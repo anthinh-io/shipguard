@@ -1,0 +1,23 @@
+{
+  "files.encoding": "utf8",
+  "files.autoSave": "onFocusChange",
+  "terminal.integrated.suggest.enabled": true,
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "editor.rulers": [
+    {
+      "column": 100,
+      "color": "#00ff00"
+    },
+    {
+      "column": 120,
+      "color": "#0000ff"
+    }
+  ],
+  "files.associations": {
+    "*.json": "jsonc"
+  }
+}
