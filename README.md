@@ -19,9 +19,10 @@ Người dùng nhập thông tin đơn hàng và nhận dự đoán rủi ro gia
 | --- | --- |
 | Giao diện người dùng | React / Next.js |
 | Hệ thống phía máy chủ | FastAPI |
+| Cơ sở dữ liệu | PostgreSQL (Docker Compose), lược đồ quản lý bằng Alembic |
 | Mô hình học máy | Scikit-learn, XGBoost |
 | Xử lý dữ liệu | Pandas, NumPy |
-| Trực quan hóa dữ liệu | Recharts / Chart.js |
+| Trực quan hóa dữ liệu | Recharts |
 | Bộ dữ liệu | Olist Brazilian E-Commerce (Kaggle) |
 
 ## 3. Kết quả kỳ vọng
