@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.deps import get_db
 from app.core.config import settings
 from app.main import app
+from app.scripts.build_derived_data import build_all
+from app.scripts.load_raw_data import CSV_DIR, load_all
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,6 +71,19 @@ def test_database() -> None:
     config = Config(BACKEND_ROOT / "alembic.ini")
     config.attributes["db_url"] = settings.TEST_DATABASE_URL
     command.upgrade(config, "head")
+
+
+# Nạp thô và dựng bảng dẫn xuất một lần cho cả phiên. Khai báo phụ thuộc qua tham số
+# là ràng buộc cứng trong đồ thị fixture, nên thứ tự luôn là migration -> nạp thô ->
+# dựng dẫn xuất, không phụ thuộc vào thứ tự chạy của các test.
+@pytest.fixture(scope="session")
+def raw_data(test_database: None) -> dict[str, int]:
+    return asyncio.run(load_all(settings.TEST_DATABASE_URL, CSV_DIR))
+
+
+@pytest.fixture(scope="session")
+def derived_data(raw_data: dict[str, int]) -> dict[str, int]:
+    return asyncio.run(build_all(settings.TEST_DATABASE_URL))
 
 
 @pytest.fixture

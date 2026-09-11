@@ -45,6 +45,7 @@ docker compose up -d --wait postgres
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
 uv run python -m app.scripts.load_raw_data
+uv run python -m app.scripts.build_derived_data
 uv run fastapi dev backend/app/main.py
 ```
 
@@ -56,9 +57,73 @@ Lệnh `load_raw_data` nạp 9 tệp CSV Olist trong `datasets/raw/` vào các b
 xoá sạch (`TRUNCATE`) rồi nạp lại trong cùng một transaction trước khi nạp,
 nên không bao giờ bị nhân đôi dữ liệu.
 
+Lệnh `build_derived_data` dựng hai bảng dẫn xuất từ các bảng thô, cũng chạy lại
+an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bên dưới.
+
 Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
 endpoint trả mã 503 kèm `{"status":"degraded","database":"disconnected"}`.
+
+## Hai tầng bảng
+
+Tiền tố phân biệt hai tầng: `raw_*` là tầng thô phản chiếu nguyên trạng tệp CSV,
+tên trần là tầng dẫn xuất.
+
+| Bảng | Nội dung |
+| --- | --- |
+| `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
+| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang khách hàng, điểm đánh giá thấp nhất, trạng thái đơn |
+| `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+
+`orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
+của truy vấn KPI, không phải của bước dựng bảng.
+
+Bốn cột `payment_approval`, `seller_handling`, `carrier_transit` và `is_late` là
+cột sinh tự động (`GENERATED ALWAYS AS ... STORED`), không nạp vào được. Riêng
+`is_late` là chỗ quan trọng nhất: `Late Order` định nghĩa bằng so sánh ở mức
+**ngày lịch**, nên giao đúng ngày cam kết là đúng hạn bất kể mấy giờ. Kiểu `DATE`
+của `estimated_delivery_date` một mình không đủ để chặn lỗi — so thẳng dấu thời
+gian với nó, Postgres vẫn nâng `DATE` lên nửa đêm và cho ra 7.826 đơn trễ thay vì
+6.534. Cột sinh đóng cứng phép so đúng vào lược đồ; truy vấn KPI đọc cờ chứ không
+tự tính lại.
+
+Vì cùng lý do đó, **không được thêm `timezone=True`** vào các cột dấu thời gian
+trong `app/models/derived.py`: ép kiểu `timestamptz → date` không phải IMMUTABLE,
+migration sẽ hỏng.
+
+Lưu ý khi viết truy vấn: `is_late` là `NULL` chứ không phải `false` với đơn chưa
+giao, nên cả `WHERE is_late` lẫn `WHERE NOT is_late` đều loại các đơn đó ra. Dùng
+`IS TRUE` / `IS NOT TRUE` nếu cần nói rõ ý định.
+
+## Tập đơn biên dùng cho test
+
+`tests/fixtures/edge_case_orders.json` ghim 312 mã đơn chọn có chủ đích, phủ bốn
+trường hợp dễ tính sai: giao đúng ngày cam kết, thiếu mốc trung gian, nhiều người
+bán, không có đánh giá. Nhóm thiếu mốc trung gian phải chọn có chủ đích vì toàn bộ
+dữ liệu chỉ có 15 đơn như vậy trong 99.441 đơn.
+
+Dựng lại tệp này bằng các truy vấn sau — `ORDER BY order_id LIMIT n` cho kết quả
+cố định qua mọi lần chạy:
+
+```sql
+-- delivered_on_estimated_date
+SELECT order_id FROM raw_orders
+ WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
+   AND order_delivered_customer_date::date = order_estimated_delivery_date::date
+ ORDER BY order_id LIMIT 100;
+-- missing_intermediate_milestone (lấy hết, tổng thể chỉ có 15 đơn)
+SELECT order_id FROM raw_orders
+ WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
+   AND (order_approved_at IS NULL OR order_delivered_carrier_date IS NULL)
+ ORDER BY order_id;
+-- multi_seller
+SELECT order_id FROM raw_order_items GROUP BY order_id
+ HAVING count(DISTINCT seller_id) > 1 ORDER BY order_id LIMIT 100;
+-- no_review
+SELECT o.order_id FROM raw_orders o
+ WHERE NOT EXISTS (SELECT 1 FROM raw_order_reviews r WHERE r.order_id = o.order_id)
+ ORDER BY o.order_id LIMIT 100;
+```
 
 ## Kiểm thử
 
