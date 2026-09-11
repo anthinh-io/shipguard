@@ -44,11 +44,17 @@ Dựng cơ sở dữ liệu, cài phụ thuộc, chạy migration, khởi độn
 docker compose up -d --wait postgres
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
+uv run python -m app.scripts.load_raw_data
 uv run fastapi dev backend/app/main.py
 ```
 
 `--wait` chặn cho tới khi Postgres nhận kết nối. Thiếu nó thì lệnh migration
 ngay sau đó có thể chạy trong lúc cơ sở dữ liệu còn đang khởi tạo và bị từ chối.
+
+Lệnh `load_raw_data` nạp 9 tệp CSV Olist trong `datasets/raw/` vào các bảng
+`raw_*`, nguyên trạng không lọc hay biến đổi. Chạy lại an toàn: mỗi bảng được
+xoá sạch (`TRUNCATE`) rồi nạp lại trong cùng một transaction trước khi nạp,
+nên không bao giờ bị nhân đôi dữ liệu.
 
 Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
