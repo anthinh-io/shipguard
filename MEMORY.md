@@ -10,3 +10,25 @@
 - Đặt Status = Done trên GitHub Project sẽ tự động đóng Issue liên kết.
 - Tiêu chí chấp nhận viết bằng văn phong tự nhiên, không thuật ngữ kỹ thuật, kể cả với dữ liệu/mô hình; ưu tiên Given-When-Then hơn Checklist khi cần dễ hình dung kịch bản cho nhiều vai trò đọc.
 - Trong `CONTEXT.md`, tên thuật ngữ viết tiếng Anh để khớp định danh trong code, còn định nghĩa viết tiếng Việt — tránh phải dịch qua lại mỗi lần viết code hay test.
+- Comment tóm tắt triển khai trên GitHub Issue theo khuôn cố định, bỏ mục nào không có nội dung tương ứng:
+
+  ```
+  ## Tóm tắt triển khai
+
+  [Một câu tổng quan]. Commit `<hash>` trên nhánh `<branch>` (chưa gộp vào `master`).
+
+  ### Hạ tầng
+  - ...
+
+  ### Mã nguồn (`đường dẫn/`)
+  - Liệt kê theo tệp, mỗi dòng nêu vai trò
+
+  ### Test (`đường dẫn/`)
+  - Test nào, xanh mấy cái
+
+  ### Đã xác minh trực tiếp
+  - Các bước đã tự tay kiểm tra (thì quá khứ, không phải hướng dẫn)
+
+  ### Rà soát đã thực hiện
+  - Kết quả code review, đã sửa gì
+  ```
