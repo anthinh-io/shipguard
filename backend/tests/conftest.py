@@ -86,6 +86,19 @@ def derived_data(raw_data: dict[str, int]) -> dict[str, int]:
     return asyncio.run(build_all(settings.TEST_DATABASE_URL))
 
 
+# Phụ thuộc derived_data là bắt buộc, không phải trang trí: engine trần không kéo theo
+# bước nạp dữ liệu, nên thiếu nó thì một tệp test chạy riêng sẽ đọc phải bảng rỗng.
+@pytest.fixture
+async def session(derived_data: dict[str, int]) -> AsyncIterator[AsyncSession]:
+    engine = create_async_engine(settings.TEST_DATABASE_URL)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as db:
+            yield db
+    finally:
+        await engine.dispose()
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     async with _client_using_database(settings.TEST_DATABASE_URL) as async_client:

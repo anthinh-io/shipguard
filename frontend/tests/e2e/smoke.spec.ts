@@ -1,9 +1,60 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
-test("trang chủ hiển thị trạng thái kết nối backend qua HTTP thật", async ({ page }) => {
+// Trình duyệt gọi thẳng backend (ADR-0002), nên mẫu chặn phải bám địa chỉ backend chứ
+// không phải địa chỉ của trang.
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const DASHBOARD_API = `${BACKEND_URL}/dashboard**`;
+
+// Không khẳng định vào giá trị KPI cụ thể: dữ liệu nạp lại được và kỳ mặc định tính
+// động, nên con số đổi mà hành vi vẫn đúng. Bộ số vàng khẳng định ở tầng tính toán.
+async function expectKpiTiles(page: Page) {
+  await expect(page.getByTestId("kpi-on-time-rate")).toBeVisible();
+  await expect(page.getByTestId("kpi-late-orders")).toBeVisible();
+  await expect(page.getByTestId("reporting-period")).toContainText("Kỳ báo cáo:");
+}
+
+test("mở bảng điều khiển là thấy ngay số liệu, không cần chọn bộ lọc", async ({
+  page,
+}) => {
   await page.goto("/");
 
-  const status = page.getByTestId("backend-status");
-  await expect(status).toBeVisible();
-  await expect(status).toContainText(/Backend: (ok|degraded)/);
+  await expectKpiTiles(page);
+  await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
+});
+
+test("mỗi lần mở trang chỉ sinh đúng một lần gọi máy chủ", async ({ page }) => {
+  let calls = 0;
+  await page.route(DASHBOARD_API, async (route) => {
+    calls += 1;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expectKpiTiles(page);
+
+  expect(calls).toBe(1);
+});
+
+test("máy chủ không phản hồi thì hiện thông báo lỗi rõ ràng", async ({ page }) => {
+  await page.route(DASHBOARD_API, (route) => route.abort());
+
+  await page.goto("/");
+
+  await expect(page.getByTestId("dashboard-error")).toBeVisible();
+  await expect(page.getByTestId("kpi-grid")).toHaveCount(0);
+});
+
+test("số liệu chưa về thì hiện trạng thái đang tải", async ({ page }) => {
+  // Giữ phản hồi lại một nhịp để trạng thái tải quan sát được một cách tất định, thay
+  // vì chớp qua trong vài mili giây.
+  await page.route(DASHBOARD_API, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByTestId("dashboard-loading")).toBeVisible();
+  await expectKpiTiles(page);
+  await expect(page.getByTestId("dashboard-loading")).toHaveCount(0);
 });

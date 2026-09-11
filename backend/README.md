@@ -22,6 +22,7 @@ backend/
     api/
       deps.py      SessionDep — phụ thuộc session dùng chung cho mọi endpoint
       routes/      mỗi tệp một nhóm endpoint
+    services/      tính KPI từ bảng dẫn xuất; route chỉ đọc tham số và gọi vào đây
     alembic/       migration
   tests/
   alembic.ini
@@ -63,6 +64,10 @@ an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bê
 Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
 endpoint trả mã 503 kèm `{"status":"degraded","database":"disconnected"}`.
+
+Kiểm tra tiếp: `curl http://localhost:8000/dashboard` trả về kỳ báo cáo mặc định
+kèm khối KPI. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
+số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
 
 ## Hai tầng bảng
 
@@ -151,6 +156,7 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose dựng container |
 | `DATABASE_URL` | Ứng dụng và Alembic |
 | `TEST_DATABASE_URL` | Chỉ bộ test |
+| `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md` |
 
 Ghi lược đồ `postgresql://` thuần — mã tự thêm trình điều khiển `+asyncpg`.
 

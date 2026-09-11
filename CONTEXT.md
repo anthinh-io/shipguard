@@ -70,6 +70,14 @@ _Avoid_: Low Volume, Insufficient Data
 Khoảng thời gian đang xem trên bảng điều khiển, xác định theo **ngày giao thực tế** của đơn. Một đơn giao trong tháng 1 thuộc kỳ tháng 1 kể cả khi được đặt từ tháng 11.
 _Avoid_: Date Range, Time Window
 
+**Full Month**:
+Tháng có ít nhất 100 đơn đã giao. Ngưỡng này để loại các tháng ở rìa dải dữ liệu, nơi chỉ còn vài đơn rớt lại — tính chúng vào sẽ cho ra một tỷ lệ dựng trên mẫu quá nhỏ và trông như hệ thống hỏng.
+_Avoid_: Complete Month, Valid Month
+
+**Default Reporting Period**:
+Kỳ báo cáo khi người dùng chưa chọn gì: 12 tháng gần nhất tính đến `Full Month` cuối cùng. Nếu không tháng nào đạt ngưỡng, lùi về tháng cuối cùng có đơn đã giao. Luôn suy ra từ dữ liệu hiện có, không phải một khoảng ngày cố định.
+_Avoid_: Initial Period, Fallback Period
+
 **Comparison Period**:
 Kỳ được đem ra đối chiếu với kỳ báo cáo. Có hai lựa chọn: kỳ liền trước có cùng độ dài, hoặc cùng kỳ của năm trước.
 _Avoid_: Baseline, Reference Period
