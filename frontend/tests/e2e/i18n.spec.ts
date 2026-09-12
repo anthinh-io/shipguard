@@ -10,7 +10,15 @@ const DASHBOARD_API = `${BACKEND_URL}/dashboard**`;
 // ngôn ngữ, thứ chỉ nhìn thấy khi biết trước giá trị đầu vào.
 const PINNED = {
   reporting_period: { start_date: "2017-09-01", end_date: "2018-08-31" },
-  kpis: { delivered_orders: 12345, late_orders: 678, on_time_rate: 0.9323 },
+  kpis: {
+    delivered_orders: 12345,
+    late_orders: 678,
+    on_time_rate: 0.9323,
+    payment_approval: { median_days: 0.0106, p90_days: 1.4381 },
+    seller_handling: { median_days: 1.8234, p90_days: 5.9912 },
+    carrier_transit: { median_days: 7.0994, p90_days: 18.8975 },
+    late_related_low_review_rate: 0.3238,
+  },
 };
 
 async function pinDashboard(page: Page) {

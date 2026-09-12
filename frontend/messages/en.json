@@ -10,7 +10,14 @@
     "noDeliveredOrders": "no delivered orders yet",
     "onTimeRate": "On-time rate",
     "deliveredOrders": "{count, plural, one {# order delivered} other {# orders delivered}}",
-    "lateOrders": "Late orders"
+    "lateOrders": "Late orders",
+    "paymentApproval": "Payment approval",
+    "sellerHandling": "Seller handling",
+    "carrierTransit": "Carrier transit",
+    "medianDays": "{value} days",
+    "p90Hint": "90th percentile: {value} days",
+    "lateRelatedLowReviewRate": "Late-related low reviews",
+    "lowReviewHint": "of 1–2 star orders"
   },
   "language": {
     "switchTo": "Tiếng Việt",

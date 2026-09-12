@@ -33,6 +33,11 @@ export default getRequestConfig(async () => {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         },
+        // Số ngày của ba chặng thời gian (#8) — trung vị và phân vị 90 là số thực,
+        // không phải số nguyên, nên cần một format riêng thay vì format() mặc định.
+        days: {
+          maximumFractionDigits: 2,
+        },
       },
     },
   };

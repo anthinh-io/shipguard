@@ -19,6 +19,10 @@ test.beforeEach(async ({ context }) => {
 async function expectKpiTiles(page: Page) {
   await expect(page.getByTestId("kpi-on-time-rate")).toBeVisible();
   await expect(page.getByTestId("kpi-late-orders")).toBeVisible();
+  await expect(page.getByTestId("kpi-payment-approval")).toBeVisible();
+  await expect(page.getByTestId("kpi-seller-handling")).toBeVisible();
+  await expect(page.getByTestId("kpi-carrier-transit")).toBeVisible();
+  await expect(page.getByTestId("kpi-late-related-low-review-rate")).toBeVisible();
   await expect(page.getByTestId("reporting-period")).toContainText("Kỳ báo cáo:");
 }
 

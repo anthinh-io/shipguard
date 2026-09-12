@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
-import { Card, CardContent } from "./ui/card";
+import { KpiTile } from "./kpi-tile";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -13,10 +13,19 @@ type ReportingPeriod = {
   end_date: string;
 };
 
+type StageDuration = {
+  median_days: number | null;
+  p90_days: number | null;
+};
+
 type Kpis = {
   delivered_orders: number;
   late_orders: number;
   on_time_rate: number | null;
+  payment_approval: StageDuration;
+  seller_handling: StageDuration;
+  carrier_transit: StageDuration;
+  late_related_low_review_rate: number | null;
 };
 
 type DashboardData = {
@@ -54,36 +63,6 @@ async function fetchDashboard(url: string): Promise<DashboardData> {
     throw new DashboardError({ kind: "http_status", status: response.status });
   }
   return (await response.json()) as DashboardData;
-}
-
-function KpiTile({
-  testId,
-  label,
-  value,
-  hint,
-}: {
-  testId: string;
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    // Card truyền tiếp props nên data-testid xuống tới thẻ gốc; bốn bài Playwright bám
-    // đúng các định danh này. Viền, nền và màu chữ phụ giờ lấy từ bộ token của shadcn
-    // thay cho các giá trị chọn tay, nên chúng tự đổi theo chế độ sáng/tối.
-    <Card data-testid={testId}>
-      {/* Chỉ dùng CardContent: CardHeader/CardTitle dựng ra <div> và thêm một nhịp
-          khoảng cách nữa, trong khi ô này chỉ cần phần đệm ngang và giữ nguyên <h2>
-          để cấu trúc tiêu đề dưới <h1> của trang không mất đi. */}
-      <CardContent>
-        <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
-        <p className="mt-2 text-4xl font-semibold tabular-nums">{value}</p>
-        {hint ? (
-          <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
 }
 
 export default function Dashboard() {
@@ -179,7 +158,65 @@ export default function Dashboard() {
           label={t("lateOrders")}
           value={format.number(kpis.late_orders)}
         />
+        <StageTile
+          testId="kpi-payment-approval"
+          label={t("paymentApproval")}
+          stage={kpis.payment_approval}
+        />
+        <StageTile
+          testId="kpi-seller-handling"
+          label={t("sellerHandling")}
+          stage={kpis.seller_handling}
+        />
+        <StageTile
+          testId="kpi-carrier-transit"
+          label={t("carrierTransit")}
+          stage={kpis.carrier_transit}
+        />
+        <KpiTile
+          testId="kpi-late-related-low-review-rate"
+          label={t("lateRelatedLowReviewRate")}
+          // Không có đơn 1–2 sao nào trong tập đã lọc thì tỷ lệ là rỗng, không phải 0%
+          // — cùng quy ước với on_time_rate ở trên.
+          value={
+            kpis.late_related_low_review_rate === null
+              ? "—"
+              : format.number(kpis.late_related_low_review_rate, "percent")
+          }
+          hint={t("lowReviewHint")}
+        />
       </section>
     </>
+  );
+}
+
+function StageTile({
+  testId,
+  label,
+  stage,
+}: {
+  testId: string;
+  label: string;
+  stage: StageDuration;
+}) {
+  const t = useTranslations("dashboard");
+  const format = useFormatter();
+  return (
+    <KpiTile
+      testId={testId}
+      label={label}
+      // Chặng có thể toàn NULL (mọi đơn thiếu mốc trung gian trong tập đã lọc); "—"
+      // tránh in ra "null ngày" một cách vô nghĩa.
+      value={
+        stage.median_days === null
+          ? "—"
+          : t("medianDays", { value: format.number(stage.median_days, "days") })
+      }
+      hint={
+        stage.p90_days === null
+          ? undefined
+          : t("p90Hint", { value: format.number(stage.p90_days, "days") })
+      }
+    />
   );
 }

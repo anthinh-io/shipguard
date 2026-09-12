@@ -10,7 +10,14 @@
     "noDeliveredOrders": "chưa có đơn nào đã giao",
     "onTimeRate": "Tỷ lệ giao đúng hạn",
     "deliveredOrders": "{count, number} đơn đã giao",
-    "lateOrders": "Đơn giao trễ"
+    "lateOrders": "Đơn giao trễ",
+    "paymentApproval": "Chặng duyệt thanh toán",
+    "sellerHandling": "Chặng người bán xử lý",
+    "carrierTransit": "Chặng vận chuyển",
+    "medianDays": "{value} ngày",
+    "p90Hint": "Phân vị 90: {value} ngày",
+    "lateRelatedLowReviewRate": "Đánh giá thấp do trễ",
+    "lowReviewHint": "trong các đơn 1–2 sao"
   },
   "language": {
     "switchTo": "English",
