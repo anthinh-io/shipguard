@@ -25,6 +25,7 @@ async function expectKpiTiles(page: Page) {
   await expect(page.getByTestId("kpi-late-related-low-review-rate")).toBeVisible();
   await expect(page.getByTestId("reporting-period")).toContainText("Kỳ báo cáo:");
   await expect(page.getByTestId("late-rate-trend")).toBeVisible();
+  await expect(page.getByTestId("late-rate-by-state")).toBeVisible();
 }
 
 test("mở bảng điều khiển là thấy ngay số liệu, không cần chọn bộ lọc", async ({

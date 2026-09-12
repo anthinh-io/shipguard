@@ -24,7 +24,8 @@
       "day": "Theo ngày",
       "week": "Theo tuần",
       "month": "Theo tháng"
-    }
+    },
+    "byStateTitle": "Tỷ lệ trễ theo bang"
   },
   "language": {
     "switchTo": "English",

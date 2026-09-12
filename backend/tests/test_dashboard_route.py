@@ -27,7 +27,12 @@ async def test_response_shape(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"reporting_period", "kpis", "late_rate_trend"}
+    assert set(body) == {
+        "reporting_period",
+        "kpis",
+        "late_rate_trend",
+        "late_rate_by_state",
+    }
     assert set(body["reporting_period"]) == {"start_date", "end_date"}
     assert set(body["kpis"]) == {
         "delivered_orders",
@@ -47,6 +52,12 @@ async def test_response_shape(client: AsyncClient) -> None:
             "late_orders",
             "late_rate",
         }
+    assert set(body["late_rate_by_state"][0]) == {
+        "customer_state",
+        "delivered_orders",
+        "late_orders",
+        "late_rate",
+    }
 
 
 async def test_default_period_applied_when_no_parameters_given(

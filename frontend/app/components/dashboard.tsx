@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { KpiTile } from "./kpi-tile";
+import { LateRateByStateChart } from "./late-rate-by-state";
 import { LateRateTrendChart } from "./late-rate-trend";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
@@ -43,10 +44,18 @@ type LateRateTrend = {
   points: TrendPoint[];
 };
 
+type StateLateRate = {
+  customer_state: string;
+  delivered_orders: number;
+  late_orders: number;
+  late_rate: number;
+};
+
 type DashboardData = {
   reporting_period: ReportingPeriod | null;
   kpis: Kpis;
   late_rate_trend: LateRateTrend;
+  late_rate_by_state: StateLateRate[];
 };
 
 type Failure =
@@ -204,6 +213,9 @@ export default function Dashboard() {
       </section>
       <div className="mt-6">
         <LateRateTrendChart trend={state.data.late_rate_trend} />
+      </div>
+      <div className="mt-6">
+        <LateRateByStateChart byState={state.data.late_rate_by_state} />
       </div>
     </>
   );

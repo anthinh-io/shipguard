@@ -24,7 +24,8 @@
       "day": "By day",
       "week": "By week",
       "month": "By month"
-    }
+    },
+    "byStateTitle": "Late rate by state"
   },
   "language": {
     "switchTo": "Tiếng Việt",

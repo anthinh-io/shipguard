@@ -26,6 +26,10 @@ const PINNED = {
       { bucket_start: "2017-10-01", delivered_orders: 4494, late_orders: 210, late_rate: 0.0467 },
     ],
   },
+  late_rate_by_state: [
+    { customer_state: "AL", delivered_orders: 397, late_orders: 85, late_rate: 0.2141 },
+    { customer_state: "MA", delivered_orders: 717, late_orders: 125, late_rate: 0.1743 },
+  ],
 };
 
 async function pinDashboard(page: Page) {

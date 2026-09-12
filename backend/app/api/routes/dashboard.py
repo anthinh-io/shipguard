@@ -8,7 +8,9 @@ from app.services.dashboard import (
     DashboardKpis,
     LateRateTrend,
     ReportingPeriod,
+    StateLateRate,
     compute_kpis,
+    compute_late_rate_by_state,
     compute_late_rate_trend,
     resolve_default_period,
 )
@@ -24,6 +26,7 @@ class DashboardResponse(BaseModel):
     reporting_period: ReportingPeriod | None
     kpis: DashboardKpis
     late_rate_trend: LateRateTrend
+    late_rate_by_state: list[StateLateRate]
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -47,4 +50,5 @@ async def dashboard(
         reporting_period=period,
         kpis=await compute_kpis(session, period),
         late_rate_trend=await compute_late_rate_trend(session, period),
+        late_rate_by_state=await compute_late_rate_by_state(session, period),
     )

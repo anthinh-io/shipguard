@@ -50,6 +50,15 @@ class LateRateTrend(BaseModel):
     points: list[TrendPoint]
 
 
+class StateLateRate(BaseModel):
+    # Region theo CONTEXT.md: bang của khách hàng NHẬN hàng, không phải bang người bán
+    # gửi đi. orders.customer_state đã là đúng cột này.
+    customer_state: str
+    delivered_orders: int
+    late_orders: int
+    late_rate: float
+
+
 class StageDuration(BaseModel):
     median_days: float | None
     p90_days: float | None
@@ -303,3 +312,36 @@ async def compute_late_rate_trend(
         for bucket_start, delivered, late in rows
     ]
     return LateRateTrend(granularity=granularity, points=points)
+
+
+async def compute_late_rate_by_state(
+    session: AsyncSession, period: ReportingPeriod | None
+) -> list[StateLateRate]:
+    """Tỷ lệ trễ theo bang khách hàng nhận hàng, xếp từ cao xuống thấp.
+
+    customer_state là NOT NULL trên bảng dẫn xuất nên mọi đơn đã giao đều có một bang,
+    không có nhóm nào bị bỏ sót vì thiếu dữ liệu.
+    """
+    statement = sa.select(
+        orders.c.customer_state,
+        sa.func.count(),
+        sa.func.count().filter(orders.c.is_late.is_(True)),
+    ).where(DELIVERED)
+    if period is not None:
+        statement = statement.where(_delivered_within(period))
+    statement = statement.group_by(orders.c.customer_state)
+
+    rows = (await session.execute(statement)).all()
+    by_state = [
+        StateLateRate(
+            customer_state=customer_state,
+            delivered_orders=delivered,
+            late_orders=late,
+            late_rate=late / delivered,
+        )
+        for customer_state, delivered, late in rows
+    ]
+    # Xếp giảm dần theo tỷ lệ trễ để trả lời thẳng câu hỏi "xử lý vùng nào trước"; hoà
+    # thì theo mã bang để kết quả tất định giữa các lần gọi.
+    by_state.sort(key=lambda state: (-state.late_rate, state.customer_state))
+    return by_state

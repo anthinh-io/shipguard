@@ -12,6 +12,7 @@ from app.services.dashboard import (
     ReportingPeriod,
     choose_granularity,
     compute_kpis,
+    compute_late_rate_by_state,
     compute_late_rate_trend,
     resolve_default_period,
 )
@@ -144,6 +145,40 @@ async def test_trend_over_unfiltered_default_period_has_no_gaps(
     assert trend.granularity == "month"
     assert len(trend.points) == 12
     assert all(point.delivered_orders > 0 for point in trend.points)
+
+
+async def test_state_distribution_uses_customer_state_not_seller_state(
+    session: AsyncSession,
+) -> None:
+    # Đếm độc lập theo bang NGƯỜI BÁN, qua order_sellers -> raw_sellers. Hai tập phải
+    # khác nhau, nếu không bài test này không phân biệt được gì cả — đây chính là cái
+    # bẫy nêu trong CONTEXT.md mục Region.
+    seller_state_sp_orders = await session.scalar(
+        text(
+            "SELECT count(*) FROM order_sellers os "
+            "JOIN orders o ON o.order_id = os.order_id "
+            "JOIN raw_sellers s ON s.seller_id = os.seller_id "
+            "WHERE o.order_status = 'delivered' AND o.delivered_to_customer_at IS NOT NULL "
+            "AND s.seller_state = 'SP'"
+        )
+    )
+
+    by_state = {
+        state.customer_state: state
+        for state in await compute_late_rate_by_state(session, None)
+    }
+
+    assert seller_state_sp_orders != by_state["SP"].delivered_orders
+    assert by_state["SP"].delivered_orders == 40494
+
+
+async def test_state_distribution_covers_27_states(session: AsyncSession) -> None:
+    by_state = await compute_late_rate_by_state(session, None)
+
+    assert len(by_state) == 27
+    rates = [state.late_rate for state in by_state]
+    # Xếp giảm dần: bang trễ nhiều nhất đứng đầu, trả lời thẳng "xử lý vùng nào trước".
+    assert rates == sorted(rates, reverse=True)
 
 
 async def test_default_period_ends_at_the_last_full_month(
