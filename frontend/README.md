@@ -2,7 +2,9 @@
 
 Bảng điều khiển Next.js hiển thị chỉ số hiệu suất giao hàng lấy từ backend
 FastAPI qua HTTP thật (không dữ liệu giả). Style viết bằng Tailwind CSS v4 (lý
-do chọn: `docs/adr/0003-tailwind-css-cho-giao-dien.md`), biểu đồ về sau dùng
+do chọn: `docs/adr/0003-tailwind-css-cho-giao-dien.md`), component dựng sẵn lấy
+từ shadcn/ui trên nền Radix
+(`docs/adr/0004-shadcn-ui-cho-component-giao-dien.md`), biểu đồ về sau dùng
 Recharts.
 
 ## Yêu cầu
@@ -16,16 +18,21 @@ Recharts.
 ```
 frontend/
   app/
-    layout.tsx           metadata (tiêu đề, mô tả)
-    globals.css          nạp Tailwind, biến màu, nền sáng/tối
+    layout.tsx           metadata (tiêu đề, mô tả), bọc ThemeProvider
+    globals.css          nạp Tailwind, bộ token màu shadcn, nhánh sáng/tối
     page.tsx             Server Component: khung trang, gọi <Dashboard />
     components/
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
+      ui/                component do shadcn sinh ra — mã của dự án, sửa trực
+                         tiếp được, không phải phụ thuộc trong node_modules
+    lib/
+      utils.ts           chỗ shadcn trỏ tới cho hàm gộp lớp `cn`
   tests/
     e2e/
       smoke.spec.ts      Playwright: số liệu hiện khi mở trang, đúng một lần
                          gọi máy chủ, trạng thái tải và trạng thái lỗi
+  components.json        cấu hình shadcn CLI: thư viện nền và alias đường dẫn
   playwright.config.ts
   postcss.config.mjs
 ```
@@ -52,6 +59,26 @@ bun run dev
 Mở http://localhost:3000 — bảng điều khiển hiện tỷ lệ giao đúng hạn và số đơn
 trễ của kỳ mặc định, không phải chọn bộ lọc nào trước. Nếu backend chưa chạy,
 trang vẫn dựng được và hiện thông báo lỗi thay cho số liệu.
+
+## Thêm component shadcn
+
+Chạy **từ trong `frontend/`**:
+
+```bash
+bunx shadcn@latest add <tên>
+```
+
+Component rơi vào `app/components/ui/` và thành mã của dự án — sửa thẳng được,
+không cần chờ bản phát hành nào. Đường dẫn này do bốn khoá `aliases` trong
+`components.json` quyết định; CLI không có cờ nào đặt chúng nên đừng chạy lại
+`init`, sửa tệp đó là đủ.
+
+Chế độ tối chạy bằng lớp `.dark` do `next-themes` gắn vào thẻ `<html>`, mặc
+định bám theo cài đặt hệ điều hành. Đừng quay lại `prefers-color-scheme`:
+component `chart` viết cứng tên lớp `.dark` trong JavaScript, chỗ CSS không với
+tới. Cũng đừng thêm mẹo `useState` + `useEffect` để chặn lệch hydrate — quy tắc
+`react-hooks/set-state-in-effect` là lỗi trong cấu hình này, và script chặn của
+`next-themes` đã lo phần đó rồi.
 
 ## Chạy Playwright (kiểm thử smoke)
 

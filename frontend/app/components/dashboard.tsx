@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Card, CardContent } from "./ui/card";
+
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -81,14 +83,21 @@ function KpiTile({
   hint?: string;
 }) {
   return (
-    <article
-      data-testid={testId}
-      className="rounded-lg border border-black/10 p-5 dark:border-white/15"
-    >
-      <h2 className="text-sm font-medium opacity-70">{label}</h2>
-      <p className="mt-2 text-4xl font-semibold tabular-nums">{value}</p>
-      {hint ? <p className="mt-2 text-sm opacity-60">{hint}</p> : null}
-    </article>
+    // Card truyền tiếp props nên data-testid xuống tới thẻ gốc; bốn bài Playwright bám
+    // đúng các định danh này. Viền, nền và màu chữ phụ giờ lấy từ bộ token của shadcn
+    // thay cho các giá trị chọn tay, nên chúng tự đổi theo chế độ sáng/tối.
+    <Card data-testid={testId}>
+      {/* Chỉ dùng CardContent: CardHeader/CardTitle dựng ra <div> và thêm một nhịp
+          khoảng cách nữa, trong khi ô này chỉ cần phần đệm ngang và giữ nguyên <h2>
+          để cấu trúc tiêu đề dưới <h1> của trang không mất đi. */}
+      <CardContent>
+        <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
+        <p className="mt-2 text-4xl font-semibold tabular-nums">{value}</p>
+        {hint ? (
+          <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
