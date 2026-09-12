@@ -98,16 +98,29 @@ Về `CLAUDE.md` §2: nhận shadcn ở ticket này đúng là vượt phạm vi
 ## Hệ quả
 
 - **Dễ hơn:** #11 và #12 chỉ còn là `bunx shadcn@latest add <tên>`, không có đợt chuyển đổi nào nữa; hành vi bàn phím và khả năng tiếp cận có sẵn thay vì phải tự canh; mã component nằm trong repo nên sửa được trực tiếp khi cần, không phải chờ thư viện.
-- **Khó hơn:** thêm `radix-ui`, `cn`, `class-variance-authority`, `lucide-react`, `shadcn`, `tw-animate-css`, `next-themes` vào phụ thuộc; `node_modules` nặng hơn đường Base UI; chế độ tối giờ phụ thuộc JavaScript (`next-themes` gắn lớp `.dark`) thay vì thuần CSS; các tệp trong `app/components/ui/` là mã sinh ra nhưng vẫn nằm trong tầm quét của ESLint và `tsc`.
-- **Màu sắc dịch nhẹ, có chủ ý.** Bộ token của shadcn thay các giá trị chọn tay trước đây, nên chữ ở chế độ sáng đi từ `#171717` sang `oklch(0.145 0 0)` và ô KPI có nền `bg-card` cộng viền `ring-foreground/10` thay cho nền trong suốt và `border-black/10`. Đây là cái giá phải trả để component về sau ăn cùng một bộ token; ghim lại giá trị cũ thì chống lại chính hệ thống vừa nhận.
-- **Preset chỉ là tên bộ chủ đề, không phải cả chuỗi `style`.** CLI nhận `-b radix -p nova` để ra `style: "radix-nova"`; truyền `-p radix-nova` bị từ chối. Và CLI **không có cờ nào đặt alias**, nên bốn khoá alias phải sửa tay trong `components.json` ngay sau `init`, trước lệnh `add` đầu tiên.
+- **Khó hơn:** thêm `radix-ui`, `cn`, `class-variance-authority`, `lucide-react`, `next-themes` vào phụ thuộc chạy, cộng `shadcn` và `tw-animate-css` vào phụ thuộc phát triển — `init` đặt cả hai vào nhóm chạy, nhưng chúng chỉ được dùng lúc dựng (một cái là CLI, một cái nạp qua `@import` trong CSS) nên chuyển về đúng nhóm như `tailwindcss` sẵn có; `node_modules` nặng hơn đường Base UI; chế độ tối giờ phụ thuộc JavaScript (`next-themes` gắn lớp `.dark`) thay vì thuần CSS; các tệp trong `app/components/ui/` là mã sinh ra nhưng vẫn nằm trong tầm quét của ESLint và `tsc`.
+- **Hình thức ô KPI dịch nhẹ, có chủ ý.** Bộ token và bộ đo của shadcn thay các giá trị chọn tay trước đây. Cụ thể, không chỉ màu:
+
+  | Thuộc tính | Trước | Sau |
+  | --- | --- | --- |
+  | Màu chữ, chế độ sáng | `#171717` | `oklch(0.145 0 0)` |
+  | Nền ô | trong suốt | `bg-card` |
+  | Đường viền | `border-black/10`, nằm trong hộp | `ring-foreground/10`, vẽ ngoài hộp |
+  | Bo góc | `rounded-lg`, 8px | `rounded-xl`, 14px |
+  | Phần đệm | `p-5`, 20px | `--card-spacing`, 16px |
+  | Thẻ gốc | `<article>` | `<div>` do `Card` dựng ra |
+
+  Đây là cái giá phải trả để component về sau ăn cùng một bộ token và một bộ đo; ghim lại giá trị cũ thì chống lại chính hệ thống vừa nhận. Riêng thẻ gốc: `Card` không nhận cờ đổi phần tử, nên ô KPI mất vai trò `article`. Thẻ `<h2>` của nhãn thì giữ nguyên, nên cấu trúc tiêu đề dưới `<h1>` của trang không đổi.
+
+- **Không có `app/lib/utils.ts`.** `init` sinh ra tệp một dòng `export { cn } from "cn"`, nhưng registry hiện tại cho `card`, `button`, `select`, `popover`, `calendar`, `command` và `chart` đều nhập `cn` thẳng từ gói, không qua alias — đã kiểm từng cái. Giữ lại thì đó là mã không ai dùng, trái `CLAUDE.md` §2, nên tệp bị xoá. Khoá `utils` trong `components.json` vẫn trỏ vào đường dẫn đó để nếu về sau thật sự cần thì tạo lại đúng chỗ.
+- **Preset chỉ là tên bộ chủ đề, không phải cả chuỗi `style`.** CLI nhận `-b radix -p nova` để ra `style: "radix-nova"`; truyền `-p radix-nova` bị từ chối. Và CLI **không có cờ nào đặt alias**, nên các khoá alias phải sửa tay trong `components.json` ngay sau `init`, trước lệnh `add` đầu tiên.
 - **Cái bẫy đang chờ #9:** component `chart` của shadcn khai `recharts@3.8.0` **kèm số phiên bản rõ ràng**. Chốt "đã cài thì thôi" của CLI chỉ bỏ qua các dòng khai tên trần, nên khi #9 chạy `add chart` thì lệnh `bun add recharts@3.8.0` sẽ chạy thẳng, **hạ cấp** bản `^3.10.1` đang có và ghi lại `bun.lock` ở gốc repo. Đã chấp nhận, nhưng người làm #9 cần biết trước để không tưởng là sự cố.
 - **Cần xem lại:** Base UI là thư viện nền mặc định của shadcn từ 07/2026. Nếu đường Radix được chăm sóc ít dần — component mới ra trễ hơn, hoặc registry ngừng phát hành bản `radix-*` — thì quyết định này đáng mở lại. CLI có sẵn lệnh `shadcn migrate` cho hướng chuyển đổi đó.
 
 ## Việc cần làm
 
 1. [x] Chạy `bunx shadcn@latest init -b radix -p nova --no-monorepo` trong `frontend/`
-2. [x] Đặt bốn khoá alias dưới `app/` trong `components.json` và dời `lib/utils.ts` về `app/lib/utils.ts`
+2. [x] Đặt các khoá alias dưới `app/` trong `components.json`; xoá `lib/utils.ts` vì registry nhập `cn` thẳng từ gói
 3. [x] Xác nhận `components.json` có `style` là `radix-nova` trước khi cài component đầu tiên
 4. [x] Gỡ khối `prefers-color-scheme` còn sót khỏi `app/globals.css` và định nghĩa `--font-sans`
 5. [x] Thêm `next-themes` và bọc `ThemeProvider` ở layout gốc, cùng commit với việc gỡ ở trên

@@ -26,8 +26,6 @@ frontend/
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
       ui/                component do shadcn sinh ra — mã của dự án, sửa trực
                          tiếp được, không phải phụ thuộc trong node_modules
-    lib/
-      utils.ts           chỗ shadcn trỏ tới cho hàm gộp lớp `cn`
   tests/
     e2e/
       smoke.spec.ts      Playwright: số liệu hiện khi mở trang, đúng một lần
@@ -69,9 +67,14 @@ bunx shadcn@latest add <tên>
 ```
 
 Component rơi vào `app/components/ui/` và thành mã của dự án — sửa thẳng được,
-không cần chờ bản phát hành nào. Đường dẫn này do bốn khoá `aliases` trong
+không cần chờ bản phát hành nào. Đường dẫn này do các khoá `aliases` trong
 `components.json` quyết định; CLI không có cờ nào đặt chúng nên đừng chạy lại
 `init`, sửa tệp đó là đủ.
+
+Registry hiện nhập hàm gộp lớp `cn` thẳng từ gói `cn`, nên dự án **không** có
+`app/lib/utils.ts`. Nếu một component về sau nhập `@/app/lib/utils` và `tsc`
+báo thiếu, tạo lại tệp đó với đúng một dòng `export { cn } from "cn"` —
+`components.json` đã trỏ sẵn `utils` vào đường dẫn này.
 
 Chế độ tối chạy bằng lớp `.dark` do `next-themes` gắn vào thẻ `<html>`, mặc
 định bám theo cài đặt hệ điều hành. Đừng quay lại `prefers-color-scheme`:
