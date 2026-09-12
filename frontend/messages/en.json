@@ -17,7 +17,14 @@
     "medianDays": "{value} days",
     "p90Hint": "90th percentile: {value} days",
     "lateRelatedLowReviewRate": "Late-related low reviews",
-    "lowReviewHint": "of 1–2 star orders"
+    "lowReviewHint": "of 1–2 star orders",
+    "trendTitle": "Late rate trend",
+    "lateRate": "Late rate",
+    "granularity": {
+      "day": "By day",
+      "week": "By week",
+      "month": "By month"
+    }
   },
   "language": {
     "switchTo": "Tiếng Việt",

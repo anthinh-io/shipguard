@@ -27,7 +27,7 @@ async def test_response_shape(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"reporting_period", "kpis"}
+    assert set(body) == {"reporting_period", "kpis", "late_rate_trend"}
     assert set(body["reporting_period"]) == {"start_date", "end_date"}
     assert set(body["kpis"]) == {
         "delivered_orders",
@@ -39,6 +39,14 @@ async def test_response_shape(client: AsyncClient) -> None:
         "late_related_low_review_rate",
     }
     assert set(body["kpis"]["payment_approval"]) == {"median_days", "p90_days"}
+    assert set(body["late_rate_trend"]) == {"granularity", "points"}
+    if body["late_rate_trend"]["points"]:
+        assert set(body["late_rate_trend"]["points"][0]) == {
+            "bucket_start",
+            "delivered_orders",
+            "late_orders",
+            "late_rate",
+        }
 
 
 async def test_default_period_applied_when_no_parameters_given(

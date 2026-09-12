@@ -26,6 +26,10 @@ export default getRequestConfig(async () => {
           year: "numeric",
           timeZone: "UTC",
         },
+        // Nhãn trục hoành của biểu đồ xu hướng (#9). Cùng lý do timeZone UTC với
+        // fullDate — nếu không, máy ở múi giờ phía tây UTC lệch mất một ngày.
+        axisDate: { day: "2-digit", month: "2-digit", timeZone: "UTC" },
+        axisMonth: { month: "short", year: "numeric", timeZone: "UTC" },
       },
       number: {
         percent: {
@@ -37,6 +41,12 @@ export default getRequestConfig(async () => {
         // không phải số nguyên, nên cần một format riêng thay vì format() mặc định.
         days: {
           maximumFractionDigits: 2,
+        },
+        // percent đang cố định 2 chữ số thập phân — hợp với ô KPI, quá dài cho vạch
+        // trục của biểu đồ xu hướng (#9).
+        percentAxis: {
+          style: "percent",
+          maximumFractionDigits: 0,
         },
       },
     },

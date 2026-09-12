@@ -17,7 +17,14 @@
     "medianDays": "{value} ngày",
     "p90Hint": "Phân vị 90: {value} ngày",
     "lateRelatedLowReviewRate": "Đánh giá thấp do trễ",
-    "lowReviewHint": "trong các đơn 1–2 sao"
+    "lowReviewHint": "trong các đơn 1–2 sao",
+    "trendTitle": "Xu hướng tỷ lệ trễ",
+    "lateRate": "Tỷ lệ trễ",
+    "granularity": {
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    }
   },
   "language": {
     "switchTo": "English",

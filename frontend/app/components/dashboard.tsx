@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { KpiTile } from "./kpi-tile";
+import { LateRateTrendChart } from "./late-rate-trend";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -28,9 +29,24 @@ type Kpis = {
   late_related_low_review_rate: number | null;
 };
 
+type Granularity = "day" | "week" | "month";
+
+type TrendPoint = {
+  bucket_start: string;
+  delivered_orders: number;
+  late_orders: number;
+  late_rate: number | null;
+};
+
+type LateRateTrend = {
+  granularity: Granularity;
+  points: TrendPoint[];
+};
+
 type DashboardData = {
   reporting_period: ReportingPeriod | null;
   kpis: Kpis;
+  late_rate_trend: LateRateTrend;
 };
 
 type Failure =
@@ -186,6 +202,9 @@ export default function Dashboard() {
           hint={t("lowReviewHint")}
         />
       </section>
+      <div className="mt-6">
+        <LateRateTrendChart trend={state.data.late_rate_trend} />
+      </div>
     </>
   );
 }

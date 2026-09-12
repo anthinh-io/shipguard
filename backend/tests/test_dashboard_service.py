@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -10,7 +10,9 @@ from app.services.dashboard import (
     DEFAULT_PERIOD_MONTHS,
     FULL_MONTH_MIN_DELIVERED_ORDERS,
     ReportingPeriod,
+    choose_granularity,
     compute_kpis,
+    compute_late_rate_trend,
     resolve_default_period,
 )
 
@@ -83,6 +85,65 @@ async def test_three_star_orders_are_not_low_reviews(session: AsyncSession) -> N
 
     assert three_star_count > 0
     assert low_review_count == 12310
+
+
+def test_granularity_switches_at_the_31_day_boundary() -> None:
+    start = date(2018, 1, 1)
+
+    # Kỳ 30 ngày (điểm cuối trong khoảng 29 ngày sau điểm đầu).
+    thirty_days = ReportingPeriod(start_date=start, end_date=start + timedelta(days=29))
+    # Kỳ 31 ngày — vượt ranh giới đúng một ngày.
+    thirty_one_days = ReportingPeriod(
+        start_date=start, end_date=start + timedelta(days=30)
+    )
+
+    assert choose_granularity(thirty_days) == "day"
+    assert choose_granularity(thirty_one_days) == "week"
+
+
+def test_granularity_switches_at_the_six_month_boundary() -> None:
+    start = date(2018, 1, 1)
+
+    # 182 ngày — "dưới 6 tháng" quy về ngày.
+    span_182 = ReportingPeriod(start_date=start, end_date=start + timedelta(days=181))
+    # 183 ngày — vượt ranh giới đúng một ngày.
+    span_183 = ReportingPeriod(start_date=start, end_date=start + timedelta(days=182))
+
+    assert choose_granularity(span_182) == "week"
+    assert choose_granularity(span_183) == "month"
+
+
+async def test_trend_fills_empty_buckets(session: AsyncSession) -> None:
+    # Cuối dải dữ liệu Olist: chỉ 10/10 và 10/17 có đơn giao, sáu ngày ở giữa không có
+    # đơn nào. Gom nhóm trần sẽ chỉ trả về hai điểm; lấp khoảng trống phải trả đủ 8.
+    period = ReportingPeriod(start_date=date(2018, 10, 10), end_date=date(2018, 10, 17))
+
+    trend = await compute_late_rate_trend(session, period)
+
+    assert trend.granularity == "day"
+    assert len(trend.points) == 8
+    by_date = {point.bucket_start: point for point in trend.points}
+    # Nhóm rỗng: không có đơn nào, và late_rate là None — không phải 0%.
+    assert by_date[date(2018, 10, 12)].delivered_orders == 0
+    assert by_date[date(2018, 10, 12)].late_rate is None
+    # Hai ngày có đơn thật vẫn đếm đúng.
+    assert by_date[date(2018, 10, 11)].delivered_orders == 1
+    assert by_date[date(2018, 10, 17)].delivered_orders == 1
+
+
+async def test_trend_over_unfiltered_default_period_has_no_gaps(
+    session: AsyncSession,
+) -> None:
+    # Kỳ mặc định trùng khít mốc tháng nên không dính hiện tượng nhóm khuyết ở hai đầu;
+    # 12 tháng phải cho ra đúng 12 điểm, không thiếu điểm nào.
+    period = await resolve_default_period(session)
+    assert period is not None
+
+    trend = await compute_late_rate_trend(session, period)
+
+    assert trend.granularity == "month"
+    assert len(trend.points) == 12
+    assert all(point.delivered_orders > 0 for point in trend.points)
 
 
 async def test_default_period_ends_at_the_last_full_month(

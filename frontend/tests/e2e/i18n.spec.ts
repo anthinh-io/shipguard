@@ -19,6 +19,13 @@ const PINNED = {
     carrier_transit: { median_days: 7.0994, p90_days: 18.8975 },
     late_related_low_review_rate: 0.3238,
   },
+  late_rate_trend: {
+    granularity: "month",
+    points: [
+      { bucket_start: "2017-09-01", delivered_orders: 3965, late_orders: 121, late_rate: 0.0305 },
+      { bucket_start: "2017-10-01", delivered_orders: 4494, late_orders: 210, late_rate: 0.0467 },
+    ],
+  },
 };
 
 async function pinDashboard(page: Page) {

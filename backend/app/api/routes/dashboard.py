@@ -6,8 +6,10 @@ from pydantic import BaseModel
 from app.api.deps import SessionDep
 from app.services.dashboard import (
     DashboardKpis,
+    LateRateTrend,
     ReportingPeriod,
     compute_kpis,
+    compute_late_rate_trend,
     resolve_default_period,
 )
 
@@ -16,11 +18,12 @@ router = APIRouter(tags=["dashboard"])
 
 # Một endpoint tổng hợp nhận mọi điều kiện lọc và trả mọi số liệu của bảng điều khiển
 # trong một lần gọi. "Một lần gọi" ở đây là một lần gọi HTTP, không phải một câu SQL:
-# route chạy hai truy vấn (giải kỳ, rồi tính) và như vậy là đúng. Khối kpis lồng riêng
-# để các chỉ số về sau nối thêm vào mà không phải đổi hình dạng phản hồi.
+# route chạy nhiều truy vấn (giải kỳ, rồi tính từng khối) và như vậy là đúng. Mỗi khối
+# lồng riêng để các chỉ số về sau nối thêm mà không phải đổi hình dạng phản hồi.
 class DashboardResponse(BaseModel):
     reporting_period: ReportingPeriod | None
     kpis: DashboardKpis
+    late_rate_trend: LateRateTrend
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -41,5 +44,7 @@ async def dashboard(
         else await resolve_default_period(session)
     )
     return DashboardResponse(
-        reporting_period=period, kpis=await compute_kpis(session, period)
+        reporting_period=period,
+        kpis=await compute_kpis(session, period),
+        late_rate_trend=await compute_late_rate_trend(session, period),
     )

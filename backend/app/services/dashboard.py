@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+from typing import Literal
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -11,6 +12,14 @@ from app.models.derived import orders
 # mẫu vài đơn và màn hình trông như hệ thống hỏng chứ không phải như dữ liệu đã hết.
 FULL_MONTH_MIN_DELIVERED_ORDERS = 100
 DEFAULT_PERIOD_MONTHS = 12
+
+Granularity = Literal["day", "week", "month"]
+
+# Hai ngưỡng đều tính bằng ngày, cùng một kiểu số học, nên test ranh giới chỉ là hai
+# con số cố định. 183 ngày là "6 tháng" quy về ngày; dùng số học lịch thay cho nó sẽ
+# làm ngưỡng trượt theo từng tháng và kéo thêm một phụ thuộc chỉ để phục vụ một phép so.
+DAILY_MAX_SPAN_DAYS = 31  # "dưới 31 ngày" → kỳ 30 ngày gom theo ngày
+WEEKLY_MAX_SPAN_DAYS = 183  # "dưới 6 tháng" → kỳ 182 ngày gom theo tuần
 
 # Delivered Order theo CONTEXT.md: đơn đã tới tay khách và có ngày giao thực tế. Đây là
 # tập đơn duy nhất được tính vào KPI — bảng dẫn xuất cố ý giữ mọi đơn kèm cột trạng
@@ -25,6 +34,20 @@ DELIVERED = sa.and_(
 class ReportingPeriod(BaseModel):
     start_date: date
     end_date: date
+
+
+class TrendPoint(BaseModel):
+    bucket_start: date
+    delivered_orders: int
+    late_orders: int
+    # None nghĩa là nhóm rỗng — không có đơn nào giao trong khoảng đó — chứ không phải
+    # 0%. "Không có đơn nào" và "không đơn nào trễ" là hai điều khác nhau.
+    late_rate: float | None
+
+
+class LateRateTrend(BaseModel):
+    granularity: Granularity
+    points: list[TrendPoint]
 
 
 class StageDuration(BaseModel):
@@ -198,3 +221,85 @@ def _delivered_within(period: ReportingPeriod) -> sa.ColumnElement[bool]:
         orders.c.delivered_to_customer_at
         < datetime.combine(period.end_date + timedelta(days=1), time.min),
     )
+
+
+def choose_granularity(period: ReportingPeriod) -> Granularity:
+    """Backend chọn độ mịn theo độ dài kỳ, không phải frontend.
+
+    Dưới 31 ngày gom theo ngày, dưới 6 tháng (183 ngày) gom theo tuần, dài hơn gom theo
+    tháng. Mục đích: người dùng không bao giờ nhìn vào một biểu đồ chỉ có một điểm,
+    cũng không nhìn vào một biểu đồ dày đặc không đọc nổi.
+    """
+    span_days = (period.end_date - period.start_date).days + 1
+    if span_days < DAILY_MAX_SPAN_DAYS:
+        return "day"
+    if span_days < WEEKLY_MAX_SPAN_DAYS:
+        return "week"
+    return "month"
+
+
+async def compute_late_rate_trend(
+    session: AsyncSession, period: ReportingPeriod | None
+) -> LateRateTrend:
+    """Xu hướng tỷ lệ trễ theo thời gian, gom nhóm theo độ mịn do backend chọn.
+
+    `period` là None chỉ xảy ra khi chưa có đơn đã giao nào — không có khung thời gian
+    nào để lấp khoảng trống, nên trả về rỗng.
+    """
+    if period is None:
+        return LateRateTrend(granularity="month", points=[])
+
+    granularity = choose_granularity(period)
+    start_ts = datetime.combine(period.start_date, time.min)
+    end_ts = datetime.combine(period.end_date, time.min)
+
+    # Gom nhóm trần chỉ trả về những nhóm có đơn, nên một kỳ dài mà dữ liệu dồn vào một
+    # góc sẽ tụt xuống còn vài điểm. generate_series dựng khung đủ mọi mốc trong kỳ,
+    # rồi LEFT JOIN vào dữ liệu thật để nhóm rỗng vẫn có mặt với late_rate là None.
+    buckets = (
+        sa.func.generate_series(
+            sa.func.date_trunc(granularity, start_ts),
+            sa.func.date_trunc(granularity, end_ts),
+            sa.text(f"interval '1 {granularity}'"),
+        )
+        .table_valued("bucket_start", name="buckets")
+        # render_derived() là bắt buộc: generate_series trả về một cột vô danh mà
+        # Postgres tự đặt tên là "generate_series", không phải "bucket_start". Thiếu
+        # lời gọi này thì SQLAlchemy đặt bí danh cho bảng nhưng không đổi tên cột, và
+        # truy vấn vỡ với "column buckets.bucket_start does not exist".
+        .render_derived()
+    )
+
+    bucket_of = sa.func.date_trunc(granularity, orders.c.delivered_to_customer_at)
+    # _delivered_within phải nằm trong điều kiện JOIN chứ không phải WHERE: nhóm đầu
+    # tiên bị date_trunc kéo lùi về đầu tuần/đầu tháng, nên không chặn ở đây thì đơn
+    # giao trước ngày bắt đầu lọt vào nhóm đó.
+    join_condition = sa.and_(
+        bucket_of == buckets.c.bucket_start, DELIVERED, _delivered_within(period)
+    )
+
+    statement = (
+        sa.select(
+            buckets.c.bucket_start,
+            # count(order_id) chứ không phải count(*): nhóm rỗng phải đếm ra 0, không
+            # phải 1 — mọi hàng NULL bên phải của LEFT JOIN vẫn có mặt.
+            sa.func.count(orders.c.order_id),
+            sa.func.count(orders.c.order_id).filter(orders.c.is_late.is_(True)),
+        )
+        .select_from(buckets)
+        .outerjoin(orders, join_condition)
+        .group_by(buckets.c.bucket_start)
+        .order_by(buckets.c.bucket_start)
+    )
+
+    rows = (await session.execute(statement)).all()
+    points = [
+        TrendPoint(
+            bucket_start=bucket_start.date(),
+            delivered_orders=delivered,
+            late_orders=late,
+            late_rate=None if delivered == 0 else late / delivered,
+        )
+        for bucket_start, delivered, late in rows
+    ]
+    return LateRateTrend(granularity=granularity, points=points)
