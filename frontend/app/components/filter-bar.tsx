@@ -59,18 +59,17 @@ export function FilterBar({
 
   function handleRangeSelect(range: DateRange | undefined) {
     setPendingRange(range);
+    // `min={2}` trên Calendar bên dưới đã bắt react-day-picker giữ range ở trạng thái
+    // dở dang (to: undefined) cho tới khi đủ hai ngày cách nhau ít nhất một ngày, nên
+    // tới đây range.from && range.to là đã đủ điều kiện — không cần tự nới thêm.
+    // Không tự làm việc đó ở đây: một lần chọn xong tự nới thì cú nhấp đầu tiên sẽ
+    // luôn commit và đóng popover ngay, không còn cách nào chọn một khoảng rộng hơn.
     if (!range?.from || !range?.to) {
       return;
     }
-    // Kỳ tối thiểu là 2 ngày: chọn đúng một ngày thì tự nới thành 2, vì một biểu đồ xu
-    // hướng của đúng một ngày không nói lên điều gì (xem #9).
-    const to =
-      range.to.getTime() === range.from.getTime()
-        ? new Date(range.from.getTime() + 24 * 60 * 60 * 1000)
-        : range.to;
     onChange({
       ...filters,
-      range: { from: toISODate(range.from), to: toISODate(to) },
+      range: { from: toISODate(range.from), to: toISODate(range.to) },
     });
     setOpen(false);
   }
@@ -104,6 +103,11 @@ export function FilterBar({
             selected={pendingRange}
             onSelect={handleRangeSelect}
             numberOfMonths={2}
+            // Kỳ tối thiểu 2 ngày (xem #9): một biểu đồ xu hướng của đúng một ngày
+            // không nói lên điều gì. react-day-picker tự giữ range ở trạng thái dở
+            // dang cho tới khi đủ điều kiện này, nên cú nhấp đầu tiên không tự đóng
+            // popover và người dùng vẫn chọn được một khoảng rộng bất kỳ.
+            min={2}
           />
         </PopoverContent>
       </Popover>

@@ -92,12 +92,14 @@ export function LateRateTrendChart({ trend }: { trend: LateRateTrend }) {
             />
             {/* connectNulls mặc định là false: nhóm rỗng (late_rate null) để lại một
                 khoảng hở trên đường, đúng ý nghĩa "không có đơn nào" thay vì vẽ tiếp
-                như thể tỷ lệ bằng 0%. */}
+                như thể tỷ lệ bằng 0%. Có chấm ở mỗi điểm thật (dot khác false): một
+                điểm có dữ liệu nhưng cả hai lân cận đều rỗng sẽ không có đoạn nào để
+                vẽ — thiếu chấm thì điểm đó biến mất hoàn toàn khỏi biểu đồ. */}
             <Line
               dataKey="late_rate"
               stroke="var(--color-late_rate)"
               strokeWidth={2}
-              dot={false}
+              dot={{ r: 3, fill: "var(--color-late_rate)", strokeWidth: 0 }}
             />
           </LineChart>
         </ChartContainer>

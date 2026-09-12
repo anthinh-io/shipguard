@@ -70,24 +70,38 @@ async def test_late_related_low_review_rate_over_unfiltered_data(
 
 
 async def test_three_star_orders_are_not_low_reviews(session: AsyncSession) -> None:
-    # Đếm lại mẫu số bằng một truy vấn độc lập với worst_review_score <= 2, rồi khẳng
-    # định có tồn tại đơn 3 sao — nếu không có đơn 3 sao nào thì bài test này không
-    # phân biệt được "loại 3 sao" với "không có đơn 3 sao nào để loại".
-    low_review_count = await session.scalar(
-        text(
-            "SELECT count(*) FROM orders WHERE order_status = 'delivered' "
-            "AND delivered_to_customer_at IS NOT NULL AND worst_review_score <= 2"
-        )
-    )
+    # Gọi thẳng tầng dịch vụ — không chỉ đếm lại bằng SQL độc lập — để bài test này
+    # thật sự ghim vào hành vi của compute_kpis. Nếu code coi 3 sao là đánh giá thấp,
+    # rate_including_three_star sẽ khớp kpis.late_related_low_review_rate và bài test
+    # không phân biệt được hai nhánh.
     three_star_count = await session.scalar(
         text(
             "SELECT count(*) FROM orders WHERE order_status = 'delivered' "
             "AND delivered_to_customer_at IS NOT NULL AND worst_review_score = 3"
         )
     )
-
     assert three_star_count > 0
-    assert low_review_count == 12310
+
+    kpis = await compute_kpis(session, DashboardFilters())
+    assert kpis.late_related_low_review_rate is not None
+
+    low_and_late_including_three_star, low_including_three_star = (
+        await session.execute(
+            text(
+                "SELECT count(*) FILTER (WHERE is_late), count(*) FROM orders "
+                "WHERE order_status = 'delivered' "
+                "AND delivered_to_customer_at IS NOT NULL AND worst_review_score <= 3"
+            )
+        )
+    ).one()
+    rate_including_three_star = (
+        low_and_late_including_three_star / low_including_three_star
+    )
+
+    # Coi 3 sao là đánh giá thấp sẽ cho ra một tỷ lệ khác — nếu hai con số trùng nhau,
+    # bài test này không phân biệt được gì cả.
+    assert kpis.late_related_low_review_rate != rate_including_three_star
+    assert round(kpis.late_related_low_review_rate * 100, 2) == 32.38
 
 
 def test_granularity_switches_at_the_31_day_boundary() -> None:
