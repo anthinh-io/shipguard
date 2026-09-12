@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Card, CardContent } from "./ui/card";
 
 export function KpiTile({
@@ -5,11 +7,16 @@ export function KpiTile({
   label,
   value,
   hint,
+  delta,
 }: {
   testId: string;
   label: string;
   value: string;
   hint?: string;
+  // Mức chênh so với kỳ đối chiếu. Là ReactNode chứ không phải chuỗi vì nó gồm một mũi
+  // tên và phần chữ được tô màu; value và hint đều đã là chuỗi định dạng sẵn nên không
+  // có chỗ nào đặt được hai thứ đó vào.
+  delta?: ReactNode;
 }) {
   return (
     // Card truyền tiếp props nên data-testid xuống tới thẻ gốc; bốn bài Playwright bám
@@ -22,6 +29,7 @@ export function KpiTile({
       <CardContent>
         <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
         <p className="mt-2 text-4xl font-semibold tabular-nums">{value}</p>
+        {delta ?? null}
         {hint ? (
           <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
         ) : null}

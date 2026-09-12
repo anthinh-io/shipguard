@@ -20,6 +20,11 @@
     "lowReviewHint": "of 1–2 star orders",
     "trendTitle": "Late rate trend",
     "lateRate": "Late rate",
+    "trendCurrentSeries": "Current period",
+    "trendComparisonSeries": "Comparison period",
+    "deltaPercentagePoints": "{value} percentage points",
+    "deltaDays": "{value} days",
+    "deltaFlat": "Unchanged from the comparison period",
     "granularity": {
       "day": "By day",
       "week": "By week",
@@ -38,7 +43,11 @@
       "allSellers": "All sellers",
       "sellerPlaceholder": "Type an id, state or city…",
       "sellerNoResults": "No sellers found",
-      "sellerHint": "{state} · {city} · {count, number} orders"
+      "sellerHint": "{state} · {city} · {count, number} orders",
+      "comparison": "Comparison mode",
+      "comparisonNone": "No comparison",
+      "comparisonPrevious": "Previous period",
+      "comparisonYearOverYear": "Same period last year"
     }
   },
   "language": {

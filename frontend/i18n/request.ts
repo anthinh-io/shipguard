@@ -48,6 +48,26 @@ export default getRequestConfig(async () => {
           style: "percent",
           maximumFractionDigits: 0,
         },
+        // Ba định dạng mức chênh giữa hai kỳ (#13). signDisplay "exceptZero" để dấu +
+        // hiện ra với mức tăng — không có nó thì chỉ mức giảm mới mang dấu và người
+        // đọc phải suy ra chiều từ mũi tên.
+        //
+        // Mức chênh của một tỷ lệ là ĐIỂM phần trăm, không phải phần trăm: 93% xuống
+        // 91% là giảm 2 điểm phần trăm chứ không phải giảm 2%. Vì thế không dùng
+        // style "percent" ở đây — số đã được nhân 100 sẵn và đơn vị nằm trong nhãn.
+        signedPercentagePoints: {
+          signDisplay: "exceptZero",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        },
+        signedCount: {
+          signDisplay: "exceptZero",
+          maximumFractionDigits: 0,
+        },
+        signedDays: {
+          signDisplay: "exceptZero",
+          maximumFractionDigits: 2,
+        },
       },
     },
   };

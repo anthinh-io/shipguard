@@ -18,6 +18,7 @@ from app.services.dashboard import (
     compute_late_rate_trend,
     is_small_sample,
     list_customer_states,
+    resolve_comparison_period,
     resolve_default_period,
     search_sellers,
 )
@@ -452,6 +453,76 @@ async def test_a_seller_below_the_threshold_is_flagged(session: AsyncSession) ->
 
     assert 0 < kpis.delivered_orders < SMALL_SAMPLE_MAX_ORDERS
     assert is_small_sample(kpis.delivered_orders) is True
+
+
+def test_previous_period_has_the_same_length_and_ends_the_day_before() -> None:
+    period = ReportingPeriod(start_date=date(2018, 3, 1), end_date=date(2018, 3, 31))
+
+    previous = resolve_comparison_period(period, "previous")
+
+    assert previous == ReportingPeriod(
+        start_date=date(2018, 1, 29), end_date=date(2018, 2, 28)
+    )
+    # Cùng độ dài là điều kiện để hai đường xu hướng so được với nhau.
+    assert _span_days(previous) == _span_days(period)
+
+
+def test_year_over_year_period_shifts_back_one_year() -> None:
+    period = ReportingPeriod(start_date=date(2018, 1, 1), end_date=date(2018, 6, 30))
+
+    assert resolve_comparison_period(period, "year_over_year") == ReportingPeriod(
+        start_date=date(2017, 1, 1), end_date=date(2017, 6, 30)
+    )
+
+
+def test_year_over_year_clamps_the_leap_day() -> None:
+    # 29/2/2016 không tồn tại ở 2015; lùi về 28/2 thay vì ném ValueError.
+    period = ReportingPeriod(start_date=date(2016, 2, 29), end_date=date(2016, 2, 29))
+
+    assert resolve_comparison_period(period, "year_over_year") == ReportingPeriod(
+        start_date=date(2015, 2, 28), end_date=date(2015, 2, 28)
+    )
+
+
+def test_no_comparison_mode_resolves_to_nothing() -> None:
+    period = ReportingPeriod(start_date=date(2018, 1, 1), end_date=date(2018, 6, 30))
+
+    assert resolve_comparison_period(period, "none") is None
+    # Chưa có đơn đã giao nào thì không có kỳ chính, nên cũng không có kỳ đối chiếu.
+    assert resolve_comparison_period(None, "previous") is None
+
+
+async def test_comparison_trend_uses_the_report_period_granularity(
+    session: AsyncSession,
+) -> None:
+    """Kỳ đối chiếu không được tự chọn độ mịn của riêng nó.
+
+    Cặp ngày này lệch nhau đúng một ngày vì 29/2/2016 nằm trong kỳ đối chiếu chứ không
+    nằm trong kỳ chính, và một ngày đó đủ đẩy kỳ đối chiếu qua ngưỡng tuần/tháng.
+    """
+    period = ReportingPeriod(start_date=date(2016, 9, 2), end_date=date(2017, 3, 2))
+    comparison = resolve_comparison_period(period, "year_over_year")
+
+    assert comparison is not None
+    # Tiền đề của chính bài test: để tự chọn thì hai kỳ ra hai độ mịn KHÁC nhau. Thiếu
+    # khẳng định này, bài test vẫn xanh kể cả khi tham số granularity bị bỏ qua.
+    assert _span_days(period) == 182
+    assert _span_days(comparison) == 183
+    assert choose_granularity(period) == "week"
+    assert choose_granularity(comparison) == "month"
+
+    granularity = choose_granularity(period)
+    main = await compute_late_rate_trend(session, DashboardFilters(period=period))
+    other = await compute_late_rate_trend(
+        session, DashboardFilters(period=comparison), granularity=granularity
+    )
+
+    assert main.granularity == "week"
+    assert other.granularity == "week"
+
+
+def _span_days(period: ReportingPeriod) -> int:
+    return (period.end_date - period.start_date).days + 1
 
 
 def _months_spanned(period: ReportingPeriod) -> int:

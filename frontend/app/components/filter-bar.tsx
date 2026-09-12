@@ -17,12 +17,15 @@ import {
   SelectValue,
 } from "./ui/select";
 
+export type ComparisonMode = "previous" | "year_over_year";
+
 export type Filters = {
   range: { from: string; to: string } | null;
   customerState: string | null;
   // Giữ cả đối tượng chứ không chỉ mã: nhãn trên nút cần bang của người bán, mà không
   // có nơi nào khác để tra lại nó. Chỉ seller_id đi vào chuỗi truy vấn.
   seller: SellerOption | null;
+  comparison: ComparisonMode | null;
 };
 
 // null ở mỗi trường nghĩa là không gắn tham số đó vào chuỗi truy vấn, chứ không phải
@@ -31,11 +34,14 @@ export const EMPTY_FILTERS: Filters = {
   range: null,
   customerState: null,
   seller: null,
+  comparison: null,
 };
 
 // shadcn Select không chấp nhận value="" cho một item, nên cần một giá trị đặc biệt
 // riêng cho lựa chọn "tất cả các bang".
 const ALL_STATES = "__all__";
+// Cùng lý do, cho chế độ "không so sánh".
+const NO_COMPARISON = "none";
 
 export function FilterBar({
   filters,
@@ -145,6 +151,36 @@ export function FilterBar({
         seller={filters.seller}
         onChange={(seller) => onChange({ ...filters, seller })}
       />
+
+      <Select
+        value={filters.comparison ?? NO_COMPARISON}
+        onValueChange={(value) =>
+          onChange({
+            ...filters,
+            comparison:
+              value === NO_COMPARISON ? null : (value as ComparisonMode),
+          })
+        }
+      >
+        <SelectTrigger
+          data-testid="filter-comparison"
+          aria-label={t("filters.comparison")}
+          className="w-[200px]"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_COMPARISON}>
+            {t("filters.comparisonNone")}
+          </SelectItem>
+          <SelectItem value="previous">
+            {t("filters.comparisonPrevious")}
+          </SelectItem>
+          <SelectItem value="year_over_year">
+            {t("filters.comparisonYearOverYear")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
 
       <Button
         variant="ghost"

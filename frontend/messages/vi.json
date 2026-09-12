@@ -20,6 +20,11 @@
     "lowReviewHint": "trong các đơn 1–2 sao",
     "trendTitle": "Xu hướng tỷ lệ trễ",
     "lateRate": "Tỷ lệ trễ",
+    "trendCurrentSeries": "Kỳ đang xem",
+    "trendComparisonSeries": "Kỳ đối chiếu",
+    "deltaPercentagePoints": "{value} điểm phần trăm",
+    "deltaDays": "{value} ngày",
+    "deltaFlat": "Không đổi so với kỳ đối chiếu",
     "granularity": {
       "day": "Theo ngày",
       "week": "Theo tuần",
@@ -38,7 +43,11 @@
       "allSellers": "Tất cả người bán",
       "sellerPlaceholder": "Gõ mã, bang hoặc thành phố…",
       "sellerNoResults": "Không tìm thấy người bán nào",
-      "sellerHint": "{state} · {city} · {count, number} đơn"
+      "sellerHint": "{state} · {city} · {count, number} đơn",
+      "comparison": "Chế độ so sánh",
+      "comparisonNone": "Không so sánh",
+      "comparisonPrevious": "Kỳ liền trước",
+      "comparisonYearOverYear": "Cùng kỳ năm trước"
     }
   },
   "language": {

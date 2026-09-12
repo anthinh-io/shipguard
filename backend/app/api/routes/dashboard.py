@@ -6,17 +6,20 @@ from pydantic import BaseModel
 
 from app.api.deps import SessionDep
 from app.services.dashboard import (
+    ComparisonMode,
     DashboardFilters,
     DashboardKpis,
     LateRateTrend,
     ReportingPeriod,
     SellerOption,
     StateLateRate,
+    choose_granularity,
     compute_kpis,
     compute_late_rate_by_state,
     compute_late_rate_trend,
     is_small_sample,
     list_customer_states,
+    resolve_comparison_period,
     resolve_default_period,
     search_sellers,
 )
@@ -43,6 +46,15 @@ class DashboardResponse(BaseModel):
     # Chỉ là một cờ cảnh báo: số liệu bên trên vẫn đầy đủ. Người dùng có quyền xem, chỉ
     # cần biết là đừng kết luận chắc từ một tập vài đơn.
     small_sample: bool
+    # Ba khối của kỳ đối chiếu, cùng về trong một lần gọi. None nghĩa là không so sánh —
+    # khác hẳn với "có so sánh nhưng kỳ đối chiếu rỗng", trường hợp đó vẫn có khối đầy
+    # đủ với delivered_orders bằng 0 và các tỷ lệ là None.
+    #
+    # Phân bố theo bang cố ý không có bản đối chiếu: đặc tả ở #1 chỉ yêu cầu chuỗi đối
+    # chiếu cho ô KPI và biểu đồ xu hướng.
+    comparison_period: ReportingPeriod | None
+    comparison_kpis: DashboardKpis | None
+    comparison_late_rate_trend: LateRateTrend | None
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -54,6 +66,7 @@ async def dashboard(
     # theo bang là lẫn bang người bán với bang khách nhận (xem CONTEXT.md mục Region).
     customer_state: str | None = None,
     seller_id: str | None = None,
+    comparison: ComparisonMode = "none",
 ) -> DashboardResponse:
     if (start_date is None) != (end_date is None):
         raise HTTPException(
@@ -71,6 +84,24 @@ async def dashboard(
     )
     customer_states = await list_customer_states(session)
     kpis = await compute_kpis(session, filters)
+
+    comparison_period = resolve_comparison_period(period, comparison)
+    comparison_kpis = None
+    comparison_trend = None
+    if comparison_period is not None:
+        # Chỉ kỳ đổi; bang và người bán áp nguyên vẹn cho cả hai vế, nếu không thì mức
+        # chênh đang so hai tập đơn khác nhau về bản chất.
+        comparison_filters = filters.model_copy(update={"period": comparison_period})
+        comparison_kpis = await compute_kpis(session, comparison_filters)
+        # Áp độ mịn của kỳ chính thay vì để kỳ đối chiếu tự chọn: hai kỳ "cùng kỳ năm
+        # trước" có thể lệch nhau một ngày vì năm nhuận, đủ để rơi vào hai độ mịn khác
+        # nhau, và hai đường như vậy không chồng lên nhau được.
+        comparison_trend = await compute_late_rate_trend(
+            session,
+            comparison_filters,
+            granularity=None if period is None else choose_granularity(period),
+        )
+
     return DashboardResponse(
         reporting_period=period,
         filter_options=FilterOptions(customer_states=customer_states),
@@ -78,6 +109,9 @@ async def dashboard(
         late_rate_trend=await compute_late_rate_trend(session, filters),
         late_rate_by_state=await compute_late_rate_by_state(session, filters),
         small_sample=is_small_sample(kpis.delivered_orders),
+        comparison_period=comparison_period,
+        comparison_kpis=comparison_kpis,
+        comparison_late_rate_trend=comparison_trend,
     )
 
 

@@ -40,7 +40,14 @@ async def test_response_shape(client: AsyncClient) -> None:
         "late_rate_trend",
         "late_rate_by_state",
         "small_sample",
+        "comparison_period",
+        "comparison_kpis",
+        "comparison_late_rate_trend",
     }
+    # Không so sánh là mặc định, và ba khối kia rỗng chứ không phải bằng không.
+    assert body["comparison_period"] is None
+    assert body["comparison_kpis"] is None
+    assert body["comparison_late_rate_trend"] is None
     assert set(body["reporting_period"]) == {"start_date", "end_date"}
     assert set(body["filter_options"]) == {"customer_states"}
     assert len(body["filter_options"]["customer_states"]) == 27
@@ -257,6 +264,118 @@ async def test_sellers_endpoint_returns_nothing_without_a_query(
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+async def test_previous_comparison_returns_both_periods_in_one_call(
+    client: AsyncClient,
+) -> None:
+    params = {**REPORTING_PERIOD, "comparison": "previous"}
+
+    response = await client.get("/dashboard", params=params)
+
+    # Một lần gọi HTTP mang về cả hai kỳ — tiêu chí của #13.
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison_period"] == {
+        "start_date": "2017-10-03",
+        "end_date": "2017-12-31",
+    }
+    assert body["comparison_kpis"]["delivered_orders"] > 0
+    assert body["comparison_late_rate_trend"]["points"] != []
+    # Hai kỳ khác nhau thì số liệu cũng phải khác, nếu không bài test không phân biệt
+    # được kỳ đối chiếu với chính kỳ đang xem.
+    assert (
+        body["comparison_kpis"]["delivered_orders"] != body["kpis"]["delivered_orders"]
+    )
+
+
+async def test_year_over_year_comparison_shifts_back_one_year(
+    client: AsyncClient,
+) -> None:
+    params = {**REPORTING_PERIOD, "comparison": "year_over_year"}
+
+    body = (await client.get("/dashboard", params=params)).json()
+
+    assert body["comparison_period"] == {
+        "start_date": "2017-01-01",
+        "end_date": "2017-03-31",
+    }
+
+
+async def test_both_trends_share_one_granularity(client: AsyncClient) -> None:
+    # Cùng kỳ năm trước có thể lệch một ngày vì năm nhuận và tự chọn ra độ mịn khác;
+    # hai đường như vậy không chồng lên nhau được. Ranh giới chính xác được kiểm ở
+    # tầng dịch vụ, đây chỉ khẳng định hợp đồng phản hồi giữ đúng một độ mịn.
+    params = {
+        "start_date": "2016-09-02",
+        "end_date": "2017-03-02",
+        "comparison": "year_over_year",
+    }
+
+    body = (await client.get("/dashboard", params=params)).json()
+
+    assert (
+        body["comparison_late_rate_trend"]["granularity"]
+        == body["late_rate_trend"]["granularity"]
+        == "week"
+    )
+
+
+async def test_comparison_period_without_data_stays_a_valid_response(
+    client: AsyncClient,
+) -> None:
+    # 10/2016 là tháng đầu tiên có đơn giao, nên cùng kỳ năm trước hoàn toàn rỗng.
+    # Đây là chuyện xảy ra thật với bộ Olist, không phải trường hợp bịa ra.
+    params = {
+        **EDGE_CASE_FILTERS["empty_comparison_period"],
+        "comparison": "year_over_year",
+    }
+
+    response = await client.get("/dashboard", params=params)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kpis"]["delivered_orders"] > 0
+    assert body["comparison_period"] == {
+        "start_date": "2015-10-01",
+        "end_date": "2015-10-31",
+    }
+    # Rỗng gọn gàng: khối vẫn có mặt, số đơn bằng 0, tỷ lệ là rỗng chứ không phải 0%.
+    assert body["comparison_kpis"]["delivered_orders"] == 0
+    assert body["comparison_kpis"]["on_time_rate"] is None
+    assert body["comparison_kpis"]["late_related_low_review_rate"] is None
+    points = body["comparison_late_rate_trend"]["points"]
+    assert points != []
+    assert all(point["late_rate"] is None for point in points)
+
+
+async def test_comparison_inherits_the_state_and_seller_filters(
+    client: AsyncClient,
+) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    base = {**REPORTING_PERIOD, "comparison": "previous"}
+
+    wide = (await client.get("/dashboard", params=base)).json()
+    narrow = (
+        await client.get(
+            "/dashboard",
+            params={**base, "customer_state": "SP", "seller_id": seller_id},
+        )
+    ).json()
+
+    # Chỉ kỳ đổi giữa hai khối; bang và người bán áp cho cả hai.
+    assert narrow["comparison_period"] == wide["comparison_period"]
+    assert (
+        0
+        < narrow["comparison_kpis"]["delivered_orders"]
+        < wide["comparison_kpis"]["delivered_orders"]
+    )
+
+
+async def test_unknown_comparison_mode_is_rejected(client: AsyncClient) -> None:
+    response = await client.get("/dashboard", params={"comparison": "last_quarter"})
+
+    assert response.status_code == 422
 
 
 async def test_cors_header_present_for_an_allowed_origin(

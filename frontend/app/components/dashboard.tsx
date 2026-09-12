@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { EMPTY_FILTERS, FilterBar, type Filters } from "./filter-bar";
+import { KpiDelta } from "./kpi-delta";
 import { KpiTile } from "./kpi-tile";
 import { LateRateByStateChart } from "./late-rate-by-state";
 import { LateRateTrendChart } from "./late-rate-trend";
@@ -24,6 +25,9 @@ function buildDashboardUrl(filters: Filters): string {
   }
   if (filters.seller) {
     params.set("seller_id", filters.seller.seller_id);
+  }
+  if (filters.comparison) {
+    params.set("comparison", filters.comparison);
   }
   const query = params.toString();
   return `${BACKEND_URL}/dashboard${query ? `?${query}` : ""}`;
@@ -81,6 +85,11 @@ type DashboardData = {
   late_rate_trend: LateRateTrend;
   late_rate_by_state: StateLateRate[];
   small_sample: boolean;
+  // null nghĩa là không so sánh. "Có so sánh nhưng kỳ đối chiếu rỗng" là chuyện khác:
+  // lúc đó khối vẫn về đầy đủ với delivered_orders bằng 0 và các tỷ lệ là null.
+  comparison_period: ReportingPeriod | null;
+  comparison_kpis: Kpis | null;
+  comparison_late_rate_trend: LateRateTrend | null;
 };
 
 type Failure =
@@ -193,6 +202,14 @@ export default function Dashboard() {
     );
   } else {
     const { reporting_period, kpis } = state.data;
+    // Kỳ đối chiếu không có đơn nào thì không có mức chênh nào cả — kể cả với số đơn
+    // trễ, chỉ số duy nhất mà 0 là một giá trị hợp lệ. "45 đơn so với một kỳ rỗng" đọc
+    // ra thành "tăng 45 đơn", trong khi thật ra là không có gì để so. Các tỷ lệ đã tự
+    // rỗng theo quy ước của backend; chốt này kéo số đếm về cùng một hành vi.
+    const comparison_kpis =
+      state.data.comparison_kpis && state.data.comparison_kpis.delivered_orders > 0
+        ? state.data.comparison_kpis
+        : null;
     const period = reporting_period
       ? `${format.dateTime(new Date(reporting_period.start_date), "fullDate")} – ${format.dateTime(
           new Date(reporting_period.end_date),
@@ -230,26 +247,46 @@ export default function Dashboard() {
                 : format.number(kpis.on_time_rate, "percent")
             }
             hint={t("deliveredOrders", { count: kpis.delivered_orders })}
+            delta={
+              <KpiDelta
+                value={kpis.on_time_rate}
+                comparisonValue={comparison_kpis?.on_time_rate}
+                unit="percentagePoints"
+                // Chỉ số duy nhất mà tăng là tốt.
+                higherIsBetter
+              />
+            }
           />
           <KpiTile
             testId="kpi-late-orders"
             label={t("lateOrders")}
             value={format.number(kpis.late_orders)}
+            delta={
+              <KpiDelta
+                value={kpis.late_orders}
+                comparisonValue={comparison_kpis?.late_orders}
+                unit="count"
+                higherIsBetter={false}
+              />
+            }
           />
           <StageTile
             testId="kpi-payment-approval"
             label={t("paymentApproval")}
             stage={kpis.payment_approval}
+            comparisonStage={comparison_kpis?.payment_approval}
           />
           <StageTile
             testId="kpi-seller-handling"
             label={t("sellerHandling")}
             stage={kpis.seller_handling}
+            comparisonStage={comparison_kpis?.seller_handling}
           />
           <StageTile
             testId="kpi-carrier-transit"
             label={t("carrierTransit")}
             stage={kpis.carrier_transit}
+            comparisonStage={comparison_kpis?.carrier_transit}
           />
           <KpiTile
             testId="kpi-late-related-low-review-rate"
@@ -262,10 +299,21 @@ export default function Dashboard() {
                 : format.number(kpis.late_related_low_review_rate, "percent")
             }
             hint={t("lowReviewHint")}
+            delta={
+              <KpiDelta
+                value={kpis.late_related_low_review_rate}
+                comparisonValue={comparison_kpis?.late_related_low_review_rate}
+                unit="percentagePoints"
+                higherIsBetter={false}
+              />
+            }
           />
         </section>
         <div className="mt-6">
-          <LateRateTrendChart trend={state.data.late_rate_trend} />
+          <LateRateTrendChart
+            trend={state.data.late_rate_trend}
+            comparison={state.data.comparison_late_rate_trend}
+          />
         </div>
         <div className="mt-6">
           <LateRateByStateChart byState={state.data.late_rate_by_state} />
@@ -294,10 +342,12 @@ function StageTile({
   testId,
   label,
   stage,
+  comparisonStage,
 }: {
   testId: string;
   label: string;
   stage: StageDuration;
+  comparisonStage?: StageDuration;
 }) {
   const t = useTranslations("dashboard");
   const format = useFormatter();
@@ -305,6 +355,16 @@ function StageTile({
     <KpiTile
       testId={testId}
       label={label}
+      // Mức chênh tính trên trung vị, cùng con số đang hiện lớn ở giữa ô. Chặng chậm đi
+      // là xấu, nên không có chỉ số nào ở đây tăng mà tốt.
+      delta={
+        <KpiDelta
+          value={stage.median_days}
+          comparisonValue={comparisonStage?.median_days}
+          unit="days"
+          higherIsBetter={false}
+        />
+      }
       // Chặng có thể toàn NULL (mọi đơn thiếu mốc trung gian trong tập đã lọc); "—"
       // tránh in ra "null ngày" một cách vô nghĩa.
       value={

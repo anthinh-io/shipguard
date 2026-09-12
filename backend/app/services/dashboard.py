@@ -15,6 +15,10 @@ DEFAULT_PERIOD_MONTHS = 12
 
 Granularity = Literal["day", "week", "month"]
 
+# Comparison Period theo CONTEXT.md: kỳ liền trước có cùng độ dài, hoặc cùng kỳ của năm
+# trước. "none" là chế độ thứ ba trên thanh bộ lọc, không phải sự vắng mặt của tham số.
+ComparisonMode = Literal["none", "previous", "year_over_year"]
+
 # Hai ngưỡng đều tính bằng ngày, cùng một kiểu số học, nên test ranh giới chỉ là hai
 # con số cố định. 183 ngày là "6 tháng" quy về ngày; dùng số học lịch thay cho nó sẽ
 # làm ngưỡng trượt theo từng tháng và kéo thêm một phụ thuộc chỉ để phục vụ một phép so.
@@ -284,6 +288,37 @@ def _delivered_within(period: ReportingPeriod) -> sa.ColumnElement[bool]:
     )
 
 
+def _minus_one_year(day: date) -> date:
+    try:
+        return day.replace(year=day.year - 1)
+    except ValueError:
+        # Chỉ có đúng một ngày ném lỗi ở đây: 29/2 của năm nhuận, vì năm trước đó không
+        # có ngày ấy. Lùi về 28/2 thay vì để cả yêu cầu vỡ.
+        return day.replace(year=day.year - 1, day=28)
+
+
+def resolve_comparison_period(
+    period: ReportingPeriod | None, mode: ComparisonMode
+) -> ReportingPeriod | None:
+    """Kỳ đem ra đối chiếu với kỳ báo cáo, theo chế độ người dùng chọn.
+
+    Trả None khi không so sánh, hoặc khi chưa có kỳ chính nào để mà đối chiếu. Hàm
+    thuần: không chạm cơ sở dữ liệu, nên kỳ đối chiếu rơi ra ngoài dải dữ liệu là
+    chuyện bình thường — lúc đó truy vấn chỉ đơn giản không ra đơn nào.
+    """
+    if period is None or mode == "none":
+        return None
+    if mode == "previous":
+        # Cùng độ dài, kết thúc đúng ngày trước ngày bắt đầu của kỳ chính.
+        span = period.end_date - period.start_date
+        end_date = period.start_date - timedelta(days=1)
+        return ReportingPeriod(start_date=end_date - span, end_date=end_date)
+    return ReportingPeriod(
+        start_date=_minus_one_year(period.start_date),
+        end_date=_minus_one_year(period.end_date),
+    )
+
+
 def choose_granularity(period: ReportingPeriod) -> Granularity:
     """Backend chọn độ mịn theo độ dài kỳ, không phải frontend.
 
@@ -300,18 +335,26 @@ def choose_granularity(period: ReportingPeriod) -> Granularity:
 
 
 async def compute_late_rate_trend(
-    session: AsyncSession, filters: DashboardFilters
+    session: AsyncSession,
+    filters: DashboardFilters,
+    granularity: Granularity | None = None,
 ) -> LateRateTrend:
     """Xu hướng tỷ lệ trễ theo thời gian, gom nhóm theo độ mịn do backend chọn.
 
     `filters.period` là None chỉ xảy ra khi chưa có đơn đã giao nào — không có khung
     thời gian nào để lấp khoảng trống, nên trả về rỗng.
+
+    `granularity` để bên gọi áp một độ mịn có sẵn thay vì tự suy ra. Đường dẫn duy nhất
+    tới đó là chuỗi của kỳ đối chiếu: hai kỳ cùng chế độ "cùng kỳ năm trước" có thể lệch
+    nhau đúng một ngày vì năm nhuận, và một ngày đó đủ đẩy chúng sang hai độ mịn khác
+    nhau — hai đường như vậy không chồng lên nhau được. Để None thì tự chọn như cũ.
     """
     period = filters.period
     if period is None:
         return LateRateTrend(granularity="month", points=[])
 
-    granularity = choose_granularity(period)
+    if granularity is None:
+        granularity = choose_granularity(period)
     start_ts = datetime.combine(period.start_date, time.min)
     end_ts = datetime.combine(period.end_date, time.min)
 
