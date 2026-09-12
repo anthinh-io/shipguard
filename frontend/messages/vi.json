@@ -27,12 +27,18 @@
     },
     "byStateTitle": "Tỷ lệ trễ theo bang",
     "empty": "Bộ lọc hiện tại không có đơn nào đã giao. Hãy nới khoảng thời gian hoặc chọn bang khác.",
+    "smallSampleWarning": "Chỉ có {count, number} đơn sau khi lọc. Ở quy mô này các tỷ lệ phần trăm chưa đủ tin cậy để kết luận.",
     "filters": {
       "dateRange": "Khoảng thời gian",
       "customerState": "Bang nhận hàng",
       "allStates": "Tất cả các bang",
       "clearAll": "Xoá hết bộ lọc",
-      "pickDateRange": "Chọn khoảng thời gian"
+      "pickDateRange": "Chọn khoảng thời gian",
+      "seller": "Người bán",
+      "allSellers": "Tất cả người bán",
+      "sellerPlaceholder": "Gõ mã, bang hoặc thành phố…",
+      "sellerNoResults": "Không tìm thấy người bán nào",
+      "sellerHint": "{state} · {city} · {count, number} đơn"
     }
   },
   "language": {

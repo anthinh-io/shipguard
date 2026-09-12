@@ -9,18 +9,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.dashboard import (
     DEFAULT_PERIOD_MONTHS,
     FULL_MONTH_MIN_DELIVERED_ORDERS,
+    SMALL_SAMPLE_MAX_ORDERS,
     DashboardFilters,
     ReportingPeriod,
     choose_granularity,
     compute_kpis,
     compute_late_rate_by_state,
     compute_late_rate_trend,
+    is_small_sample,
     list_customer_states,
     resolve_default_period,
+    search_sellers,
 )
 
 EDGE_CASE_ORDERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
+)
+
+EDGE_CASE_FILTERS = json.loads(
+    (Path(__file__).parent / "fixtures" / "edge_case_filters.json").read_text("utf-8")
 )
 
 ORDER_IDS = bindparam("ids", type_=sa.ARRAY(sa.Text))
@@ -283,6 +290,168 @@ async def test_default_period_falls_back_when_no_month_is_full(
         assert _months_spanned(period) == DEFAULT_PERIOD_MONTHS
     finally:
         await session.rollback()
+
+
+async def test_seller_filter_narrows_every_metric(session: AsyncSession) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    # Đếm lại độc lập qua bảng nối, rồi khẳng định compute_kpis khớp đúng con số đó.
+    expected_delivered = await session.scalar(
+        text(
+            "SELECT count(*) FROM orders o WHERE o.order_status = 'delivered' "
+            "AND o.delivered_to_customer_at IS NOT NULL AND EXISTS ("
+            "SELECT 1 FROM order_sellers os WHERE os.order_id = o.order_id "
+            "AND os.seller_id = :seller_id)"
+        ),
+        {"seller_id": seller_id},
+    )
+
+    unfiltered = await compute_kpis(session, DashboardFilters())
+    kpis = await compute_kpis(session, DashboardFilters(seller_id=seller_id))
+
+    assert kpis.delivered_orders == expected_delivered
+    # Nếu không hẹp hơn thì bộ lọc chưa hề được áp và bài test không phân biệt được gì.
+    assert 0 < kpis.delivered_orders < unfiltered.delivered_orders
+
+
+async def test_seller_filter_combines_with_state_and_period(
+    session: AsyncSession,
+) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    period = ReportingPeriod(start_date=date(2018, 1, 1), end_date=date(2018, 6, 30))
+
+    seller_only = await compute_kpis(session, DashboardFilters(seller_id=seller_id))
+    combined = await compute_kpis(
+        session,
+        DashboardFilters(seller_id=seller_id, customer_state="SP", period=period),
+    )
+
+    # Ba chiều lọc chồng lên nhau, không cái nào ghi đè cái nào.
+    assert 0 < combined.delivered_orders < seller_only.delivered_orders
+
+
+async def test_multi_seller_order_counts_for_every_participating_seller(
+    session: AsyncSession,
+) -> None:
+    # Một đơn ghép nhiều người bán thuộc về MỌI người bán tham gia (CONTEXT.md mục
+    # Multi-Seller Order), nên lọc theo từng người bán đều phải thấy đúng đơn đó.
+    order_id = EDGE_CASE_ORDERS["multi_seller"][0]
+    seller_ids = [
+        row.seller_id
+        for row in (
+            await session.execute(
+                text("SELECT seller_id FROM order_sellers WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+        ).all()
+    ]
+
+    assert len(seller_ids) > 1
+
+    for seller_id in seller_ids:
+        found = await session.scalar(
+            text(
+                "SELECT count(*) FROM orders o WHERE o.order_id = :order_id "
+                "AND EXISTS (SELECT 1 FROM order_sellers os "
+                "WHERE os.order_id = o.order_id AND os.seller_id = :seller_id)"
+            ),
+            {"order_id": order_id, "seller_id": seller_id},
+        )
+        assert found == 1
+
+
+async def test_per_seller_totals_overshoot_the_overall_total(
+    session: AsyncSession,
+) -> None:
+    """Sai lệch ~1,3% là quyết định đã chốt trong #1, không phải lỗi cần khử.
+
+    Bài trên chứng minh *cách* quy đơn; bài này ghim *độ lớn*. Thiếu nó thì một lần
+    "sửa cho hai con số khớp nhau" sau này sẽ đi qua mà không có gì đỏ.
+    """
+    per_seller_sum = await session.scalar(
+        text(
+            "SELECT sum(n) FROM (SELECT count(*) AS n FROM order_sellers os "
+            "JOIN orders o ON o.order_id = os.order_id "
+            "WHERE o.order_status = 'delivered' "
+            "AND o.delivered_to_customer_at IS NOT NULL GROUP BY os.seller_id) t"
+        )
+    )
+    overall = (await compute_kpis(session, DashboardFilters())).delivered_orders
+
+    assert overall == 96470
+    assert per_seller_sum > overall
+    # sum() của Postgres về đây là Decimal, không so bằng được với float.
+    assert round((float(per_seller_sum) / overall - 1) * 100, 1) == 1.4
+
+
+async def test_search_sellers_matches_id_prefix_state_and_city(
+    session: AsyncSession,
+) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+
+    by_id = await search_sellers(session, seller_id[:8], limit=10)
+    by_city = await search_sellers(session, "sao paulo", limit=10)
+    by_state = await search_sellers(session, "SP", limit=10)
+
+    assert [option.seller_id for option in by_id] == [seller_id]
+    assert by_id[0].seller_city == "sao paulo"
+    assert by_id[0].seller_state == "SP"
+    assert by_id[0].delivered_orders > 0
+
+    assert len(by_city) == 10
+    assert all(option.seller_city == "sao paulo" for option in by_city)
+    # Khớp bang là một nhánh khác hẳn khớp thành phố: SP có người bán ngoài sao paulo.
+    assert all(option.seller_state == "SP" for option in by_state)
+    assert {option.seller_id for option in by_state} != {
+        option.seller_id for option in by_city
+    }
+    # Xếp theo số đơn giảm dần để đối tác lớn hiện trước.
+    counts = [option.delivered_orders for option in by_state]
+    assert counts == sorted(counts, reverse=True)
+
+
+async def test_search_sellers_returns_nothing_for_an_empty_query(
+    session: AsyncSession,
+) -> None:
+    assert await search_sellers(session, "", limit=10) == []
+    assert await search_sellers(session, "   ", limit=10) == []
+
+
+async def test_search_sellers_treats_wildcards_as_literal_text(
+    session: AsyncSession,
+) -> None:
+    # "%" chưa thoát sẽ khớp mọi người bán; đây là chuỗi tự do người dùng gõ vào.
+    assert await search_sellers(session, "%", limit=10) == []
+
+
+async def test_search_sellers_counts_are_unfiltered_totals(
+    session: AsyncSession,
+) -> None:
+    # Cùng lý do với list_customer_states: chọn một tuỳ chọn không được làm biến mất
+    # hay thu nhỏ các tuỳ chọn còn lại. Số đơn trên gợi ý là tổng của cả bộ dữ liệu.
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    expected = (
+        await compute_kpis(session, DashboardFilters(seller_id=seller_id))
+    ).delivered_orders
+
+    option = (await search_sellers(session, seller_id[:8], limit=10))[0]
+
+    assert option.delivered_orders == expected
+
+
+def test_small_sample_threshold_excludes_exactly_thirty() -> None:
+    assert SMALL_SAMPLE_MAX_ORDERS == 30
+    assert is_small_sample(29) is True
+    assert is_small_sample(30) is False
+    assert is_small_sample(31) is False
+
+
+async def test_a_seller_below_the_threshold_is_flagged(session: AsyncSession) -> None:
+    seller_id = EDGE_CASE_FILTERS["small_sample_sellers"][0]
+
+    kpis = await compute_kpis(session, DashboardFilters(seller_id=seller_id))
+
+    assert 0 < kpis.delivered_orders < SMALL_SAMPLE_MAX_ORDERS
+    assert is_small_sample(kpis.delivered_orders) is True
 
 
 def _months_spanned(period: ReportingPeriod) -> int:

@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.derived import orders
+from app.models.derived import order_sellers, orders, sellers
 
 # Bộ Olist thực chất kết thúc tháng 8/2018: tháng 9 chỉ còn 56 đơn giao, tháng 10 chỉ
 # còn 3. Không có ngưỡng thì kỳ mặc định kéo tới tận những tháng đó, tỷ lệ dựng trên
@@ -20,6 +20,9 @@ Granularity = Literal["day", "week", "month"]
 # làm ngưỡng trượt theo từng tháng và kéo thêm một phụ thuộc chỉ để phục vụ một phép so.
 DAILY_MAX_SPAN_DAYS = 31  # "dưới 31 ngày" → kỳ 30 ngày gom theo ngày
 WEEKLY_MAX_SPAN_DAYS = 183  # "dưới 6 tháng" → kỳ 182 ngày gom theo tuần
+
+# Small Sample theo CONTEXT.md: dưới 30 đơn sau khi lọc. Đúng 30 đơn KHÔNG bị gắn cờ.
+SMALL_SAMPLE_MAX_ORDERS = 30
 
 # Delivered Order theo CONTEXT.md: đơn đã tới tay khách và có ngày giao thực tế. Đây là
 # tập đơn duy nhất được tính vào KPI — bảng dẫn xuất cố ý giữ mọi đơn kèm cột trạng
@@ -74,12 +77,22 @@ class DashboardKpis(BaseModel):
     late_related_low_review_rate: float | None
 
 
+class SellerOption(BaseModel):
+    seller_id: str
+    # Seller State theo CONTEXT.md: bang người bán GỬI hàng đi, chỉ để nhận diện người
+    # bán. Không nhầm với customer_state của StateLateRate, vốn là bang khách nhận.
+    seller_city: str
+    seller_state: str
+    delivered_orders: int
+
+
 class DashboardFilters(BaseModel):
     # None ở mỗi trường nghĩa là không lọc theo chiều đó, không phải "lọc theo giá trị
     # mặc định". period=None cũng là đường vào bộ số vàng: test đối chiếu trên toàn bộ
     # dữ liệu không qua kỳ báo cáo nào.
     period: ReportingPeriod | None = None
     customer_state: str | None = None
+    seller_id: str | None = None
 
 
 def _where(filters: DashboardFilters) -> list[sa.ColumnElement[bool]]:
@@ -88,7 +101,33 @@ def _where(filters: DashboardFilters) -> list[sa.ColumnElement[bool]]:
         clauses.append(_delivered_within(filters.period))
     if filters.customer_state is not None:
         clauses.append(orders.c.customer_state == filters.customer_state)
+    if filters.seller_id is not None:
+        # EXISTS chứ không phải JOIN, và lý do là cú pháp chứ không phải hiệu năng:
+        # danh sách này còn bị nối vào mệnh đề ON của LEFT JOIN trong
+        # compute_late_rate_trend, nơi vế trái là generate_series và không có chỗ nào
+        # đặt thêm một bảng vào FROM. Tiện thể nó cũng giữ đúng một dòng mỗi đơn.
+        #
+        # Đơn ghép nhiều người bán vì vậy thuộc về MỌI người bán tham gia — đúng
+        # CONTEXT.md mục Multi-Seller Order, và là nguồn của sai lệch ~1,3% đã chấp
+        # nhận trong #1. Đừng khử.
+        clauses.append(
+            sa.exists().where(
+                sa.and_(
+                    order_sellers.c.order_id == orders.c.order_id,
+                    order_sellers.c.seller_id == filters.seller_id,
+                )
+            )
+        )
     return clauses
+
+
+def is_small_sample(delivered_orders: int) -> bool:
+    """Tập đơn sau khi lọc có đủ nhỏ để mọi tỷ lệ phần trăm mất ý nghĩa hay không.
+
+    Chỉ gắn cờ, không ẩn số liệu — người dùng vẫn có quyền xem, chỉ cần biết là đừng
+    kết luận chắc từ đó.
+    """
+    return delivered_orders < SMALL_SAMPLE_MAX_ORDERS
 
 
 async def resolve_default_period(session: AsyncSession) -> ReportingPeriod | None:
@@ -377,3 +416,70 @@ async def list_customer_states(session: AsyncSession) -> list[str]:
         )
     ).all()
     return [row.customer_state for row in rows]
+
+
+def _like_prefix(query: str) -> str:
+    # seller_city nhận chuỗi tự do người dùng gõ vào, nên "%" và "_" phải thành ký tự
+    # thường. Không thoát thì gõ đúng một dấu "%" sẽ khớp toàn bộ 3.095 người bán.
+    # Dấu chéo ngược phải thoát trước, nếu không nó sẽ thoát nhầm hai lần sau đó.
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"{escaped}%"
+
+
+async def search_sellers(
+    session: AsyncSession, query: str, limit: int
+) -> list[SellerOption]:
+    """Gợi ý người bán cho ô gõ dần, khớp tiền tố trên mã, bang và thành phố.
+
+    Bộ Olist không có tên người bán — chỉ có mã băm 32 ký tự — nên mỗi gợi ý phải kèm
+    bang và số đơn thì người dùng mới phân biệt nổi các dòng trông giống hệt nhau.
+
+    Cố ý không nhận `DashboardFilters`: cùng lý do với `list_customer_states`, đây là
+    tuỳ chọn cho bộ lọc nên chọn một tuỳ chọn không được làm biến mất hay thu nhỏ các
+    lựa chọn còn lại. Hệ quả cần biết: một gợi ý ghi 45 đơn vẫn có thể chạm ngưỡng mẫu
+    nhỏ sau khi người dùng áp thêm khoảng thời gian hay bang.
+    """
+    # Chuỗi rỗng khớp mọi thứ, và đổ cả 3.095 dòng ra không phải là "gợi ý".
+    if not query.strip():
+        return []
+
+    pattern = _like_prefix(query.strip())
+    delivered_orders = sa.func.count().label("delivered_orders")
+    statement = (
+        sa.select(
+            sellers.c.seller_id,
+            sellers.c.seller_city,
+            sellers.c.seller_state,
+            delivered_orders,
+        )
+        .select_from(sellers)
+        .join(order_sellers, order_sellers.c.seller_id == sellers.c.seller_id)
+        .join(orders, orders.c.order_id == order_sellers.c.order_id)
+        .where(
+            sa.and_(
+                DELIVERED,
+                sa.or_(
+                    sellers.c.seller_id.ilike(pattern, escape="\\"),
+                    sellers.c.seller_state.ilike(pattern, escape="\\"),
+                    sellers.c.seller_city.ilike(pattern, escape="\\"),
+                ),
+            )
+        )
+        .group_by(sellers.c.seller_id, sellers.c.seller_city, sellers.c.seller_state)
+        # Xếp theo số đơn giảm dần là chủ ý, không phải theo độ khớp: gõ tên bang hay
+        # thành phố thì người dùng muốn thấy đối tác lớn trước. Hoà thì theo mã để kết
+        # quả tất định giữa các lần gọi.
+        .order_by(delivered_orders.desc(), sellers.c.seller_id)
+        .limit(limit)
+    )
+
+    rows = (await session.execute(statement)).all()
+    return [
+        SellerOption(
+            seller_id=row.seller_id,
+            seller_city=row.seller_city,
+            seller_state=row.seller_state,
+            delivered_orders=row.delivered_orders,
+        )
+        for row in rows
+    ]

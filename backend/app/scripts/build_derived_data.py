@@ -44,7 +44,15 @@ ORDER_SELLERS_SQL = """
     JOIN orders o ON o.order_id = i.order_id
 """
 
-DERIVED_TABLES = ("orders", "order_sellers")
+# DISTINCT chứ không phải SELECT trần: khoá chính seller_id sẽ từ chối bản sao, và một
+# mã người bán lặp lại y hệt trong tệp thô là chuyện bình thường, không phải lỗi dữ liệu.
+SELLERS_SQL = """
+    INSERT INTO sellers (seller_id, seller_city, seller_state)
+    SELECT DISTINCT seller_id, seller_city, seller_state
+    FROM raw_sellers
+"""
+
+DERIVED_TABLES = ("orders", "order_sellers", "sellers")
 
 
 async def build_all(dsn: str) -> dict[str, int]:
@@ -56,9 +64,11 @@ async def build_all(dsn: str) -> dict[str, int]:
             # cha sẽ bị từ chối. Không dùng CASCADE — nó sẽ lan sang bảng khác nếu
             # sau này có bảng trỏ tới. Thứ tự INSERT thì ngược lại: orders phải có
             # trước order_sellers.
-            await conn.execute("TRUNCATE TABLE order_sellers, orders")
+            # sellers không có khoá ngoại nào nên xoá cùng lượt là an toàn.
+            await conn.execute("TRUNCATE TABLE order_sellers, orders, sellers")
             await conn.execute(ORDERS_SQL)
             await conn.execute(ORDER_SELLERS_SQL)
+            await conn.execute(SELLERS_SQL)
 
         return {
             table: await conn.fetchval(f'SELECT count(*) FROM "{table}"')

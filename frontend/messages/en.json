@@ -27,12 +27,18 @@
     },
     "byStateTitle": "Late rate by state",
     "empty": "No delivered orders match the current filters. Try widening the date range or picking a different state.",
+    "smallSampleWarning": "Only {count, number} orders match the current filters. At this size the percentages are not reliable enough to draw conclusions from.",
     "filters": {
       "dateRange": "Date range",
       "customerState": "Receiving state",
       "allStates": "All states",
       "clearAll": "Clear all filters",
-      "pickDateRange": "Pick a date range"
+      "pickDateRange": "Pick a date range",
+      "seller": "Seller",
+      "allSellers": "All sellers",
+      "sellerPlaceholder": "Type an id, state or city…",
+      "sellerNoResults": "No sellers found",
+      "sellerHint": "{state} · {city} · {count, number} orders"
     }
   },
   "language": {

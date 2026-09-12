@@ -130,6 +130,31 @@ SELECT o.order_id FROM raw_orders o
  ORDER BY o.order_id LIMIT 100;
 ```
 
+`tests/fixtures/edge_case_filters.json` là tệp anh em, ghim những thứ *không phải* mã
+đơn: người bán dưới ngưỡng mẫu nhỏ, người bán nhiều đơn nhất, và một kỳ báo cáo mà cả
+hai kỳ đối chiếu đều rỗng. Để riêng vì `edge_case_orders.json` được đọc theo kiểu
+"mọi nhóm đều là danh sách mã đơn", trộn vào sẽ làm hỏng cách đọc đó.
+
+```sql
+-- small_sample_sellers (2.343 người bán như vậy; lấy 20 mã đầu cho cố định)
+SELECT os.seller_id FROM order_sellers os
+  JOIN orders o ON o.order_id = os.order_id
+ WHERE o.order_status = 'delivered' AND o.delivered_to_customer_at IS NOT NULL
+ GROUP BY os.seller_id HAVING count(*) < 30
+ ORDER BY os.seller_id LIMIT 20;
+-- busiest_seller
+SELECT os.seller_id FROM order_sellers os
+  JOIN orders o ON o.order_id = os.order_id
+ WHERE o.order_status = 'delivered' AND o.delivered_to_customer_at IS NOT NULL
+ GROUP BY os.seller_id ORDER BY count(*) DESC LIMIT 1;
+-- empty_comparison_period: 10/2016 là tháng đầu tiên có đơn giao (205 đơn), nên kỳ
+-- liền trước (9/2016) và cùng kỳ năm trước (10/2015) đều không có đơn nào.
+SELECT date_trunc('month', delivered_to_customer_at) AS month, count(*)
+  FROM orders WHERE order_status = 'delivered'
+   AND delivered_to_customer_at IS NOT NULL
+ GROUP BY 1 ORDER BY 1 LIMIT 3;
+```
+
 ## Kiểm thử
 
 ```bash

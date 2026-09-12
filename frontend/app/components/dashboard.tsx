@@ -22,6 +22,9 @@ function buildDashboardUrl(filters: Filters): string {
   if (filters.customerState) {
     params.set("customer_state", filters.customerState);
   }
+  if (filters.seller) {
+    params.set("seller_id", filters.seller.seller_id);
+  }
   const query = params.toString();
   return `${BACKEND_URL}/dashboard${query ? `?${query}` : ""}`;
 }
@@ -77,6 +80,7 @@ type DashboardData = {
   kpis: Kpis;
   late_rate_trend: LateRateTrend;
   late_rate_by_state: StateLateRate[];
+  small_sample: boolean;
 };
 
 type Failure =
@@ -201,6 +205,17 @@ export default function Dashboard() {
         <p data-testid="reporting-period" className="mt-1 opacity-70">
           {t("reportingPeriod", { period })}
         </p>
+        {/* Cảnh báo, không phải che giấu: lưới KPI bên dưới vẫn hiện đủ mọi con số.
+            Người dùng có quyền xem, chỉ cần biết là đừng kết luận chắc từ đó. */}
+        {state.data.small_sample ? (
+          <p
+            data-testid="small-sample-warning"
+            role="status"
+            className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
+          >
+            {t("smallSampleWarning", { count: kpis.delivered_orders })}
+          </p>
+        ) : null}
         <section
           data-testid="kpi-grid"
           className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4"

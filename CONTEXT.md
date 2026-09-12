@@ -60,6 +60,10 @@ _Avoid_: Review Impact Rate
 Bang của khách hàng nhận hàng. Khi nói phân bố theo vùng, luôn là vùng nhận, không phải vùng gửi.
 _Avoid_: Area, Zone, Territory
 
+**Seller State**:
+Bang của người bán gửi hàng đi. Chỉ dùng để nhận diện người bán trong ô gợi ý gõ dần — mọi chỉ số theo vùng đều tính trên `Region`, tức bang của khách nhận hàng.
+_Avoid_: Origin State, Vendor Region
+
 **Small Sample**:
 Tập đơn sau khi lọc có dưới 30 đơn. Ở quy mô này các tỷ lệ phần trăm không đủ tin cậy để kết luận, nên được gắn cảnh báo.
 _Avoid_: Low Volume, Insufficient Data

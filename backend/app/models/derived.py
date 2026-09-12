@@ -53,3 +53,16 @@ order_sellers = sa.Table(
     sa.Column("order_id", sa.Text, sa.ForeignKey("orders.order_id"), primary_key=True),
     sa.Column("seller_id", sa.Text, primary_key=True, index=True),
 )
+
+# Seller State theo CONTEXT.md: bang người bán GỬI hàng đi, chỉ dùng để nhận diện người
+# bán trong ô gợi ý. Mọi chỉ số theo vùng đọc orders.customer_state, tức Region.
+#
+# Để riêng một bảng vài nghìn dòng thay vì nhồi hai cột vào order_sellers: bảng nối có
+# ~100 nghìn dòng và không truy vấn nào của bảng điều khiển cần bang người bán trên đó.
+sellers = sa.Table(
+    "sellers",
+    Base.metadata,
+    sa.Column("seller_id", sa.Text, primary_key=True),
+    sa.Column("seller_city", sa.Text, nullable=False),
+    sa.Column("seller_state", sa.Text, nullable=False),
+)

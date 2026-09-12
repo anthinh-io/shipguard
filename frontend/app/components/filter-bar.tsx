@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { CalendarIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 
+import { SellerCombobox, type SellerOption } from "./seller-combobox";
 import { Button } from "./ui/button";
 import { Calendar } from "./ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -19,11 +20,18 @@ import {
 export type Filters = {
   range: { from: string; to: string } | null;
   customerState: string | null;
+  // Giữ cả đối tượng chứ không chỉ mã: nhãn trên nút cần bang của người bán, mà không
+  // có nơi nào khác để tra lại nó. Chỉ seller_id đi vào chuỗi truy vấn.
+  seller: SellerOption | null;
 };
 
 // null ở mỗi trường nghĩa là không gắn tham số đó vào chuỗi truy vấn, chứ không phải
 // "gắn giá trị mặc định" — xem dashboard.tsx.
-export const EMPTY_FILTERS: Filters = { range: null, customerState: null };
+export const EMPTY_FILTERS: Filters = {
+  range: null,
+  customerState: null,
+  seller: null,
+};
 
 // shadcn Select không chấp nhận value="" cho một item, nên cần một giá trị đặc biệt
 // riêng cho lựa chọn "tất cả các bang".
@@ -132,6 +140,11 @@ export function FilterBar({
           ))}
         </SelectContent>
       </Select>
+
+      <SellerCombobox
+        seller={filters.seller}
+        onChange={(seller) => onChange({ ...filters, seller })}
+      />
 
       <Button
         variant="ghost"

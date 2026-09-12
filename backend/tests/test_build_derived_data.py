@@ -102,6 +102,20 @@ async def test_distinct_customer_states(db: AsyncConnection) -> None:
     assert await scalar(db, "SELECT count(DISTINCT customer_state) FROM orders") == 27
 
 
+async def test_every_seller_is_present_with_its_city_and_state(
+    db: AsyncConnection,
+) -> None:
+    # Con số lấy từ chính dữ liệu, không đóng cứng: tệp thô có 3.096 dòng kể cả tiêu
+    # đề, nhưng đó là số dòng chứ không phải số mã phân biệt.
+    assert await scalar(db, "SELECT count(*) FROM sellers") == await scalar(
+        db, "SELECT count(DISTINCT seller_id) FROM raw_sellers"
+    )
+    assert await scalar(db, "SELECT count(*) FROM sellers") > 0
+    # Seller State là bang người bán GỬI đi, khác tập bang khách nhận của orders —
+    # nếu hai con số bằng nhau thì bài test không phân biệt được hai cột.
+    assert await scalar(db, "SELECT count(DISTINCT seller_state) FROM sellers") == 23
+
+
 @pytest.mark.parametrize(
     "index_name",
     [

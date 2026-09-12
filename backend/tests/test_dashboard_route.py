@@ -1,4 +1,6 @@
+import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
@@ -6,6 +8,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+
+EDGE_CASE_FILTERS = json.loads(
+    (Path(__file__).parent / "fixtures" / "edge_case_filters.json").read_text("utf-8")
+)
 
 # Fixture client của conftest chỉ phụ thuộc DSN, không kéo theo bước nạp dữ liệu. Thiếu
 # ràng buộc này thì tệp chạy riêng sẽ đọc một bảng rỗng và xanh sai.
@@ -33,6 +39,7 @@ async def test_response_shape(client: AsyncClient) -> None:
         "kpis",
         "late_rate_trend",
         "late_rate_by_state",
+        "small_sample",
     }
     assert set(body["reporting_period"]) == {"start_date", "end_date"}
     assert set(body["filter_options"]) == {"customer_states"}
@@ -158,6 +165,98 @@ async def test_one_sided_period_is_rejected(
     response = await client.get("/dashboard", params=params)
 
     assert response.status_code == 422
+
+
+async def test_seller_filter_combines_with_state_and_period(
+    client: AsyncClient,
+) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    whole_range = {"start_date": "2016-01-01", "end_date": "2018-12-31"}
+
+    seller_only = (
+        await client.get("/dashboard", params={**whole_range, "seller_id": seller_id})
+    ).json()
+    combined = (
+        await client.get(
+            "/dashboard",
+            params={
+                "start_date": "2018-01-01",
+                "end_date": "2018-06-30",
+                "customer_state": "SP",
+                "seller_id": seller_id,
+            },
+        )
+    ).json()
+
+    # Ba chiều lọc chồng lên nhau cùng lúc, không cái nào ghi đè cái nào.
+    assert 0 < combined["kpis"]["delivered_orders"] < seller_only["kpis"]["delivered_orders"]
+    # Tuỳ chọn bộ lọc không bị bộ lọc đang áp làm hẹp lại.
+    assert len(combined["filter_options"]["customer_states"]) == 27
+
+
+async def test_small_sample_flag_follows_the_filtered_order_count(
+    client: AsyncClient,
+) -> None:
+    small_seller = EDGE_CASE_FILTERS["small_sample_sellers"][0]
+    busiest_seller = EDGE_CASE_FILTERS["busiest_seller"]
+    whole_range = {"start_date": "2016-01-01", "end_date": "2018-12-31"}
+
+    small = (
+        await client.get("/dashboard", params={**whole_range, "seller_id": small_seller})
+    ).json()
+    large = (
+        await client.get(
+            "/dashboard", params={**whole_range, "seller_id": busiest_seller}
+        )
+    ).json()
+
+    assert small["small_sample"] is True
+    assert 0 < small["kpis"]["delivered_orders"] < 30
+    # Số liệu vẫn về đầy đủ khi bị gắn cờ — cờ chỉ cảnh báo, không ẩn gì cả.
+    assert small["kpis"]["on_time_rate"] is not None
+    assert small["late_rate_by_state"] != []
+
+    assert large["small_sample"] is False
+    assert large["kpis"]["delivered_orders"] >= 30
+
+
+async def test_sellers_endpoint_returns_suggestions_with_state_and_count(
+    client: AsyncClient,
+) -> None:
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+
+    response = await client.get("/sellers", params={"q": seller_id[:8]})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert set(body[0]) == {
+        "seller_id",
+        "seller_city",
+        "seller_state",
+        "delivered_orders",
+    }
+    assert body[0]["seller_id"] == seller_id
+    # Mã băm trông giống hệt nhau; bang và số đơn là hai thứ phân biệt được các dòng.
+    assert body[0]["seller_state"] == "SP"
+    assert body[0]["delivered_orders"] > 0
+
+
+async def test_sellers_endpoint_honours_the_limit(client: AsyncClient) -> None:
+    body = (await client.get("/sellers", params={"q": "SP", "limit": 3})).json()
+
+    assert len(body) == 3
+
+
+@pytest.mark.parametrize("params", [{}, {"q": ""}, {"q": "   "}], ids=["none", "empty", "blank"])
+async def test_sellers_endpoint_returns_nothing_without_a_query(
+    client: AsyncClient, params: dict[str, str]
+) -> None:
+    # Không gõ gì thì không có gợi ý nào — đổ cả nghìn dòng ra không phải là gợi ý.
+    response = await client.get("/sellers", params=params)
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 async def test_cors_header_present_for_an_allowed_origin(
