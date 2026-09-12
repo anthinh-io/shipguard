@@ -1,0 +1,19 @@
+{
+  "dashboard": {
+    "loading": "Loading data…",
+    "error": "Could not load data from the server ({detail}). Please try again.",
+    "errorDetail": {
+      "missingBackendUrl": "the NEXT_PUBLIC_BACKEND_URL environment variable is missing",
+      "httpStatus": "the server returned status {status}"
+    },
+    "reportingPeriod": "Reporting period: {period}",
+    "noDeliveredOrders": "no delivered orders yet",
+    "onTimeRate": "On-time rate",
+    "deliveredOrders": "{count, plural, one {# order delivered} other {# orders delivered}}",
+    "lateOrders": "Late orders"
+  },
+  "language": {
+    "switchTo": "Tiếng Việt",
+    "switchLabel": "Switch to Vietnamese"
+  }
+}

@@ -5,6 +5,15 @@ import { test, expect, type Page } from "@playwright/test";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const DASHBOARD_API = `${BACKEND_URL}/dashboard**`;
 
+// Ghim ngôn ngữ ở tiếng Việt cho cả bộ smoke. Các bài dưới đây khẳng định vào chuỗi đã
+// hiển thị, nên để chúng bám vào ngôn ngữ mặc định là gài sẵn một lần hỏng vào ngày ai
+// đó đổi mặc định.
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([
+    { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
+  ]);
+});
+
 // Không khẳng định vào giá trị KPI cụ thể: dữ liệu nạp lại được và kỳ mặc định tính
 // động, nên con số đổi mà hành vi vẫn đúng. Bộ số vàng khẳng định ở tầng tính toán.
 async function expectKpiTiles(page: Page) {

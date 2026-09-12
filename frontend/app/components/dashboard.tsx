@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useFormatter, useTranslations } from "next-intl";
 
 import { Card, CardContent } from "./ui/card";
 
@@ -23,52 +24,36 @@ type DashboardData = {
   kpis: Kpis;
 };
 
+type Failure =
+  | { kind: "missing_backend_url" }
+  | { kind: "http_status"; status: number }
+  // Lỗi mạng do trình duyệt sinh ra, luôn tiếng Anh và không dịch được; giữ nguyên văn.
+  | { kind: "network"; detail: string };
+
+class DashboardError extends Error {
+  constructor(readonly failure: Failure) {
+    super(failure.kind);
+  }
+}
+
 type State =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; failure: Failure }
   | { kind: "loaded"; data: DashboardData };
-
-const percent = new Intl.NumberFormat("vi-VN", {
-  style: "percent",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const integer = new Intl.NumberFormat("vi-VN");
-// dateStyle "short" cho năm hai chữ số ("1/9/17"), mơ hồ với một kỳ báo cáo trải nhiều
-// năm; nêu rõ từng thành phần để ra 01/09/2017.
-//
-// timeZone UTC là bắt buộc, không phải tuỳ chọn: new Date("2017-09-01") đọc chuỗi chỉ
-// có ngày thành nửa đêm UTC, nên máy đặt ở múi giờ phía tây UTC sẽ hiện 31/08/2017 —
-// lệch đúng một ngày ở chính cái ranh giới mà cả tính năng này xoay quanh.
-const fullDate = new Intl.DateTimeFormat("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 async function fetchDashboard(url: string): Promise<DashboardData> {
   // Ném thay vì dựng trạng thái lỗi thẳng trong effect: cả hai hiện ra cùng một chỗ,
   // nhưng ném thì đi qua nhánh catch chung và không gọi setState đồng bộ trong effect.
   if (!BACKEND_URL) {
-    throw new Error("thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL");
+    throw new DashboardError({ kind: "missing_backend_url" });
   }
   const response = await fetch(url, { cache: "no-store" });
   // Phản hồi lỗi của FastAPI vẫn là JSON hợp lệ — 422 khi ngày sai định dạng chẳng
   // hạn — nên phải chặn theo mã trạng thái, không thể chỉ dựa vào json() ném hay không.
   if (!response.ok) {
-    throw new Error(`Máy chủ trả về mã ${response.status}`);
+    throw new DashboardError({ kind: "http_status", status: response.status });
   }
   return (await response.json()) as DashboardData;
-}
-
-function formatPeriod(period: ReportingPeriod | null): string {
-  if (!period) {
-    return "chưa có đơn nào đã giao";
-  }
-  return `${fullDate.format(new Date(period.start_date))} – ${fullDate.format(
-    new Date(period.end_date),
-  )}`;
 }
 
 function KpiTile({
@@ -102,6 +87,8 @@ function KpiTile({
 }
 
 export default function Dashboard() {
+  const t = useTranslations("dashboard");
+  const format = useFormatter();
   const [state, setState] = useState<State>({ kind: "loading" });
   const url = `${BACKEND_URL}/dashboard`;
   // Strict Mode gọi effect mount hai lần ở chế độ phát triển và không có lớp nào gộp
@@ -124,7 +111,13 @@ export default function Dashboard() {
       .catch((error: unknown) =>
         setState({
           kind: "error",
-          message: error instanceof Error ? error.message : String(error),
+          failure:
+            error instanceof DashboardError
+              ? error.failure
+              : {
+                  kind: "network",
+                  detail: error instanceof Error ? error.message : String(error),
+                },
         }),
       );
   }, [url]);
@@ -132,25 +125,39 @@ export default function Dashboard() {
   if (state.kind === "loading") {
     return (
       <p data-testid="dashboard-loading" className="opacity-70">
-        Đang tải số liệu…
+        {t("loading")}
       </p>
     );
   }
 
   if (state.kind === "error") {
+    const { failure } = state;
+    const detail =
+      failure.kind === "missing_backend_url"
+        ? t("errorDetail.missingBackendUrl")
+        : failure.kind === "http_status"
+          ? t("errorDetail.httpStatus", { status: failure.status })
+          : failure.detail;
+
     return (
       <p data-testid="dashboard-error" className="text-red-700 dark:text-red-400">
-        Không lấy được số liệu từ máy chủ ({state.message}). Vui lòng thử lại.
+        {t("error", { detail })}
       </p>
     );
   }
 
   const { reporting_period, kpis } = state.data;
+  const period = reporting_period
+    ? `${format.dateTime(new Date(reporting_period.start_date), "fullDate")} – ${format.dateTime(
+        new Date(reporting_period.end_date),
+        "fullDate",
+      )}`
+    : t("noDeliveredOrders");
 
   return (
     <>
       <p data-testid="reporting-period" className="mt-1 opacity-70">
-        Kỳ báo cáo: {formatPeriod(reporting_period)}
+        {t("reportingPeriod", { period })}
       </p>
       <section
         data-testid="kpi-grid"
@@ -158,15 +165,19 @@ export default function Dashboard() {
       >
         <KpiTile
           testId="kpi-on-time-rate"
-          label="Tỷ lệ giao đúng hạn"
+          label={t("onTimeRate")}
           // Kỳ lọc có thể không ra đơn nào; lúc đó tỷ lệ là rỗng chứ không phải 0%.
-          value={kpis.on_time_rate === null ? "—" : percent.format(kpis.on_time_rate)}
-          hint={`${integer.format(kpis.delivered_orders)} đơn đã giao`}
+          value={
+            kpis.on_time_rate === null
+              ? "—"
+              : format.number(kpis.on_time_rate, "percent")
+          }
+          hint={t("deliveredOrders", { count: kpis.delivered_orders })}
         />
         <KpiTile
           testId="kpi-late-orders"
-          label="Đơn giao trễ"
-          value={integer.format(kpis.late_orders)}
+          label={t("lateOrders")}
+          value={format.number(kpis.late_orders)}
         />
       </section>
     </>

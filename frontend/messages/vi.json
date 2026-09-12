@@ -1,0 +1,19 @@
+{
+  "dashboard": {
+    "loading": "Đang tải số liệu…",
+    "error": "Không lấy được số liệu từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "reportingPeriod": "Kỳ báo cáo: {period}",
+    "noDeliveredOrders": "chưa có đơn nào đã giao",
+    "onTimeRate": "Tỷ lệ giao đúng hạn",
+    "deliveredOrders": "{count, number} đơn đã giao",
+    "lateOrders": "Đơn giao trễ"
+  },
+  "language": {
+    "switchTo": "English",
+    "switchLabel": "Chuyển sang tiếng Anh"
+  }
+}
