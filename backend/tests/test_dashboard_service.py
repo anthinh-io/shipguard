@@ -314,6 +314,44 @@ async def test_seller_filter_narrows_every_metric(session: AsyncSession) -> None
     assert 0 < kpis.delivered_orders < unfiltered.delivered_orders
 
 
+async def test_seller_filter_narrows_the_trend_and_the_state_distribution(
+    session: AsyncSession,
+) -> None:
+    """Bộ lọc người bán phải áp cho cả ba khối, không riêng ô KPI.
+
+    Đây là chỗ dễ hỏng nhất của cả tính năng: vị ngữ EXISTS được nối vào mệnh đề ON của
+    LEFT JOIN trong compute_late_rate_trend, cạnh generate_series. Một EXISTS bị mất
+    tương quan ở đó vẫn chạy, vẫn trả về kết quả, nhưng khớp mọi đơn — biểu đồ trông y
+    hệt bản không lọc mà không có gì báo lỗi.
+    """
+    seller_id = EDGE_CASE_FILTERS["busiest_seller"]
+    # Trải hết dải dữ liệu để không lẫn với kỳ mặc định.
+    period = ReportingPeriod(start_date=date(2016, 1, 1), end_date=date(2018, 12, 31))
+    filters = DashboardFilters(period=period, seller_id=seller_id)
+    unfiltered = DashboardFilters(period=period)
+
+    kpis = await compute_kpis(session, filters)
+    trend = await compute_late_rate_trend(session, filters)
+    unfiltered_trend = await compute_late_rate_trend(session, unfiltered)
+    by_state = await compute_late_rate_by_state(session, filters)
+    unfiltered_by_state = await compute_late_rate_by_state(session, unfiltered)
+
+    trend_orders = sum(point.delivered_orders for point in trend.points)
+    unfiltered_trend_orders = sum(
+        point.delivered_orders for point in unfiltered_trend.points
+    )
+
+    # Khẳng định phân biệt: EXISTS mất tương quan sẽ làm hai con số này bằng nhau.
+    assert trend_orders < unfiltered_trend_orders
+    # Và biểu đồ phải đếm đúng cùng tập đơn với ô KPI, không phải một tập gần đúng.
+    assert trend_orders == kpis.delivered_orders
+    assert sum(point.late_orders for point in trend.points) == kpis.late_orders
+
+    # Một người bán không giao tới đủ 27 bang, nên bảng phân bố phải ngắn lại.
+    assert 0 < len(by_state) < len(unfiltered_by_state)
+    assert sum(state.delivered_orders for state in by_state) == kpis.delivered_orders
+
+
 async def test_seller_filter_combines_with_state_and_period(
     session: AsyncSession,
 ) -> None:
@@ -363,10 +401,15 @@ async def test_multi_seller_order_counts_for_every_participating_seller(
 async def test_per_seller_totals_overshoot_the_overall_total(
     session: AsyncSession,
 ) -> None:
-    """Sai lệch ~1,3% là quyết định đã chốt trong #1, không phải lỗi cần khử.
+    """Sai lệch quy đơn theo người bán là quyết định đã chốt trong #1, không phải lỗi.
 
     Bài trên chứng minh *cách* quy đơn; bài này ghim *độ lớn*. Thiếu nó thì một lần
     "sửa cho hai con số khớp nhau" sau này sẽ đi qua mà không có gì đỏ.
+
+    Con số ở đây là 1,4% chứ không phải 1,3% như văn xuôi của #1, và hai con số đo hai
+    thứ khác nhau chứ không mâu thuẫn: 1,3% là 1.278 đơn nhiều người bán trên 96.470
+    đơn, còn 1,4% là phần dôi ra của các cặp (đơn, người bán) — lớn hơn vì một số đơn
+    có từ ba người bán trở lên nên đóng góp nhiều hơn một cặp thừa.
     """
     per_seller_sum = await session.scalar(
         text(
@@ -380,6 +423,9 @@ async def test_per_seller_totals_overshoot_the_overall_total(
 
     assert overall == 96470
     assert per_seller_sum > overall
+    # 1.278 đơn nhiều người bán (ghim ở test_build_derived_data) sinh ra ít nhất chừng
+    # ấy cặp thừa; con số thực lớn hơn đúng bằng phần đơn có từ ba người bán trở lên.
+    assert int(per_seller_sum) - overall == 1341
     # sum() của Postgres về đây là Decimal, không so bằng được với float.
     assert round((float(per_seller_sum) / overall - 1) * 100, 1) == 1.4
 

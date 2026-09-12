@@ -202,11 +202,14 @@ export default function Dashboard() {
     );
   } else {
     const { reporting_period, kpis } = state.data;
-    // Kỳ đối chiếu không có đơn nào thì không có mức chênh nào cả — kể cả với số đơn
-    // trễ, chỉ số duy nhất mà 0 là một giá trị hợp lệ. "45 đơn so với một kỳ rỗng" đọc
-    // ra thành "tăng 45 đơn", trong khi thật ra là không có gì để so. Các tỷ lệ đã tự
-    // rỗng theo quy ước của backend; chốt này kéo số đếm về cùng một hành vi.
-    const comparison_kpis =
+    // Hẹp hơn state.data.comparison_kpis một bậc, nên cố ý mang tên khác: kỳ đối chiếu
+    // không có đơn nào thì ở đây là null, còn trong phản hồi thì vẫn là một khối đầy đủ.
+    //
+    // Không có đơn nào để so thì không hiện mức chênh nào cả — kể cả với số đơn trễ, chỉ
+    // số duy nhất mà 0 là một giá trị hợp lệ. "45 đơn so với một kỳ rỗng" đọc ra thành
+    // "tăng 45 đơn", trong khi thật ra là không có gì để so. Các tỷ lệ đã tự rỗng theo
+    // quy ước của backend; chốt này kéo số đếm về cùng một hành vi.
+    const comparisonKpis =
       state.data.comparison_kpis && state.data.comparison_kpis.delivered_orders > 0
         ? state.data.comparison_kpis
         : null;
@@ -250,7 +253,7 @@ export default function Dashboard() {
             delta={
               <KpiDelta
                 value={kpis.on_time_rate}
-                comparisonValue={comparison_kpis?.on_time_rate}
+                comparisonValue={comparisonKpis?.on_time_rate}
                 unit="percentagePoints"
                 // Chỉ số duy nhất mà tăng là tốt.
                 higherIsBetter
@@ -264,7 +267,7 @@ export default function Dashboard() {
             delta={
               <KpiDelta
                 value={kpis.late_orders}
-                comparisonValue={comparison_kpis?.late_orders}
+                comparisonValue={comparisonKpis?.late_orders}
                 unit="count"
                 higherIsBetter={false}
               />
@@ -274,19 +277,19 @@ export default function Dashboard() {
             testId="kpi-payment-approval"
             label={t("paymentApproval")}
             stage={kpis.payment_approval}
-            comparisonStage={comparison_kpis?.payment_approval}
+            comparisonStage={comparisonKpis?.payment_approval}
           />
           <StageTile
             testId="kpi-seller-handling"
             label={t("sellerHandling")}
             stage={kpis.seller_handling}
-            comparisonStage={comparison_kpis?.seller_handling}
+            comparisonStage={comparisonKpis?.seller_handling}
           />
           <StageTile
             testId="kpi-carrier-transit"
             label={t("carrierTransit")}
             stage={kpis.carrier_transit}
-            comparisonStage={comparison_kpis?.carrier_transit}
+            comparisonStage={comparisonKpis?.carrier_transit}
           />
           <KpiTile
             testId="kpi-late-related-low-review-rate"
@@ -302,7 +305,7 @@ export default function Dashboard() {
             delta={
               <KpiDelta
                 value={kpis.late_related_low_review_rate}
-                comparisonValue={comparison_kpis?.late_related_low_review_rate}
+                comparisonValue={comparisonKpis?.late_related_low_review_rate}
                 unit="percentagePoints"
                 higherIsBetter={false}
               />

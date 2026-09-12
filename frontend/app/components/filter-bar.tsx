@@ -40,8 +40,11 @@ export const EMPTY_FILTERS: Filters = {
 // shadcn Select không chấp nhận value="" cho một item, nên cần một giá trị đặc biệt
 // riêng cho lựa chọn "tất cả các bang".
 const ALL_STATES = "__all__";
-// Cùng lý do, cho chế độ "không so sánh".
-const NO_COMPARISON = "none";
+// Cùng lý do, cho chế độ "không so sánh". Dùng "__none__" chứ không phải "none": đây
+// thuần tuý là giá trị của một mục trong ô chọn, không bao giờ đi lên máy chủ (null
+// nghĩa là bỏ hẳn tham số). Trùng tên với literal "none" của backend chỉ gây hiểu nhầm
+// rằng hai thứ phải khớp nhau.
+const NO_COMPARISON = "__none__";
 
 export function FilterBar({
   filters,
