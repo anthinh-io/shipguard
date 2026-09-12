@@ -10,6 +10,7 @@ const DASHBOARD_API = `${BACKEND_URL}/dashboard**`;
 // ngôn ngữ, thứ chỉ nhìn thấy khi biết trước giá trị đầu vào.
 const PINNED = {
   reporting_period: { start_date: "2017-09-01", end_date: "2018-08-31" },
+  filter_options: { customer_states: ["AL", "MA", "SE"] },
   kpis: {
     delivered_orders: 12345,
     late_orders: 678,

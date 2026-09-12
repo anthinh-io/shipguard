@@ -1,14 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
+import { EMPTY_FILTERS, FilterBar, type Filters } from "./filter-bar";
 import { KpiTile } from "./kpi-tile";
 import { LateRateByStateChart } from "./late-rate-by-state";
 import { LateRateTrendChart } from "./late-rate-trend";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+function buildDashboardUrl(filters: Filters): string {
+  const params = new URLSearchParams();
+  // null nghĩa là không gắn tham số đó — backend tự giải kỳ mặc định hoặc không lọc
+  // bang, đúng hành vi "chưa chọn gì" chứ không phải một nhánh riêng.
+  if (filters.range) {
+    params.set("start_date", filters.range.from);
+    params.set("end_date", filters.range.to);
+  }
+  if (filters.customerState) {
+    params.set("customer_state", filters.customerState);
+  }
+  const query = params.toString();
+  return `${BACKEND_URL}/dashboard${query ? `?${query}` : ""}`;
+}
 
 type ReportingPeriod = {
   start_date: string;
@@ -51,8 +67,13 @@ type StateLateRate = {
   late_rate: number;
 };
 
+type FilterOptions = {
+  customer_states: string[];
+};
+
 type DashboardData = {
   reporting_period: ReportingPeriod | null;
+  filter_options: FilterOptions;
   kpis: Kpis;
   late_rate_trend: LateRateTrend;
   late_rate_by_state: StateLateRate[];
@@ -94,14 +115,15 @@ export default function Dashboard() {
   const t = useTranslations("dashboard");
   const format = useFormatter();
   const [state, setState] = useState<State>({ kind: "loading" });
-  const url = `${BACKEND_URL}/dashboard`;
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const url = buildDashboardUrl(filters);
   // Strict Mode gọi effect mount hai lần ở chế độ phát triển và không có lớp nào gộp
   // fetch trần, nên không chặn thì mỗi lần mở trang sinh hai lần gọi máy chủ.
   // AbortController không thay thế được chốt này: request đã huỷ vẫn là một request.
   //
-  // Chốt nhớ *địa chỉ đã gọi* chứ không phải "đã gọi lần nào chưa". Hôm nay địa chỉ cố
-  // định nên hai cách chạy y hệt, nhưng khi bộ lọc gắn vào chuỗi truy vấn thì đổi bộ
-  // lọc vẫn gọi lại được, còn một cờ boolean sẽ chặn vĩnh viễn.
+  // Chốt nhớ *địa chỉ đã gọi* chứ không phải "đã gọi lần nào chưa". Bộ lọc gắn vào
+  // chuỗi truy vấn nên đổi bộ lọc vẫn gọi lại được, còn một cờ boolean sẽ chặn vĩnh
+  // viễn sau lần gọi đầu tiên.
   const requested = useRef<string | null>(null);
 
   useEffect(() => {
@@ -111,8 +133,18 @@ export default function Dashboard() {
     requested.current = url;
 
     fetchDashboard(url)
-      .then((data) => setState({ kind: "loaded", data }))
-      .catch((error: unknown) =>
+      .then((data) => {
+        // Chốt chống phản hồi cũ: nếu người dùng đổi bộ lọc nhanh trước khi lần gọi
+        // trước kịp về, requested.current đã trỏ sang địa chỉ mới nhất — chỉ nhận
+        // phản hồi khớp đúng địa chỉ mà closure này đã gọi.
+        if (requested.current === url) {
+          setState({ kind: "loaded", data });
+        }
+      })
+      .catch((error: unknown) => {
+        if (requested.current !== url) {
+          return;
+        }
         setState({
           kind: "error",
           failure:
@@ -122,19 +154,18 @@ export default function Dashboard() {
                   kind: "network",
                   detail: error instanceof Error ? error.message : String(error),
                 },
-        }),
-      );
+        });
+      });
   }, [url]);
 
+  let content: ReactNode;
   if (state.kind === "loading") {
-    return (
+    content = (
       <p data-testid="dashboard-loading" className="opacity-70">
         {t("loading")}
       </p>
     );
-  }
-
-  if (state.kind === "error") {
+  } else if (state.kind === "error") {
     const { failure } = state;
     const detail =
       failure.kind === "missing_backend_url"
@@ -143,80 +174,103 @@ export default function Dashboard() {
           ? t("errorDetail.httpStatus", { status: failure.status })
           : failure.detail;
 
-    return (
+    content = (
       <p data-testid="dashboard-error" className="text-red-700 dark:text-red-400">
         {t("error", { detail })}
       </p>
     );
-  }
+  } else if (state.data.kpis.delivered_orders === 0) {
+    // Bộ lọc không ra đơn nào — một kết quả rỗng hợp lệ, không phải lỗi hệ thống.
+    // data-testid riêng để phân biệt rõ với dashboard-error, đúng tiêu chí của #11.
+    content = (
+      <p data-testid="dashboard-empty" className="text-muted-foreground">
+        {t("empty")}
+      </p>
+    );
+  } else {
+    const { reporting_period, kpis } = state.data;
+    const period = reporting_period
+      ? `${format.dateTime(new Date(reporting_period.start_date), "fullDate")} – ${format.dateTime(
+          new Date(reporting_period.end_date),
+          "fullDate",
+        )}`
+      : t("noDeliveredOrders");
 
-  const { reporting_period, kpis } = state.data;
-  const period = reporting_period
-    ? `${format.dateTime(new Date(reporting_period.start_date), "fullDate")} – ${format.dateTime(
-        new Date(reporting_period.end_date),
-        "fullDate",
-      )}`
-    : t("noDeliveredOrders");
+    content = (
+      <>
+        <p data-testid="reporting-period" className="mt-1 opacity-70">
+          {t("reportingPeriod", { period })}
+        </p>
+        <section
+          data-testid="kpi-grid"
+          className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4"
+        >
+          <KpiTile
+            testId="kpi-on-time-rate"
+            label={t("onTimeRate")}
+            // Kỳ lọc có thể không ra đơn nào; lúc đó tỷ lệ là rỗng chứ không phải 0%.
+            value={
+              kpis.on_time_rate === null
+                ? "—"
+                : format.number(kpis.on_time_rate, "percent")
+            }
+            hint={t("deliveredOrders", { count: kpis.delivered_orders })}
+          />
+          <KpiTile
+            testId="kpi-late-orders"
+            label={t("lateOrders")}
+            value={format.number(kpis.late_orders)}
+          />
+          <StageTile
+            testId="kpi-payment-approval"
+            label={t("paymentApproval")}
+            stage={kpis.payment_approval}
+          />
+          <StageTile
+            testId="kpi-seller-handling"
+            label={t("sellerHandling")}
+            stage={kpis.seller_handling}
+          />
+          <StageTile
+            testId="kpi-carrier-transit"
+            label={t("carrierTransit")}
+            stage={kpis.carrier_transit}
+          />
+          <KpiTile
+            testId="kpi-late-related-low-review-rate"
+            label={t("lateRelatedLowReviewRate")}
+            // Không có đơn 1–2 sao nào trong tập đã lọc thì tỷ lệ là rỗng, không phải
+            // 0% — cùng quy ước với on_time_rate ở trên.
+            value={
+              kpis.late_related_low_review_rate === null
+                ? "—"
+                : format.number(kpis.late_related_low_review_rate, "percent")
+            }
+            hint={t("lowReviewHint")}
+          />
+        </section>
+        <div className="mt-6">
+          <LateRateTrendChart trend={state.data.late_rate_trend} />
+        </div>
+        <div className="mt-6">
+          <LateRateByStateChart byState={state.data.late_rate_by_state} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <p data-testid="reporting-period" className="mt-1 opacity-70">
-        {t("reportingPeriod", { period })}
-      </p>
-      <section
-        data-testid="kpi-grid"
-        className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4"
-      >
-        <KpiTile
-          testId="kpi-on-time-rate"
-          label={t("onTimeRate")}
-          // Kỳ lọc có thể không ra đơn nào; lúc đó tỷ lệ là rỗng chứ không phải 0%.
-          value={
-            kpis.on_time_rate === null
-              ? "—"
-              : format.number(kpis.on_time_rate, "percent")
-          }
-          hint={t("deliveredOrders", { count: kpis.delivered_orders })}
-        />
-        <KpiTile
-          testId="kpi-late-orders"
-          label={t("lateOrders")}
-          value={format.number(kpis.late_orders)}
-        />
-        <StageTile
-          testId="kpi-payment-approval"
-          label={t("paymentApproval")}
-          stage={kpis.payment_approval}
-        />
-        <StageTile
-          testId="kpi-seller-handling"
-          label={t("sellerHandling")}
-          stage={kpis.seller_handling}
-        />
-        <StageTile
-          testId="kpi-carrier-transit"
-          label={t("carrierTransit")}
-          stage={kpis.carrier_transit}
-        />
-        <KpiTile
-          testId="kpi-late-related-low-review-rate"
-          label={t("lateRelatedLowReviewRate")}
-          // Không có đơn 1–2 sao nào trong tập đã lọc thì tỷ lệ là rỗng, không phải 0%
-          // — cùng quy ước với on_time_rate ở trên.
-          value={
-            kpis.late_related_low_review_rate === null
-              ? "—"
-              : format.number(kpis.late_related_low_review_rate, "percent")
-          }
-          hint={t("lowReviewHint")}
-        />
-      </section>
-      <div className="mt-6">
-        <LateRateTrendChart trend={state.data.late_rate_trend} />
-      </div>
-      <div className="mt-6">
-        <LateRateByStateChart byState={state.data.late_rate_by_state} />
-      </div>
+      {/* Luôn vẽ, kể cả khi đang tải hoặc lỗi — bộ lọc là nơi người dùng phải quay
+          lại nếu vừa lọc hỏng, nên nó không được biến mất đúng lúc cần nhất. */}
+      <FilterBar
+        filters={filters}
+        customerStates={
+          state.kind === "loaded" ? state.data.filter_options.customer_states : []
+        }
+        onChange={setFilters}
+      />
+      {content}
     </>
   );
 }

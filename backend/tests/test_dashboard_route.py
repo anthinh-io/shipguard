@@ -29,11 +29,14 @@ async def test_response_shape(client: AsyncClient) -> None:
     body = response.json()
     assert set(body) == {
         "reporting_period",
+        "filter_options",
         "kpis",
         "late_rate_trend",
         "late_rate_by_state",
     }
     assert set(body["reporting_period"]) == {"start_date", "end_date"}
+    assert set(body["filter_options"]) == {"customer_states"}
+    assert len(body["filter_options"]["customer_states"]) == 27
     assert set(body["kpis"]) == {
         "delivered_orders",
         "late_orders",
@@ -99,6 +102,49 @@ async def test_period_filters_on_delivery_date_not_purchase_date(
     assert by_delivery != by_purchase
     assert delivered == by_delivery
     assert delivered != by_purchase
+
+
+async def test_customer_state_filter_narrows_response(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    expected_delivered = await session.scalar(
+        text(
+            "SELECT count(*) FROM orders WHERE order_status = 'delivered' "
+            "AND delivered_to_customer_at IS NOT NULL AND customer_state = 'AL'"
+        )
+    )
+
+    # Trải rộng qua toàn bộ dải dữ liệu Olist để không lẫn với kỳ mặc định — nếu không
+    # gọi params, route tự giải kỳ mặc định và con số sẽ lệch với truy vấn không lọc kỳ
+    # ở trên.
+    params = {
+        "start_date": "2016-01-01",
+        "end_date": "2018-12-31",
+        "customer_state": "AL",
+    }
+    body = (await client.get("/dashboard", params=params)).json()
+
+    assert body["kpis"]["delivered_orders"] == expected_delivered
+    assert len(body["late_rate_by_state"]) == 1
+    assert body["late_rate_by_state"][0]["customer_state"] == "AL"
+    # filter_options không bị ảnh hưởng bởi bộ lọc đang áp dụng — ô chọn vẫn đủ 27 bang.
+    assert len(body["filter_options"]["customer_states"]) == 27
+
+
+async def test_filters_matching_no_orders_return_empty_not_an_error(
+    client: AsyncClient,
+) -> None:
+    # Khoảng ngày ngoài dải dữ liệu Olist (2016–2018): không đơn nào khớp, nhưng đây là
+    # một kết quả rỗng hợp lệ, không phải lỗi hệ thống — phản hồi vẫn phải là 200.
+    params = {"start_date": "2010-01-01", "end_date": "2010-01-02"}
+
+    response = await client.get("/dashboard", params=params)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kpis"]["delivered_orders"] == 0
+    assert body["kpis"]["on_time_rate"] is None
+    assert body["late_rate_by_state"] == []
 
 
 @pytest.mark.parametrize(

@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.dashboard import (
     DEFAULT_PERIOD_MONTHS,
     FULL_MONTH_MIN_DELIVERED_ORDERS,
+    DashboardFilters,
     ReportingPeriod,
     choose_granularity,
     compute_kpis,
     compute_late_rate_by_state,
     compute_late_rate_trend,
+    list_customer_states,
     resolve_default_period,
 )
 
@@ -32,7 +34,7 @@ DELIVERED_MONTHS = (
 
 
 async def test_on_time_rate_over_unfiltered_data(session: AsyncSession) -> None:
-    kpis = await compute_kpis(session, None)
+    kpis = await compute_kpis(session, DashboardFilters())
 
     assert kpis.delivered_orders == 96470
     assert kpis.late_orders == 6534
@@ -41,7 +43,7 @@ async def test_on_time_rate_over_unfiltered_data(session: AsyncSession) -> None:
 
 
 async def test_stage_durations_over_unfiltered_data(session: AsyncSession) -> None:
-    kpis = await compute_kpis(session, None)
+    kpis = await compute_kpis(session, DashboardFilters())
 
     # Bộ số vàng của #8, tính bằng ngày, làm tròn 2 chữ số. Trung vị và phân vị 90 —
     # không có trung bình cộng nào ở đây vì cả ba chặng lệch đuôi mạnh.
@@ -56,7 +58,7 @@ async def test_stage_durations_over_unfiltered_data(session: AsyncSession) -> No
 async def test_late_related_low_review_rate_over_unfiltered_data(
     session: AsyncSession,
 ) -> None:
-    kpis = await compute_kpis(session, None)
+    kpis = await compute_kpis(session, DashboardFilters())
 
     assert kpis.late_related_low_review_rate is not None
     rate = round(kpis.late_related_low_review_rate * 100, 2)
@@ -119,7 +121,7 @@ async def test_trend_fills_empty_buckets(session: AsyncSession) -> None:
     # đơn nào. Gom nhóm trần sẽ chỉ trả về hai điểm; lấp khoảng trống phải trả đủ 8.
     period = ReportingPeriod(start_date=date(2018, 10, 10), end_date=date(2018, 10, 17))
 
-    trend = await compute_late_rate_trend(session, period)
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
 
     assert trend.granularity == "day"
     assert len(trend.points) == 8
@@ -140,7 +142,7 @@ async def test_trend_over_unfiltered_default_period_has_no_gaps(
     period = await resolve_default_period(session)
     assert period is not None
 
-    trend = await compute_late_rate_trend(session, period)
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
 
     assert trend.granularity == "month"
     assert len(trend.points) == 12
@@ -165,7 +167,7 @@ async def test_state_distribution_uses_customer_state_not_seller_state(
 
     by_state = {
         state.customer_state: state
-        for state in await compute_late_rate_by_state(session, None)
+        for state in await compute_late_rate_by_state(session, DashboardFilters())
     }
 
     assert seller_state_sp_orders != by_state["SP"].delivered_orders
@@ -173,12 +175,44 @@ async def test_state_distribution_uses_customer_state_not_seller_state(
 
 
 async def test_state_distribution_covers_27_states(session: AsyncSession) -> None:
-    by_state = await compute_late_rate_by_state(session, None)
+    by_state = await compute_late_rate_by_state(session, DashboardFilters())
 
     assert len(by_state) == 27
     rates = [state.late_rate for state in by_state]
     # Xếp giảm dần: bang trễ nhiều nhất đứng đầu, trả lời thẳng "xử lý vùng nào trước".
     assert rates == sorted(rates, reverse=True)
+
+
+async def test_customer_state_filter_narrows_every_metric(
+    session: AsyncSession,
+) -> None:
+    # Đếm lại độc lập bằng một truy vấn khoá cứng vào bang AL, rồi khẳng định
+    # compute_kpis khớp đúng con số đó khi lọc theo customer_state="AL".
+    expected_delivered = await session.scalar(
+        text(
+            "SELECT count(*) FROM orders WHERE order_status = 'delivered' "
+            "AND delivered_to_customer_at IS NOT NULL AND customer_state = 'AL'"
+        )
+    )
+
+    filters = DashboardFilters(customer_state="AL")
+    kpis = await compute_kpis(session, filters)
+    by_state = await compute_late_rate_by_state(session, filters)
+
+    assert kpis.delivered_orders == expected_delivered
+    # Lọc theo đúng một bang thì bảng phân bố tự nhiên rút về đúng một dòng.
+    assert len(by_state) == 1
+    assert by_state[0].customer_state == "AL"
+    assert by_state[0].delivered_orders == expected_delivered
+
+
+async def test_list_customer_states_ignores_filters(session: AsyncSession) -> None:
+    # Danh sách tuỳ chọn không được lọc theo bất kỳ điều kiện nào — nếu không, chọn
+    # một bang sẽ làm biến mất mọi lựa chọn khác trong ô chọn.
+    states = await list_customer_states(session)
+
+    assert len(states) == 27
+    assert states == sorted(states)
 
 
 async def test_default_period_ends_at_the_last_full_month(

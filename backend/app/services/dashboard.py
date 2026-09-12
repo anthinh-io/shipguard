@@ -74,6 +74,23 @@ class DashboardKpis(BaseModel):
     late_related_low_review_rate: float | None
 
 
+class DashboardFilters(BaseModel):
+    # None ở mỗi trường nghĩa là không lọc theo chiều đó, không phải "lọc theo giá trị
+    # mặc định". period=None cũng là đường vào bộ số vàng: test đối chiếu trên toàn bộ
+    # dữ liệu không qua kỳ báo cáo nào.
+    period: ReportingPeriod | None = None
+    customer_state: str | None = None
+
+
+def _where(filters: DashboardFilters) -> list[sa.ColumnElement[bool]]:
+    clauses: list[sa.ColumnElement[bool]] = [DELIVERED]
+    if filters.period is not None:
+        clauses.append(_delivered_within(filters.period))
+    if filters.customer_state is not None:
+        clauses.append(orders.c.customer_state == filters.customer_state)
+    return clauses
+
+
 async def resolve_default_period(session: AsyncSession) -> ReportingPeriod | None:
     """Kỳ mặc định: 12 tháng gần nhất tính đến tháng đầy đủ cuối cùng.
 
@@ -137,15 +154,13 @@ def _stage_percentiles(
     )
 
 
-async def compute_kpis(
-    session: AsyncSession, period: ReportingPeriod | None
-) -> DashboardKpis:
+async def compute_kpis(session: AsyncSession, filters: DashboardFilters) -> DashboardKpis:
     """Tỷ lệ giao đúng hạn, số đơn trễ, ba chặng thời gian và tỷ lệ đánh giá thấp do
-    trễ — tất cả trên tập đơn đã giao.
+    trễ — tất cả trên tập đơn đã giao khớp `filters`.
 
-    `period` là None nghĩa là không lọc kỳ nào. Hai đường dẫn tới đó: test đối chiếu bộ
-    số vàng trên toàn bộ dữ liệu, và trường hợp `resolve_default_period` không suy ra
-    được kỳ nào vì chưa có đơn đã giao.
+    `filters.period` là None nghĩa là không lọc kỳ nào. Hai đường dẫn tới đó: test đối
+    chiếu bộ số vàng trên toàn bộ dữ liệu, và trường hợp `resolve_default_period` không
+    suy ra được kỳ nào vì chưa có đơn đã giao.
 
     Hàm này không tự giải kỳ mặc định; việc đó thuộc về route, để bên gọi còn hỏi được
     con số trên toàn bộ dữ liệu.
@@ -183,9 +198,7 @@ async def compute_kpis(
         carrier_transit_p90,
         low_reviews,
         low_and_late,
-    ).where(DELIVERED)
-    if period is not None:
-        statement = statement.where(_delivered_within(period))
+    ).where(sa.and_(*_where(filters)))
 
     row = (await session.execute(statement)).one()
     (
@@ -248,13 +261,14 @@ def choose_granularity(period: ReportingPeriod) -> Granularity:
 
 
 async def compute_late_rate_trend(
-    session: AsyncSession, period: ReportingPeriod | None
+    session: AsyncSession, filters: DashboardFilters
 ) -> LateRateTrend:
     """Xu hướng tỷ lệ trễ theo thời gian, gom nhóm theo độ mịn do backend chọn.
 
-    `period` là None chỉ xảy ra khi chưa có đơn đã giao nào — không có khung thời gian
-    nào để lấp khoảng trống, nên trả về rỗng.
+    `filters.period` là None chỉ xảy ra khi chưa có đơn đã giao nào — không có khung
+    thời gian nào để lấp khoảng trống, nên trả về rỗng.
     """
+    period = filters.period
     if period is None:
         return LateRateTrend(granularity="month", points=[])
 
@@ -280,12 +294,11 @@ async def compute_late_rate_trend(
     )
 
     bucket_of = sa.func.date_trunc(granularity, orders.c.delivered_to_customer_at)
-    # _delivered_within phải nằm trong điều kiện JOIN chứ không phải WHERE: nhóm đầu
-    # tiên bị date_trunc kéo lùi về đầu tuần/đầu tháng, nên không chặn ở đây thì đơn
-    # giao trước ngày bắt đầu lọt vào nhóm đó.
-    join_condition = sa.and_(
-        bucket_of == buckets.c.bucket_start, DELIVERED, _delivered_within(period)
-    )
+    # _where(filters) gồm DELIVERED, _delivered_within(period) và bộ lọc bang nếu có.
+    # Tất cả phải nằm trong điều kiện JOIN chứ không phải WHERE: nhóm đầu tiên bị
+    # date_trunc kéo lùi về đầu tuần/đầu tháng, nên không chặn ở đây thì đơn giao
+    # trước ngày bắt đầu (hoặc thuộc bang khác) lọt vào nhóm đó.
+    join_condition = sa.and_(bucket_of == buckets.c.bucket_start, *_where(filters))
 
     statement = (
         sa.select(
@@ -315,21 +328,23 @@ async def compute_late_rate_trend(
 
 
 async def compute_late_rate_by_state(
-    session: AsyncSession, period: ReportingPeriod | None
+    session: AsyncSession, filters: DashboardFilters
 ) -> list[StateLateRate]:
     """Tỷ lệ trễ theo bang khách hàng nhận hàng, xếp từ cao xuống thấp.
 
     customer_state là NOT NULL trên bảng dẫn xuất nên mọi đơn đã giao đều có một bang,
-    không có nhóm nào bị bỏ sót vì thiếu dữ liệu.
+    không có nhóm nào bị bỏ sót vì thiếu dữ liệu. Khi filters.customer_state đã chọn
+    sẵn một bang, kết quả tự nhiên rút về đúng một dòng — route không cần nhánh riêng.
     """
-    statement = sa.select(
-        orders.c.customer_state,
-        sa.func.count(),
-        sa.func.count().filter(orders.c.is_late.is_(True)),
-    ).where(DELIVERED)
-    if period is not None:
-        statement = statement.where(_delivered_within(period))
-    statement = statement.group_by(orders.c.customer_state)
+    statement = (
+        sa.select(
+            orders.c.customer_state,
+            sa.func.count(),
+            sa.func.count().filter(orders.c.is_late.is_(True)),
+        )
+        .where(sa.and_(*_where(filters)))
+        .group_by(orders.c.customer_state)
+    )
 
     rows = (await session.execute(statement)).all()
     by_state = [
@@ -345,3 +360,20 @@ async def compute_late_rate_by_state(
     # thì theo mã bang để kết quả tất định giữa các lần gọi.
     by_state.sort(key=lambda state: (-state.late_rate, state.customer_state))
     return by_state
+
+
+async def list_customer_states(session: AsyncSession) -> list[str]:
+    """Danh sách bang có đơn đã giao, không áp bộ lọc nào.
+
+    Cố ý không lọc theo period hay customer_state: đây là tuỳ chọn cho ô chọn bang,
+    nên chọn một bang không được làm biến mất các lựa chọn còn lại trong danh sách.
+    """
+    rows = (
+        await session.execute(
+            sa.select(orders.c.customer_state)
+            .where(DELIVERED)
+            .distinct()
+            .order_by(orders.c.customer_state)
+        )
+    ).all()
+    return [row.customer_state for row in rows]

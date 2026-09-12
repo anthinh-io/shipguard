@@ -25,7 +25,15 @@
       "week": "Theo tuần",
       "month": "Theo tháng"
     },
-    "byStateTitle": "Tỷ lệ trễ theo bang"
+    "byStateTitle": "Tỷ lệ trễ theo bang",
+    "empty": "Bộ lọc hiện tại không có đơn nào đã giao. Hãy nới khoảng thời gian hoặc chọn bang khác.",
+    "filters": {
+      "dateRange": "Khoảng thời gian",
+      "customerState": "Bang nhận hàng",
+      "allStates": "Tất cả các bang",
+      "clearAll": "Xoá hết bộ lọc",
+      "pickDateRange": "Chọn khoảng thời gian"
+    }
   },
   "language": {
     "switchTo": "English",

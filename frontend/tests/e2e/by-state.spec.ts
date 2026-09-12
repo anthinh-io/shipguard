@@ -22,6 +22,7 @@ test("biểu đồ theo bang hiển thị đúng thứ tự xếp hạng từ ca
     route.fulfill({
       json: {
         reporting_period: { start_date: "2018-01-01", end_date: "2018-01-30" },
+        filter_options: { customer_states: ["AL", "MA", "SE"] },
         kpis: {
           delivered_orders: 100,
           late_orders: 10,

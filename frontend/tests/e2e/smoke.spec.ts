@@ -17,6 +17,7 @@ test.beforeEach(async ({ context }) => {
 // Không khẳng định vào giá trị KPI cụ thể: dữ liệu nạp lại được và kỳ mặc định tính
 // động, nên con số đổi mà hành vi vẫn đúng. Bộ số vàng khẳng định ở tầng tính toán.
 async function expectKpiTiles(page: Page) {
+  await expect(page.getByTestId("filter-bar")).toBeVisible();
   await expect(page.getByTestId("kpi-on-time-rate")).toBeVisible();
   await expect(page.getByTestId("kpi-late-orders")).toBeVisible();
   await expect(page.getByTestId("kpi-payment-approval")).toBeVisible();
@@ -57,6 +58,9 @@ test("máy chủ không phản hồi thì hiện thông báo lỗi rõ ràng", a
 
   await expect(page.getByTestId("dashboard-error")).toBeVisible();
   await expect(page.getByTestId("kpi-grid")).toHaveCount(0);
+  // Thanh bộ lọc không được biến mất đúng lúc người dùng cần nó nhất — sau một lần
+  // lọc hỏng, vẫn phải còn đường để đổi bộ lọc và thử lại.
+  await expect(page.getByTestId("filter-bar")).toBeVisible();
 });
 
 test("số liệu chưa về thì hiện trạng thái đang tải", async ({ page }) => {
