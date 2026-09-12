@@ -4,7 +4,9 @@ Bảng điều khiển Next.js hiển thị chỉ số hiệu suất giao hàng 
 FastAPI qua HTTP thật (không dữ liệu giả). Style viết bằng Tailwind CSS v4 (lý
 do chọn: `docs/adr/0003-tailwind-css-cho-giao-dien.md`), component dựng sẵn lấy
 từ shadcn/ui trên nền Radix
-(`docs/adr/0004-shadcn-ui-cho-component-giao-dien.md`), biểu đồ về sau dùng
+(`docs/adr/0004-shadcn-ui-cho-component-giao-dien.md`), giao diện song ngữ Việt
+/ Anh chạy bằng next-intl
+(`docs/adr/0005-next-intl-cho-giao-dien-song-ngu.md`), biểu đồ về sau dùng
 Recharts.
 
 ## Yêu cầu
@@ -18,19 +20,34 @@ Recharts.
 ```
 frontend/
   app/
-    layout.tsx           metadata (tiêu đề, mô tả), bọc ThemeProvider
+    layout.tsx           metadata (tiêu đề, mô tả), thẻ lang theo ngôn ngữ
+                         đang chọn, bọc NextIntlClientProvider và ThemeProvider
     globals.css          nạp Tailwind, bộ token màu shadcn, nhánh sáng/tối
-    page.tsx             Server Component: khung trang, gọi <Dashboard />
+    page.tsx             Server Component: khung trang, nút đổi ngôn ngữ,
+                         gọi <Dashboard />
     components/
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
+      language-toggle.tsx
+                         Client Component: nút đổi ngôn ngữ, gọi server action
+                         ghi cookie
       ui/                component do shadcn sinh ra — mã của dự án, sửa trực
                          tiếp được, không phải phụ thuộc trong node_modules
+  i18n/
+    config.ts            danh sách ngôn ngữ, mặc định, tên cookie
+    request.ts           đọc cookie mỗi lần dựng trang, nạp bộ chuỗi, khai các
+                         format số và ngày dùng chung
+    locale.ts            server action ghi cookie
+  messages/
+    vi.json, en.json     toàn bộ chuỗi hiển thị
   tests/
     e2e/
       smoke.spec.ts      Playwright: số liệu hiện khi mở trang, đúng một lần
                          gọi máy chủ, trạng thái tải và trạng thái lỗi
+      i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
+                         lại, và quy ước số/ngày của từng ngôn ngữ
   components.json        cấu hình shadcn CLI: thư viện nền và alias đường dẫn
+  next.config.ts         bọc qua plugin của next-intl
   playwright.config.ts
   postcss.config.mjs
 ```
@@ -55,8 +72,9 @@ bun run dev
 ```
 
 Mở http://localhost:3000 — bảng điều khiển hiện tỷ lệ giao đúng hạn và số đơn
-trễ của kỳ mặc định, không phải chọn bộ lọc nào trước. Nếu backend chưa chạy,
-trang vẫn dựng được và hiện thông báo lỗi thay cho số liệu.
+trễ của kỳ mặc định, không phải chọn bộ lọc nào trước. Giao diện lên tiếng Việt,
+nút ở góc trên bên phải đổi sang tiếng Anh. Nếu backend chưa chạy, trang vẫn
+dựng được và hiện thông báo lỗi thay cho số liệu.
 
 ## Thêm component shadcn
 
@@ -82,6 +100,36 @@ component `chart` viết cứng tên lớp `.dark` trong JavaScript, chỗ CSS k
 tới. Cũng đừng thêm mẹo `useState` + `useEffect` để chặn lệch hydrate — quy tắc
 `react-hooks/set-state-in-effect` là lỗi trong cấu hình này, và script chặn của
 `next-themes` đã lo phần đó rồi.
+
+## Thêm chuỗi hiển thị
+
+Mọi nhãn người dùng đọc được nằm trong `messages/vi.json` và `messages/en.json`,
+lấy ra bằng `useTranslations`. Đừng viết chuỗi thẳng vào component — thêm một
+khoá vào **cả hai** tệp, thiếu một bên thì bản đó hiện ra tên khoá.
+
+Số và ngày lấy qua `useFormatter`, dùng format có tên khai trong
+`i18n/request.ts`:
+
+```tsx
+format.number(value, "percent")
+format.dateTime(date, "fullDate")
+```
+
+Đừng dựng `Intl.NumberFormat` hay `Intl.DateTimeFormat` tại chỗ. Không chỉ vì
+lặp: một bộ định dạng tạo ở phạm vi module sẽ đóng cứng ngôn ngữ lúc import và
+không bao giờ đổi theo nút chuyển ngữ. Và `fullDate` mang theo `timeZone: "UTC"`
+— thiếu nó thì máy đặt ở múi giờ phía tây UTC hiện ranh giới kỳ báo cáo lệch
+đúng một ngày.
+
+Ngôn ngữ nằm trong cookie `NEXT_LOCALE`, không nằm trong đường dẫn, nên **không
+có thư mục `app/[locale]/` và không có `middleware.ts`** — đừng thêm vào, phần
+lớn tài liệu next-intl ngoài kia dạy kiểu có tiền tố URL. Lý do chọn cách này:
+`docs/adr/0005-next-intl-cho-giao-dien-song-ngu.md`.
+
+Bài test nào khẳng định vào chuỗi đã hiển thị thì phải ghim ngôn ngữ trước, bằng
+cách gieo cookie `NEXT_LOCALE` như `smoke.spec.ts` đang làm. Tiếng Việt dùng dấu
+phẩy thập phân còn tiếng Anh dùng dấu chấm, nên một bài không ghim sẽ hỏng vào
+ngày ai đó đổi mặc định.
 
 ## Chạy Playwright (kiểm thử smoke)
 
