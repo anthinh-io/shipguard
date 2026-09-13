@@ -1,5 +1,5 @@
-import Dashboard from "./components/dashboard";
-import LanguageToggle from "./components/language-toggle";
+import Dashboard from "@/app/components/dashboard";
+import LanguageToggle from "@/app/components/language-toggle";
 
 export default function Home() {
   return (

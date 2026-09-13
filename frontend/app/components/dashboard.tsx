@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
+import { apiFetch } from "@/app/lib/api";
 import { EMPTY_FILTERS, FilterBar, type Filters } from "./filter-bar";
 import { KpiDelta } from "./kpi-delta";
 import { KpiTile } from "./kpi-tile";
@@ -115,7 +116,7 @@ async function fetchDashboard(url: string): Promise<DashboardData> {
   if (!BACKEND_URL) {
     throw new DashboardError({ kind: "missing_backend_url" });
   }
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await apiFetch(url, { cache: "no-store" });
   // Phản hồi lỗi của FastAPI vẫn là JSON hợp lệ — 422 khi ngày sai định dạng chẳng
   // hạn — nên phải chặn theo mã trạng thái, không thể chỉ dựa vào json() ném hay không.
   if (!response.ok) {
