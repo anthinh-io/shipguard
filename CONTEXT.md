@@ -26,6 +26,22 @@ _Avoid_: Delayed Order, Overdue Order
 Đơn có sản phẩm từ nhiều hơn một người bán. Khi lọc theo người bán, đơn này thuộc về mọi người bán tham gia. Không tách được thời gian chuẩn bị hàng theo từng người bán trong một đơn như vậy.
 _Avoid_: Split Order, Composite Order
 
+**Order Status**:
+Trạng thái vòng đời của đơn do sàn ghi nhận, là một trong tám giá trị: created, approved, invoiced, processing, shipped, delivered, canceled, unavailable. Khác với `Delivery Outcome`.
+_Avoid_: Order State, Lifecycle Stage
+
+**Delivery Outcome**:
+Kết cục giao hàng của một đơn: đúng hạn, trễ, hoặc chưa có kết quả. Chỉ `Delivered Order` mới có đúng hạn hay trễ; mọi đơn khác — đang trên đường, đã hủy, không có hàng, kể cả khi đã quá ngày cam kết — đều là chưa có kết quả.
+_Avoid_: Delivery Status, Late Status
+
+**Purchase Date**:
+Ngày khách đặt hàng. Là mốc thời gian mặc định khi tra cứu đơn, vì mọi đơn đều có — khác với `Reporting Period` của bảng điều khiển vốn bám theo ngày giao thực tế.
+_Avoid_: Order Date, Created Date
+
+**Order Value**:
+Tổng giá sản phẩm cộng phí vận chuyển của một đơn. Không phải số tiền khách đã thanh toán, vốn có thể lệch do voucher hay trả góp. Đơn không có sản phẩm nào thì không có giá trị.
+_Avoid_: Order Total, Payment Amount, GMV
+
 ## Ba chặng thời gian
 
 Vòng đời một đơn được chia làm ba chặng liên tiếp, mỗi chặng thuộc về một bên chịu trách nhiệm khác nhau. Việc tách như vậy để biết điểm nghẽn nằm ở đâu, thay vì chỉ nhìn một con số tổng.
@@ -85,3 +101,31 @@ _Avoid_: Initial Period, Fallback Period
 **Comparison Period**:
 Kỳ được đem ra đối chiếu với kỳ báo cáo. Có hai lựa chọn: kỳ liền trước có cùng độ dài, hoặc cùng kỳ của năm trước.
 _Avoid_: Baseline, Reference Period
+
+## Tra cứu đơn hàng
+
+**Internal Note**:
+Ghi chú nội bộ mà một `User` để lại trên một đơn. Chỉ thêm được, không sửa hay xóa — muốn đính chính thì thêm ghi chú mới.
+_Avoid_: Comment, Remark, Annotation
+
+## Người dùng
+
+**User**:
+Một người đăng nhập vào hệ thống, định danh bằng email, có tên hiển thị và đúng một vai trò. Không bao giờ bị xóa, chỉ bị khóa.
+_Avoid_: Account, Member
+
+**Operations Staff**:
+Vai trò nhân viên vận hành: xem bảng điều khiển, tra cứu đơn, viết `Internal Note`.
+_Avoid_: Operator, Agent
+
+**Logistics Manager**:
+Vai trò quản lý hậu cần: mọi việc của `Operations Staff`, cộng quyền quản trị các `User` khác trừ `Super Admin`.
+_Avoid_: Admin, Supervisor
+
+**Super Admin**:
+Vai trò của đúng một `User` duy nhất, sinh ra từ cấu hình lúc cài đặt để có người đầu tiên cấp tài khoản cho các `Logistics Manager`. Làm được mọi việc của `Logistics Manager`, và không ai khóa, đổi vai trò hay đặt lại mật khẩu của nó qua giao diện — để hệ thống luôn còn một lối vào.
+_Avoid_: Root, Owner, Admin
+
+**Locked User**:
+`User` bị khóa: không đăng nhập được, nhưng vẫn là tác giả của mọi `Internal Note` đã viết.
+_Avoid_: Disabled User, Deactivated User, Deleted User
