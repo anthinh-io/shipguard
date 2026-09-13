@@ -238,6 +238,94 @@ async def test_logout_without_a_session_still_succeeds(
     assert response.status_code == 204
 
 
+NEW_PASSWORD = "staple-battery-horse"
+
+
+async def post_password_change(
+    client: AsyncClient, access_token: str, current: str, new: str
+) -> Response:
+    return await client.post(
+        "/auth/password",
+        headers=bearer(access_token),
+        json={"current_password": current, "new_password": new},
+    )
+
+
+async def test_change_password_keeps_this_session_and_signs_out_others(
+    client: AsyncClient, staff_id: int
+) -> None:
+    this_device = await login(client)
+    other_device_token = (await login(client)).cookies["refresh_token"]
+
+    response = await post_password_change(
+        client, this_device.json()["access_token"], PASSWORD, NEW_PASSWORD
+    )
+
+    assert response.status_code == 200
+    me = await client.get("/me", headers=bearer(response.json()["access_token"]))
+    assert me.status_code == 200
+    new_token = response.cookies["refresh_token"]
+    for revoked in (this_device.cookies["refresh_token"], other_device_token):
+        after = await client.post("/auth/refresh", headers=refresh_cookie(revoked))
+        assert after.status_code == 401
+    kept = await client.post("/auth/refresh", headers=refresh_cookie(new_token))
+    assert kept.status_code == 200
+    old_login = await client.post(
+        "/auth/login", json={"email": "lan@shipguard.vn", "password": PASSWORD}
+    )
+    new_login = await client.post(
+        "/auth/login", json={"email": "lan@shipguard.vn", "password": NEW_PASSWORD}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+# Khác /auth/login, hai lý do từ chối trả mã và thông báo khác nhau: người gọi đã chứng
+# minh danh tính bằng access token, nên báo rõ lý do không lộ thêm gì cho người ngoài.
+@pytest.mark.parametrize(
+    ("current", "new", "status", "detail"),
+    [
+        ("wrong-password", NEW_PASSWORD, 400, "Current password is incorrect"),
+        (PASSWORD, "short", 422, "Password must be at least 8 characters"),
+    ],
+    ids=["wrong current password", "new password too short"],
+)
+async def test_rejected_password_change_leaves_everything_as_it_was(
+    client: AsyncClient,
+    staff_id: int,
+    current: str,
+    new: str,
+    status: int,
+    detail: str,
+) -> None:
+    this_device = await login(client)
+    other_device_token = (await login(client)).cookies["refresh_token"]
+
+    response = await post_password_change(
+        client, this_device.json()["access_token"], current, new
+    )
+
+    assert response.status_code == status
+    assert response.json() == {"detail": detail}
+    assert "refresh_token" not in response.cookies
+    assert (await login(client)).status_code == 200
+    other = await client.post(
+        "/auth/refresh", headers=refresh_cookie(other_device_token)
+    )
+    assert other.status_code == 200
+
+
+async def test_change_password_requires_a_session(
+    client: AsyncClient, staff_id: int
+) -> None:
+    response = await client.post(
+        "/auth/password",
+        json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
+    )
+
+    assert response.status_code == 401
+
+
 OTHER_SECRET = "some-other-secret-key-long-enough-for-hs256"
 
 
