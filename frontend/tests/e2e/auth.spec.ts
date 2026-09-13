@@ -1,5 +1,7 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 
+import { mockMe } from "./session";
+
 // Trình duyệt gọi thẳng backend (ADR-0006), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
@@ -11,6 +13,8 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
   ]);
+  // Mọi bài ở đây tự giả lập /auth/refresh; vào được bảng điều khiển thì sidebar hỏi /me.
+  await mockMe(context);
 });
 
 function bodyFor(deliveredOrders: number) {
