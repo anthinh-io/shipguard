@@ -33,9 +33,22 @@ function kpis(onTimeRate: number | null, lateOrders: number, median: number | nu
   };
 }
 
-type Options = { comparison: boolean; emptyComparison?: boolean };
+type Mode = "previous" | "year_over_year" | null;
 
-function bodyFor({ comparison, emptyComparison }: Options) {
+// Kỳ đối chiếu của mỗi chế độ khác hẳn nhau, nên mock phải trả đúng kỳ của chế độ được
+// hỏi. Trả chung một kỳ thì bài test không phân biệt được hai chế độ với nhau.
+const COMPARISON_PERIOD: Record<
+  "previous" | "year_over_year",
+  { start_date: string; end_date: string }
+> = {
+  previous: { start_date: "2017-12-29", end_date: "2017-12-31" },
+  year_over_year: { start_date: "2017-01-01", end_date: "2017-01-03" },
+};
+
+type Options = { mode: Mode; emptyComparison?: boolean };
+
+function bodyFor({ mode, emptyComparison }: Options) {
+  const comparison = mode !== null;
   return {
     reporting_period: { start_date: "2018-01-01", end_date: "2018-01-03" },
     filter_options: { customer_states: ["AL", "SP"] },
@@ -51,9 +64,7 @@ function bodyFor({ comparison, emptyComparison }: Options) {
       },
     ],
     small_sample: false,
-    comparison_period: comparison
-      ? { start_date: "2017-12-29", end_date: "2017-12-31" }
-      : null,
+    comparison_period: mode ? COMPARISON_PERIOD[mode] : null,
     // Kỳ đối chiếu rỗng vẫn là một khối đầy đủ, chỉ toàn 0 và null — đây là trường hợp
     // xảy ra thật với bộ Olist ở đầu dải dữ liệu.
     comparison_kpis: comparison
@@ -78,8 +89,15 @@ async function mock(page: Page): Promise<string[]> {
   await page.route(DASHBOARD_API, (route) => {
     const url = new URL(route.request().url());
     calls.push(url.search);
+    // Nhận cả hai chế độ, không riêng "previous": mock chỉ hiểu một chế độ thì đường
+    // "cùng kỳ năm trước" trên giao diện luôn nhận về phản hồi không so sánh, và bài
+    // test viết cho nó sẽ không kiểm được gì cả.
     const mode = url.searchParams.get("comparison");
-    return route.fulfill({ json: bodyFor({ comparison: mode === "previous" }) });
+    return route.fulfill({
+      json: bodyFor({
+        mode: mode === "previous" || mode === "year_over_year" ? mode : null,
+      }),
+    });
   });
   return calls;
 }
@@ -134,13 +152,38 @@ test("bật so sánh thì ô KPI hiện mức chênh và biểu đồ có hai đ
   await expect(stage).toHaveAttribute("data-direction", "up");
 });
 
+test("chọn cùng kỳ năm trước thì gọi đúng chế độ đó và vẽ hai đường", async ({
+  page,
+}) => {
+  const calls = await mock(page);
+
+  await page.goto("/");
+  await expect(page.getByTestId("kpi-grid")).toBeVisible();
+
+  await page.getByTestId("filter-comparison").click();
+  await page.getByRole("option", { name: "Cùng kỳ năm trước" }).click();
+
+  await expect.poll(() => calls.length).toBe(2);
+  // Chế độ thứ hai đi lên máy chủ đúng tên của nó, không lẫn với "kỳ liền trước".
+  expect(calls[1]).toContain("comparison=year_over_year");
+  expect(calls[1]).not.toContain("comparison=previous");
+
+  await expect(lines(page)).toHaveCount(2);
+  await expect(
+    page.getByTestId("kpi-on-time-rate").getByTestId("kpi-delta"),
+  ).toBeVisible();
+
+  // Ranh giới năm nhuận và cách suy ra kỳ đối chiếu thuộc về backend và được kiểm ở
+  // đó; đây chỉ khẳng định giao diện lái đúng chế độ và vẽ lại những gì nhận được.
+});
+
 test("kỳ đối chiếu không có dữ liệu thì không vỡ và không hiện mức chênh", async ({
   page,
 }) => {
   await page.route(SELLERS_API, (route) => route.fulfill({ json: [] }));
   await page.route(DASHBOARD_API, (route) =>
     route.fulfill({
-      json: bodyFor({ comparison: true, emptyComparison: true }),
+      json: bodyFor({ mode: "year_over_year", emptyComparison: true }),
     }),
   );
 

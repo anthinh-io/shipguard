@@ -312,6 +312,17 @@ export default function Dashboard() {
             }
           />
         </section>
+        {/* Quy ước "giao đúng ngày cam kết là đúng hạn" được đóng cứng vào cột sinh
+            is_late, nhưng người đọc không nhìn thấy lược đồ. Nói thẳng ra ở đây thì
+            con số trên lưới KPI mới khớp với cách quản lý vẫn hiểu về lời hứa với
+            khách. Dòng chú thích chứ không phải tooltip: mục đích là người đọc biết
+            quy ước, mà tooltip thì phải rê chuột mới thấy. */}
+        <p
+          data-testid="on-time-definition"
+          className="mt-3 text-sm text-muted-foreground"
+        >
+          {t("onTimeDefinition")}
+        </p>
         <div className="mt-6">
           <LateRateTrendChart
             trend={state.data.late_rate_trend}

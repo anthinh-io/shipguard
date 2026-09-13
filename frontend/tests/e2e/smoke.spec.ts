@@ -38,6 +38,19 @@ test("mở bảng điều khiển là thấy ngay số liệu, không cần ch�
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
 });
 
+test("bảng điều khiển nói rõ giao đúng ngày cam kết là đúng hạn", async ({
+  page,
+}) => {
+  // Quy ước này quyết định con số trên ô tỷ lệ đúng hạn, nhưng nó nằm trong cột sinh
+  // is_late — người đọc không có cách nào biết nếu màn hình không nói ra.
+  await page.goto("/");
+
+  await expect(page.getByTestId("on-time-definition")).toBeVisible();
+  await expect(page.getByTestId("on-time-definition")).toContainText(
+    "đúng ngày đã cam kết",
+  );
+});
+
 test("mỗi lần mở trang chỉ sinh đúng một lần gọi máy chủ", async ({ page }) => {
   let calls = 0;
   await page.route(DASHBOARD_API, async (route) => {

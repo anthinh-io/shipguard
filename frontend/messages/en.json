@@ -18,6 +18,7 @@
     "p90Hint": "90th percentile: {value} days",
     "lateRelatedLowReviewRate": "Late-related low reviews",
     "lowReviewHint": "of 1–2 star orders",
+    "onTimeDefinition": "An order delivered on the promised date counts as on time.",
     "trendTitle": "Late rate trend",
     "lateRate": "Late rate",
     "trendCurrentSeries": "Current period",
