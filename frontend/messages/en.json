@@ -66,5 +66,38 @@
     "submitting": "Signing in…",
     "invalidCredentials": "Incorrect email or password.",
     "unreachable": "Could not reach the server. Please try again."
+  },
+  "nav": {
+    "dashboard": "Dashboard"
+  },
+  "sidebar": {
+    "toggle": "Toggle sidebar",
+    "mobileTitle": "Navigation",
+    "mobileDescription": "ShipGuard pages"
+  },
+  "roles": {
+    "operations_staff": "Operations Staff",
+    "logistics_manager": "Logistics Manager",
+    "super_admin": "Super Admin"
+  },
+  "userMenu": {
+    "changePassword": "Change password",
+    "logout": "Sign out"
+  },
+  "changePassword": {
+    "title": "Change password",
+    "description": "After the change, every other device signed in with this account will be signed out.",
+    "currentPassword": "Current password",
+    "newPassword": "New password (at least 8 characters)",
+    "confirmPassword": "Repeat new password",
+    "submit": "Save",
+    "submitting": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "success": "Password changed. Other devices will be signed out within 15 minutes.",
+    "wrongCurrent": "The current password is incorrect.",
+    "tooShort": "The new password must be at least 8 characters.",
+    "mismatch": "The two new passwords do not match.",
+    "unreachable": "Could not reach the server. Please try again."
   }
 }
