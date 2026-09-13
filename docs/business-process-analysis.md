@@ -16,7 +16,7 @@ Một chuỗi công việc chỉ tính là "quy trình nghiệp vụ" khi có đ
 
 ## 1. Tổng quan nghiệp vụ
 
-Ứng dụng phục vụ nghiệp vụ **giám sát và quản lý rủi ro giao hàng** trong hậu cần. Người dùng là **nhân viên vận hành** và **quản lý hậu cần**. Có 3 nghiệp vụ chính:
+Ứng dụng phục vụ nghiệp vụ **giám sát và quản lý rủi ro giao hàng** trong hậu cần. Người dùng là **nhân viên vận hành** và **quản lý hậu cần**. Mọi người dùng phải đăng nhập. Hệ thống khởi tạo sẵn đúng một tài khoản **Super Admin** từ cấu hình cài đặt; Super Admin tạo các tài khoản quản lý hậu cần, và quản lý hậu cần tạo tiếp các tài khoản khác. Mọi vai trò dùng chung toàn bộ nghiệp vụ; riêng nhân viên vận hành không quản trị được tài khoản. Có 3 nghiệp vụ chính:
 
 1. **Giám sát hiệu suất giao hàng** — theo dõi KPI để đánh giá chất lượng vận hành.
 2. **Tra cứu và quản lý đơn hàng** — tìm kiếm, xem trạng thái đơn.
@@ -30,7 +30,7 @@ Cả 3 quy trình vận hành trên nền vòng đời đơn hàng thực tế: 
 - **Đầu vào:** Dữ liệu đơn hàng lịch sử, dữ liệu đánh giá của khách hàng
 - **Đầu ra:** Báo cáo KPI, quyết định điều chỉnh vận hành
 
-**Mô tả quy trình:** Quản lý đăng nhập và mở bảng điều khiển tổng quan → hệ thống truy vấn dữ liệu, tính toán và hiển thị bộ KPI gồm: tỷ lệ giao đúng hạn, số đơn trễ, **ba chặng thời gian tách riêng theo trách nhiệm** — thời gian chờ duyệt thanh toán (từ lúc đặt hàng đến lúc thanh toán được xác nhận), thời gian người bán chuẩn bị hàng (từ lúc thanh toán được xác nhận đến lúc bàn giao cho đơn vị vận chuyển), thời gian vận chuyển (từ lúc bàn giao đến lúc khách nhận hàng), mỗi chặng báo cáo bằng **trung vị kèm phân vị 90** chứ không phải trung bình cộng — **tỷ lệ đánh giá thấp có liên quan đến giao trễ** (trong các đơn bị khách chấm 1–2 sao, bao nhiêu phần trăm là đơn giao trễ), phân bố theo vùng (**bang của khách hàng nhận hàng**), xu hướng theo thời gian → quản lý chọn bộ lọc (khoảng thời gian, khu vực, **người bán**) để phân tích sâu → hệ thống cập nhật biểu đồ theo bộ lọc, **kể cả so sánh giữa các kỳ (kỳ này so với kỳ trước hoặc cùng kỳ năm trước) khi được chọn** → quản lý nhận diện vấn đề (ví dụ: vùng X có tỷ lệ trễ cao, hoặc thời gian xử lý của người bán kéo dài bất thường trong một giai đoạn) và ra quyết định điều chỉnh. Quản lý cũng có thể **xuất báo cáo (PDF/Excel)** từ trạng thái bảng điều khiển đã lọc, hoặc **nhảy sang [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management)** (danh sách đơn đã lọc sẵn) khi click vào một điểm bất thường trên biểu đồ. Hai hoạt động này — A1.6 (drill-down) và A1.8 (xuất báo cáo) — **chưa được triển khai** trong bản đầu tiên; chúng vẫn thuộc quy trình nghiệp vụ nhưng nằm ngoài phạm vi bản đang xây.
+**Mô tả quy trình:** Quản lý đăng nhập và mở bảng điều khiển tổng quan → hệ thống truy vấn dữ liệu, tính toán và hiển thị bộ KPI gồm: tỷ lệ giao đúng hạn, số đơn trễ, **ba chặng thời gian tách riêng theo trách nhiệm** — thời gian chờ duyệt thanh toán (từ lúc đặt hàng đến lúc thanh toán được xác nhận), thời gian người bán chuẩn bị hàng (từ lúc thanh toán được xác nhận đến lúc bàn giao cho đơn vị vận chuyển), thời gian vận chuyển (từ lúc bàn giao đến lúc khách nhận hàng), mỗi chặng báo cáo bằng **trung vị kèm phân vị 90** chứ không phải trung bình cộng — **tỷ lệ đánh giá thấp có liên quan đến giao trễ** (trong các đơn bị khách chấm 1–2 sao, bao nhiêu phần trăm là đơn giao trễ), phân bố theo vùng (**bang của khách hàng nhận hàng**), xu hướng theo thời gian → quản lý chọn bộ lọc (khoảng thời gian, khu vực, **người bán**) để phân tích sâu → hệ thống cập nhật biểu đồ theo bộ lọc, **kể cả so sánh giữa các kỳ (kỳ này so với kỳ trước hoặc cùng kỳ năm trước) khi được chọn** → quản lý nhận diện vấn đề (ví dụ: vùng X có tỷ lệ trễ cao, hoặc thời gian xử lý của người bán kéo dài bất thường trong một giai đoạn) và ra quyết định điều chỉnh. Quản lý cũng có thể **xuất báo cáo (PDF/Excel)** từ trạng thái bảng điều khiển đã lọc, hoặc **nhảy sang [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management)** (danh sách đơn đã lọc sẵn) khi click vào một điểm bất thường trên biểu đồ. **Xuất báo cáo (A1.8) chưa được triển khai.** **Drill-down (A1.6) được triển khai cùng [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management)**: click một điểm trên biểu đồ xu hướng tỷ lệ trễ hoặc một bang trên biểu đồ theo bang sẽ mở danh sách các đơn trễ đã giao trong đúng khoảng đó, mang theo bộ lọc bang và người bán đang áp dụng — số đơn trong danh sách khớp đúng con số trên biểu đồ.
 
 Việc tách vòng đời đơn thành ba chặng giúp quản lý xác định chính xác điểm nghẽn thuộc về ai: cổng thanh toán và ngân hàng, người bán, hay đơn vị vận chuyển. Nếu gộp thời gian chờ duyệt thanh toán vào thời gian của người bán, một đơn chậm vì ngân hàng sẽ bị quy oan cho người bán. Việc dùng trung vị kèm phân vị 90 thay cho trung bình cộng là vì cả ba chặng đều lệch đuôi mạnh — một nhúm đơn cá biệt kéo trung bình lệch xa giá trị điển hình. Việc đưa thêm tỷ lệ đánh giá thấp liên quan đến trễ vào bộ KPI giúp gắn hiệu suất vận hành nội bộ với trải nghiệm thực tế của khách hàng. Bộ lọc theo người bán, so sánh giữa các kỳ, xuất báo cáo và drill-down sang [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management) là các mở rộng giúp quản lý đi từ nhìn thấy vấn đề đến hành động nhanh hơn, tận dụng dữ liệu KPI đã có sẵn.
 
@@ -41,7 +41,7 @@ Việc tách vòng đời đơn thành ba chặng giúp quản lý xác định 
 | A1.3 | Hiển thị KPI & biểu đồ | Ứng dụng web | Bộ chỉ số KPI | Bảng điều khiển trực quan |
 | A1.4 | Chọn bộ lọc phân tích (thời gian — theo ngày giao thực tế, khu vực — bang của khách hàng, người bán) | Quản lý hậu cần | Bảng điều khiển | Điều kiện lọc |
 | A1.5 | Cập nhật biểu đồ theo bộ lọc (kể cả so sánh giữa các kỳ) | API + Ứng dụng web | Điều kiện lọc | Biểu đồ đã lọc |
-| A1.6 | Phân tích & nhận diện vấn đề | Quản lý hậu cần | Biểu đồ đã lọc | Nhận định vấn đề; hoặc điều hướng sang [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management) với bộ lọc tương ứng — _phần điều hướng chưa triển khai_ |
+| A1.6 | Phân tích & nhận diện vấn đề | Quản lý hậu cần | Biểu đồ đã lọc | Nhận định vấn đề; hoặc điều hướng sang [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management) với bộ lọc ngày giao, bang, người bán tương ứng và kết quả giao = trễ |
 | A1.7 | Ra quyết định điều chỉnh vận hành | Quản lý hậu cần | Nhận định vấn đề | Quyết định điều chỉnh |
 | A1.8 | Xuất báo cáo — _chưa triển khai_ | Quản lý hậu cần | Bảng điều khiển đã lọc | File báo cáo (PDF/Excel) |
 
@@ -84,37 +84,37 @@ flowchart TD
 ## 3. Quy trình 2: Quản lý đơn hàng (Order Management)
 
 - **Tác nhân:** Nhân viên vận hành
-- **Đầu vào:** Yêu cầu tra cứu (mã đơn, trạng thái, khoảng thời gian, mức rủi ro, trạng thái xử lý)
+- **Đầu vào:** Yêu cầu tra cứu (mã đơn, trạng thái vòng đời, kết quả giao, ngày đặt hàng, ngày giao thực tế, bang khách hàng, người bán)
 - **Đầu ra:** Thông tin chi tiết đơn hàng
 
-**Phạm vi:** quy trình này hiện chỉ gồm các hoạt động **tra cứu và hiển thị** — không có hành động ghi/thay đổi trạng thái đơn ở đây. Trạng thái "đã xử lý/chưa xử lý" của can thiệp rủi ro được ghi nhận trong dữ liệu của [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction) (A3.6, A3.9), không bắt buộc phải đi qua giao diện.
+**Phạm vi:** quy trình này không thay đổi dữ liệu đơn hàng. Thao tác ghi duy nhất là **thêm ghi chú nội bộ** — chỉ thêm được, không sửa hay xóa, luôn gắn với tài khoản người viết. **Bộ lọc mức rủi ro, trạng thái xử lý và khối kết quả dự đoán ở A2.6 được hoãn** tới khi [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction) được xây, vì chưa có dữ liệu nguồn.
 
-**Mô tả quy trình:** Nhân viên mở trang quản lý đơn, nhập điều kiện tìm kiếm/lọc (kể cả lọc theo mức rủi ro và trạng thái xử lý, lấy từ dữ liệu [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction)) → hệ thống truy vấn và trả về danh sách đơn phù hợp, hoặc **thông báo "không tìm thấy đơn" nếu danh sách rỗng** → nhân viên chọn một đơn để xem chi tiết → hệ thống hiển thị thông tin sản phẩm, người bán, địa chỉ giao, ngày dự kiến/thực tế, trạng thái đúng hạn/trễ, và **kết quả dự đoán rủi ro nếu đơn đã được đánh giá qua [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction)** → nhân viên có thể **thêm ghi chú nội bộ** vào đơn, hoặc **xuất danh sách đơn đã lọc ra file**.
+**Mô tả quy trình:** Nhân viên mở trang quản lý đơn, tìm theo vài ký tự đầu của mã đơn hoặc lọc theo trạng thái vòng đời, kết quả giao (đúng hạn / trễ / chưa có kết quả), ngày đặt hàng, ngày giao thực tế, bang khách hàng, người bán → hệ thống trả về danh sách đơn phù hợp kèm tổng số, phân trang, hoặc **thông báo "không tìm thấy đơn" nếu danh sách rỗng** → nhân viên chọn một đơn để xem chi tiết → hệ thống hiển thị dòng thời gian của đơn và ba chặng thời gian, sản phẩm kèm giá và phí vận chuyển, người bán, địa chỉ giao, thanh toán, đánh giá của khách, trạng thái đúng hạn/trễ → nhân viên có thể **thêm ghi chú nội bộ** vào đơn, hoặc **xuất toàn bộ danh sách đơn đã lọc ra file CSV**.
 
 | # | Hoạt động | Tài nguyên thực hiện | Đầu vào | Đầu ra |
 | --- | --- | --- | --- | --- |
-| A2.1 | Nhập điều kiện tìm kiếm/lọc (mã đơn, trạng thái, thời gian, mức rủi ro, trạng thái xử lý) | Nhân viên vận hành | Nhu cầu tra cứu | Điều kiện truy vấn |
+| A2.1 | Nhập điều kiện tìm kiếm/lọc (mã đơn, trạng thái vòng đời, kết quả giao, ngày đặt, ngày giao, bang, người bán) | Nhân viên vận hành | Nhu cầu tra cứu | Điều kiện truy vấn |
 | A2.2 | Truy vấn danh sách đơn | API phía máy chủ | Điều kiện truy vấn | Danh sách đơn phù hợp (có thể rỗng) |
 | A2.3 | Hiển thị danh sách kết quả, hoặc thông báo không tìm thấy đơn | Ứng dụng web | Danh sách đơn | Bảng đơn hàng trên giao diện, hoặc thông báo rỗng |
 | A2.4 | Chọn đơn cần xem | Nhân viên vận hành | Bảng đơn hàng | Mã đơn được chọn |
 | A2.5 | Truy vấn chi tiết đơn | API phía máy chủ | Mã đơn | Dữ liệu chi tiết đơn |
-| A2.6 | Hiển thị chi tiết đơn (kèm kết quả dự đoán rủi ro nếu có) | Ứng dụng web | Dữ liệu chi tiết, kết quả dự đoán (nếu có) | Trang chi tiết đơn |
-| A2.7 | Thêm ghi chú nội bộ | Nhân viên vận hành | Trang chi tiết đơn, nội dung ghi chú | Ghi chú được lưu vào đơn |
-| A2.8 | Xuất danh sách đơn ra file | Nhân viên vận hành | Danh sách đơn đã lọc | File xuất (CSV/Excel) |
+| A2.6 | Hiển thị chi tiết đơn (dòng thời gian, sản phẩm, người bán, địa chỉ, thanh toán, đánh giá) | Ứng dụng web | Dữ liệu chi tiết | Trang chi tiết đơn |
+| A2.7 | Thêm ghi chú nội bộ | Nhân viên vận hành | Trang chi tiết đơn, nội dung ghi chú | Ghi chú được lưu vào đơn kèm người viết và thời điểm |
+| A2.8 | Xuất danh sách đơn ra file | Nhân viên vận hành | Danh sách đơn đã lọc | File CSV |
 
 **Sự kiện:** bắt đầu — phát sinh nhu cầu tra cứu đơn hàng; trung gian — kết quả truy vấn được trả về (có thể rỗng); kết thúc — nhân viên nhận được thông tin đơn cần tìm, hoặc đã xuất file.
 
-**Đối tượng nghiệp vụ:** Đơn hàng (được tra cứu → được xem chi tiết); Điều kiện tìm kiếm; Danh sách đơn; Chi tiết đơn (sản phẩm, người bán, địa chỉ, ngày dự kiến/thực tế, trạng thái, kết quả dự đoán rủi ro nếu có); Ghi chú nội bộ; File xuất danh sách đơn.
+**Đối tượng nghiệp vụ:** Đơn hàng (được tra cứu → được xem chi tiết); Điều kiện tìm kiếm; Danh sách đơn; Chi tiết đơn (sản phẩm, người bán, địa chỉ, dòng thời gian, thanh toán, đánh giá, trạng thái); Ghi chú nội bộ (gắn với người viết); File CSV danh sách đơn.
 
 ```mermaid
 flowchart TD
     Start2((Bắt đầu: nhu cầu tra cứu đơn hàng)) --> A2_1
 
     subgraph NV[Nhân viên vận hành]
-        A2_1["A2.1 Nhập điều kiện tìm kiếm/lọc<br/>mã đơn, trạng thái, thời gian, rủi ro, xử lý"]
+        A2_1["A2.1 Nhập điều kiện tìm kiếm/lọc<br/>mã đơn, trạng thái, kết quả giao, thời gian, bang, người bán"]
         A2_4[A2.4 Chọn đơn cần xem]
         A2_7[A2.7 Thêm ghi chú nội bộ]
-        A2_8["A2.8 Xuất danh sách đơn (CSV/Excel)"]
+        A2_8["A2.8 Xuất danh sách đơn (CSV)"]
     end
 
     subgraph SRV2[API phía máy chủ]
@@ -124,7 +124,7 @@ flowchart TD
 
     subgraph WEB2[Ứng dụng web]
         A2_3{A2.3 Hiển thị danh sách kết quả}
-        A2_6["A2.6 Hiển thị chi tiết đơn<br/>kèm kết quả dự đoán rủi ro nếu có"]
+        A2_6["A2.6 Hiển thị chi tiết đơn"]
     end
 
     A2_1 --> A2_2 --> A2_3
@@ -136,6 +136,7 @@ flowchart TD
 
 **Định hướng mở rộng:**
 
+- **Bộ lọc mức rủi ro, trạng thái xử lý và khối kết quả dự đoán** — thiết kế đã có (A2.1, A2.6 bản gốc), chỉ chờ dữ liệu từ Quy trình 3.
 - **Lịch sử thay đổi trạng thái đơn (audit trail)** — cần một mô hình dữ liệu log riêng (ai đổi gì, khi nào) chưa được thiết kế.
 - **Nhắc việc tự động khi có đơn rủi ro cao chưa xử lý sau một khoảng thời gian** — nối tiếp trạng thái "đã xử lý/chưa xử lý" đã có (A3.6, A3.9), nhưng thiếu một tham số cụ thể: khoảng thời gian bao lâu thì nhắc, hiện chưa có cơ sở nào để quyết định con số này.
 
@@ -225,7 +226,8 @@ flowchart TD
 ## 5. Giới hạn được chấp nhận
 
 - **Tần suất giám sát** chưa được định nghĩa thành chu kỳ cố định — chấp nhận: quản lý mở bảng điều khiển hoàn toàn theo nhu cầu, không có lịch cố định.
-- **Phân quyền dữ liệu theo vùng** chưa cần thiết khi hệ thống chỉ có một quản lý sử dụng — cần xem lại khi có nhiều người dùng quản lý hơn.
+- **Phân quyền dữ liệu theo vùng** chưa cần thiết — mọi người dùng xem được toàn bộ dữ liệu; vai trò hiện chỉ giới hạn quyền quản trị tài khoản. Cần xem lại khi có yêu cầu giới hạn dữ liệu theo vùng.
+- **Khóa tài khoản hoặc đổi vai trò có thể trễ tối đa 15 phút** mới có hiệu lực với phiên đang mở — chấp nhận đổi lấy việc không tra cơ sở dữ liệu ở mỗi yêu cầu (ADR-0006).
 
 ## 6. Định hướng mở rộng ngoài phạm vi
 
