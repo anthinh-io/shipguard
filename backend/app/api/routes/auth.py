@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import SessionDep
+from app.api.deps import CurrentUserDep, SessionDep
 from app.core.security import REFRESH_TOKEN_TTL, create_access_token
 from app.services.auth import (
     authenticate,
@@ -13,6 +13,11 @@ from app.services.auth import (
     load_claims,
     revoke_refresh_token,
     rotate_refresh_token,
+)
+from app.services.users import (
+    PasswordTooShortError,
+    WrongCurrentPasswordError,
+    change_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -28,6 +33,13 @@ class LoginRequest(BaseModel):
     # tín hiệu dò khác với thông báo đăng nhập thất bại chung.
     email: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    # Không đặt min_length ở đây: độ dài do check_password_policy quyết, một chỗ duy nhất
+    # dùng chung với tạo User và script đặt lại mật khẩu.
+    current_password: str
+    new_password: str
 
 
 class TokenResponse(BaseModel):
@@ -92,3 +104,27 @@ async def logout(
         await revoke_refresh_token(session, refresh_token)
     # Xóa phải cùng path với lúc đặt, nếu không trình duyệt giữ nguyên cookie cũ.
     response.delete_cookie(REFRESH_COOKIE, **REFRESH_COOKIE_ATTRIBUTES)
+
+
+# Router /auth không gắn get_current_user ở mức router (login, refresh, logout chạy khi
+# chưa có access token), nên route này phải tự khai.
+@router.post("/password")
+async def change_own_password(
+    body: ChangePasswordRequest,
+    response: Response,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+) -> TokenResponse:
+    try:
+        user = await change_password(
+            session, current_user.user_id, body.current_password, body.new_password
+        )
+    except PasswordTooShortError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except WrongCurrentPasswordError as error:
+        # 400 chứ không 401: frontend hiểu 401 là phiên hết hạn và đá người dùng ra. Báo
+        # rõ từng lý do — khác /auth/login — vì người gọi đã chứng minh danh tính.
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    return await token_response(
+        response, session, user, await issue_refresh_token(session, user.id)
+    )

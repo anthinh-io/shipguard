@@ -1,8 +1,8 @@
 from pydantic import BaseModel
-from sqlalchemy import insert, select, update
+from sqlalchemy import Row, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.auth import Role, users
 from app.services.auth import load_claims, normalize_email, revoke_all_refresh_tokens
 
@@ -12,6 +12,11 @@ MIN_PASSWORD_LENGTH = 8
 class PasswordTooShortError(ValueError):
     def __init__(self) -> None:
         super().__init__(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+
+
+class WrongCurrentPasswordError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("Current password is incorrect")
 
 
 class SuperAdminEmailTakenError(RuntimeError):
@@ -107,11 +112,9 @@ async def ensure_super_admin(
     return True
 
 
-async def reset_super_admin_password(session: AsyncSession, new_password: str) -> None:
-    check_password_policy(new_password)
-    user_id = await _super_admin_id(session)
-    if user_id is None:
-        raise SuperAdminMissingError
+async def _set_password_and_sign_out(
+    session: AsyncSession, user_id: int, new_password: str
+) -> None:
     # Đổi mật khẩu và thu hồi phiên trong cùng một transaction: không có khoảnh khắc nào
     # mật khẩu đã đổi mà phiên cũ vẫn làm mới được.
     await session.execute(
@@ -121,3 +124,26 @@ async def reset_super_admin_password(session: AsyncSession, new_password: str) -
     )
     await revoke_all_refresh_tokens(session, user_id)
     await session.commit()
+
+
+async def reset_super_admin_password(session: AsyncSession, new_password: str) -> None:
+    check_password_policy(new_password)
+    user_id = await _super_admin_id(session)
+    if user_id is None:
+        raise SuperAdminMissingError
+    await _set_password_and_sign_out(session, user_id, new_password)
+
+
+async def change_password(
+    session: AsyncSession, user_id: int, current_password: str, new_password: str
+) -> Row:
+    """Trả dòng User để route cấp phiên mới cho chính người vừa đổi."""
+    # Kiểm độ dài trước: khỏi tốn một lượt Argon2 cho yêu cầu chắc chắn bị từ chối.
+    check_password_policy(new_password)
+    user = (await session.execute(select(users).where(users.c.id == user_id))).one()
+    if not await verify_password(current_password, user.password_hash):
+        raise WrongCurrentPasswordError
+    # Thu hồi cả phiên đang dùng; route cấp token mới cho phiên này sau khi commit, nên
+    # token đó không bị thu hồi theo.
+    await _set_password_and_sign_out(session, user_id, new_password)
+    return user
