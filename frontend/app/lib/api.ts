@@ -73,6 +73,16 @@ export async function login(email: string, password: string): Promise<LoginResul
   return "ok";
 }
 
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${BACKEND_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  } catch {
+    // Không tới được máy chủ thì cookie chưa bị thu hồi, nhưng vẫn rời phiên ở trình duyệt
+    // này: giữ người dùng lại vì một lỗi mạng còn tệ hơn trên máy dùng chung.
+  }
+  accessToken = null;
+}
+
 function withToken(init: RequestInit | undefined): RequestInit {
   const headers = new Headers(init?.headers);
   if (accessToken) {
@@ -102,4 +112,38 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
     redirectToLogin();
   }
   return retried;
+}
+
+export type ChangePasswordResult = "ok" | "wrongCurrent" | "tooShort" | "unreachable";
+
+// Máy chủ báo lý do bằng mã trạng thái; chuỗi detail tiếng Anh chỉ dành cho log, còn câu
+// người dùng đọc lấy từ messages/*.json theo khóa trả về ở đây.
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResult> {
+  let response: Response;
+  try {
+    response = await apiFetch(`${BACKEND_URL}/auth/password`, {
+      method: "POST",
+      // Phản hồi đặt cookie refresh mới cho phiên này (mọi cookie cũ đã bị thu hồi); thiếu
+      // credentials thì trình duyệt bỏ cookie đó và lần tải lại sau bị đá ra.
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+  } catch {
+    return "unreachable";
+  }
+  if (response.status === 400) {
+    return "wrongCurrent";
+  }
+  if (response.status === 422) {
+    return "tooShort";
+  }
+  if (!response.ok) {
+    return "unreachable";
+  }
+  await storeToken(response);
+  return "ok";
 }
