@@ -1,3 +1,6 @@
+node_modules/
+__pycache__/
+.venv/
 .env
 .env.*
 !.env.example
@@ -9,3 +12,4 @@
 !.vscode/*.code-snippets
 !*.code-workspace
 *.vsix
+*.local*
