@@ -23,9 +23,21 @@ frontend/
     layout.tsx           metadata (tiêu đề, mô tả), thẻ lang theo ngôn ngữ
                          đang chọn, bọc NextIntlClientProvider và ThemeProvider
     globals.css          nạp Tailwind, bộ token màu shadcn, nhánh sáng/tối
-    page.tsx             Server Component: khung trang, nút đổi ngôn ngữ,
+    (app)/               route group của mọi trang cần đăng nhập — không
+                         thêm tiền tố nào vào URL
+      layout.tsx         bọc các trang trong <AuthGate />
+      page.tsx           Server Component: khung trang, nút đổi ngôn ngữ,
                          gọi <Dashboard />
+    login/
+      page.tsx           trang đăng nhập, nằm ngoài (app)/ nên không bị chặn
+    lib/
+      api.ts             access token trong bộ nhớ, apiFetch tự gắn và làm
+                         mới token, login
+      next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
     components/
+      auth-gate.tsx      Client Component: chờ /auth/refresh trước khi vẽ
+                         trang, thất bại thì về /login?next=...
+      login-form.tsx     Client Component: form đăng nhập
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
       language-toggle.tsx
@@ -46,6 +58,10 @@ frontend/
                          gọi máy chủ, trạng thái tải và trạng thái lỗi
       i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
                          lại, và quy ước số/ngày của từng ngôn ngữ
+      auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
+                         trang, giữ phiên khi tải lại, làm mới token giữa chừng
+      next-path.spec.ts  kiểm safeNextPath, không mở trình duyệt
+      session.ts         mockSession / signInForReal dùng chung cho các spec
   components.json        cấu hình shadcn CLI: thư viện nền và alias đường dẫn
   next.config.ts         bọc qua plugin của next-intl
   playwright.config.ts
@@ -71,10 +87,28 @@ bun install
 bun run dev
 ```
 
-Mở http://localhost:3000 — bảng điều khiển hiện tỷ lệ giao đúng hạn và số đơn
-trễ của kỳ mặc định, không phải chọn bộ lọc nào trước. Giao diện lên tiếng Việt,
-nút ở góc trên bên phải đổi sang tiếng Anh. Nếu backend chưa chạy, trang vẫn
-dựng được và hiện thông báo lỗi thay cho số liệu.
+Mở http://localhost:3000 — lần đầu sẽ được đưa tới trang đăng nhập; đăng nhập
+bằng tài khoản Super Admin khai trong `.env` gốc (xem `backend/README.md`). Sau
+đó bảng điều khiển hiện tỷ lệ giao đúng hạn và số đơn trễ của kỳ mặc định,
+không phải chọn bộ lọc nào trước. Giao diện lên tiếng Việt, nút ở góc trên bên
+phải đổi sang tiếng Anh. Nếu backend chưa chạy, trang không xác nhận được phiên
+nên cũng dừng ở trang đăng nhập, và bấm đăng nhập sẽ báo không kết nối được máy
+chủ.
+
+## Đăng nhập và gọi backend
+
+Access token chỉ nằm trong bộ nhớ trình duyệt, refresh token nằm trong cookie
+httpOnly (`docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`). Máy chủ Next
+không thấy token, nên việc chặn nằm ở client, trong `(app)/layout.tsx` — **không
+có `middleware.ts` / `proxy.ts`**.
+
+- Trang mới cần đăng nhập đặt trong `app/(app)/`; nó tự đi qua cổng chặn.
+- Mọi lời gọi backend đi qua `apiFetch` trong `app/lib/api.ts`, **đừng gọi
+  `fetch` trần**: thiếu header `Authorization` là 401, và chỉ `apiFetch` biết làm
+  mới token rồi thử lại.
+- Đừng tự gọi `/auth/refresh` ở chỗ khác. Refresh token chỉ dùng được một lần;
+  `refreshAccessToken` gộp mọi lần làm mới đồng thời vào một lời gọi, gọi riêng
+  là tự đá người dùng ra trang đăng nhập.
 
 ## Thêm component shadcn
 
@@ -140,8 +174,15 @@ cd frontend && bunx playwright install chromium
 ```
 
 **Backend phải đang chạy trước khi chạy bài test này** (xem
-`backend/README.md`, mục "Khởi động"). Bài test gọi HTTP thật tới backend,
-không giả lập — nếu backend chưa sẵn sàng, test sẽ trượt thay vì âm thầm qua.
+`backend/README.md`, mục "Khởi động"). `smoke.spec.ts` và `i18n.spec.ts` gọi
+HTTP thật tới backend, không giả lập — nếu backend chưa sẵn sàng, test sẽ trượt
+thay vì âm thầm qua. Hai tệp này đăng nhập thật bằng `SUPER_ADMIN_EMAIL` /
+`SUPER_ADMIN_PASSWORD` đọc từ `.env` gốc (`signInForReal`), nên nếu đã đổi mật
+khẩu Super Admin bằng script đặt lại thì phải sửa `.env` theo.
+
+Spec giả lập `/dashboard` thì giả lập luôn `/auth/refresh` bằng `mockSession`
+trong `beforeEach`; thiếu nó thì cổng chặn đưa trang về `/login` và bài test
+không thấy bảng điều khiển.
 
 ```bash
 bun run test
@@ -158,4 +199,4 @@ mặc định tính động từ dữ liệu, nên con số đổi mà hành vi 
 
 | Biến | Dùng ở đâu |
 | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | `app/components/dashboard.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`. Lý do chọn cách này thay vì proxy qua Next: xem `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
+| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/seller-combobox.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
