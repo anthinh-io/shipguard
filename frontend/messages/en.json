@@ -1,0 +1,58 @@
+{
+  "dashboard": {
+    "loading": "Loading data…",
+    "error": "Could not load data from the server ({detail}). Please try again.",
+    "errorDetail": {
+      "missingBackendUrl": "the NEXT_PUBLIC_BACKEND_URL environment variable is missing",
+      "httpStatus": "the server returned status {status}"
+    },
+    "reportingPeriod": "Reporting period: {period}",
+    "noDeliveredOrders": "no delivered orders yet",
+    "onTimeRate": "On-time rate",
+    "deliveredOrders": "{count, plural, one {# order delivered} other {# orders delivered}}",
+    "lateOrders": "Late orders",
+    "paymentApproval": "Payment approval",
+    "sellerHandling": "Seller handling",
+    "carrierTransit": "Carrier transit",
+    "medianDays": "{value} days",
+    "p90Hint": "90th percentile: {value} days",
+    "lateRelatedLowReviewRate": "Late-related low reviews",
+    "lowReviewHint": "of 1–2 star orders",
+    "onTimeDefinition": "An order delivered on the promised date counts as on time.",
+    "trendTitle": "Late rate trend",
+    "lateRate": "Late rate",
+    "trendCurrentSeries": "Current period",
+    "trendComparisonSeries": "Comparison period",
+    "deltaPercentagePoints": "{value} percentage points",
+    "deltaDays": "{value} days",
+    "deltaFlat": "Unchanged from the comparison period",
+    "granularity": {
+      "day": "By day",
+      "week": "By week",
+      "month": "By month"
+    },
+    "byStateTitle": "Late rate by state",
+    "empty": "No delivered orders match the current filters. Try widening the date range or picking a different state.",
+    "smallSampleWarning": "Only {count, number} orders match the current filters. At this size the percentages are not reliable enough to draw conclusions from.",
+    "filters": {
+      "dateRange": "Date range",
+      "customerState": "Receiving state",
+      "allStates": "All states",
+      "clearAll": "Clear all filters",
+      "pickDateRange": "Pick a date range",
+      "seller": "Seller",
+      "allSellers": "All sellers",
+      "sellerPlaceholder": "Type an id, state or city…",
+      "sellerNoResults": "No sellers found",
+      "sellerHint": "{state} · {city} · {count, number} orders",
+      "comparison": "Comparison mode",
+      "comparisonNone": "No comparison",
+      "comparisonPrevious": "Previous period",
+      "comparisonYearOverYear": "Same period last year"
+    }
+  },
+  "language": {
+    "switchTo": "Tiếng Việt",
+    "switchLabel": "Switch to Vietnamese"
+  }
+}

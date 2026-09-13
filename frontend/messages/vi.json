@@ -1,0 +1,58 @@
+{
+  "dashboard": {
+    "loading": "Đang tải số liệu…",
+    "error": "Không lấy được số liệu từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "reportingPeriod": "Kỳ báo cáo: {period}",
+    "noDeliveredOrders": "chưa có đơn nào đã giao",
+    "onTimeRate": "Tỷ lệ giao đúng hạn",
+    "deliveredOrders": "{count, number} đơn đã giao",
+    "lateOrders": "Đơn giao trễ",
+    "paymentApproval": "Chặng duyệt thanh toán",
+    "sellerHandling": "Chặng người bán xử lý",
+    "carrierTransit": "Chặng vận chuyển",
+    "medianDays": "{value} ngày",
+    "p90Hint": "Phân vị 90: {value} ngày",
+    "lateRelatedLowReviewRate": "Đánh giá thấp do trễ",
+    "lowReviewHint": "trong các đơn 1–2 sao",
+    "onTimeDefinition": "Đơn giao đúng ngày đã cam kết được tính là đúng hạn.",
+    "trendTitle": "Xu hướng tỷ lệ trễ",
+    "lateRate": "Tỷ lệ trễ",
+    "trendCurrentSeries": "Kỳ đang xem",
+    "trendComparisonSeries": "Kỳ đối chiếu",
+    "deltaPercentagePoints": "{value} điểm phần trăm",
+    "deltaDays": "{value} ngày",
+    "deltaFlat": "Không đổi so với kỳ đối chiếu",
+    "granularity": {
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    },
+    "byStateTitle": "Tỷ lệ trễ theo bang",
+    "empty": "Bộ lọc hiện tại không có đơn nào đã giao. Hãy nới khoảng thời gian hoặc chọn bang khác.",
+    "smallSampleWarning": "Chỉ có {count, number} đơn sau khi lọc. Ở quy mô này các tỷ lệ phần trăm chưa đủ tin cậy để kết luận.",
+    "filters": {
+      "dateRange": "Khoảng thời gian",
+      "customerState": "Bang nhận hàng",
+      "allStates": "Tất cả các bang",
+      "clearAll": "Xoá hết bộ lọc",
+      "pickDateRange": "Chọn khoảng thời gian",
+      "seller": "Người bán",
+      "allSellers": "Tất cả người bán",
+      "sellerPlaceholder": "Gõ mã, bang hoặc thành phố…",
+      "sellerNoResults": "Không tìm thấy người bán nào",
+      "sellerHint": "{state} · {city} · {count, number} đơn",
+      "comparison": "Chế độ so sánh",
+      "comparisonNone": "Không so sánh",
+      "comparisonPrevious": "Kỳ liền trước",
+      "comparisonYearOverYear": "Cùng kỳ năm trước"
+    }
+  },
+  "language": {
+    "switchTo": "English",
+    "switchLabel": "Chuyển sang tiếng Anh"
+  }
+}
