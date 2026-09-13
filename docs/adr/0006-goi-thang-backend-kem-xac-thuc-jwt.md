@@ -102,8 +102,8 @@ B rụng vì refresh token 7 ngày nằm trong localStorage. C rụng vì cái g
 
 1. [x] Bảng `users`, `refresh_tokens`, `user_claims` qua Alembic
 2. [ ] Endpoint `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `/me`
-3. [ ] Dependency xác minh access token, áp cho mọi route trừ `/health` và `/auth/*`
+3. [x] Dependency xác minh access token, áp cho mọi route trừ `/health` và `/auth/*`
 4. [x] Tạo `Super Admin` lúc khởi động; script CLI đặt lại mật khẩu `Super Admin`
 5. [x] Mở rộng `CORSMiddleware` và cập nhật test header CORS
-6. [ ] Lớp gọi API phía frontend: gắn token, làm mới khi 401, chuyển về `/login`
-7. [ ] Giả lập `/auth/refresh` trong các spec Playwright hiện có
+6. [x] Lớp gọi API phía frontend: gắn token, làm mới khi 401, chuyển về `/login`
+7. [x] Giả lập `/auth/refresh` trong các spec Playwright hiện có

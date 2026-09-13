@@ -70,8 +70,9 @@ Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
 endpoint trả mã 503 kèm `{"status":"degraded","database":"disconnected"}`.
 
-Kiểm tra tiếp: `curl http://localhost:8000/dashboard` trả về kỳ báo cáo mặc định
-kèm khối KPI. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
+Kiểm tra tiếp: `curl http://localhost:8000/dashboard -H 'Authorization: Bearer
+<access_token>'` (lấy token ở mục [Đăng nhập](#đăng-nhập)) trả về kỳ báo cáo mặc
+định kèm khối KPI; thiếu token thì 401. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
 số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
 
 ## Đăng nhập
@@ -100,8 +101,8 @@ curl http://localhost:8000/me -H 'Authorization: Bearer <access_token>'
 | `POST /auth/logout` | Thu hồi cookie hiện có và xóa nó khỏi trình duyệt |
 | `GET /me` | Người đang đăng nhập: email, tên, vai trò, claim. Thiếu token hợp lệ thì 401 |
 
-`/dashboard` và `/sellers` **chưa** đòi đăng nhập — việc khóa đi cùng cổng đăng
-nhập phía trình duyệt.
+Mọi route khác đều đòi access token hợp lệ, thiếu thì 401 — trừ `/health` và
+`/auth/*` (`/auth/logout` chỉ cần cookie).
 
 Cookie refresh token chưa đặt cờ `Secure` vì môi trường phát triển chạy http.
 Triển khai qua HTTPS thì phải bật lại.
