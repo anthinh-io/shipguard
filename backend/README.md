@@ -15,14 +15,18 @@ trường ảo duy nhất ở gốc, `backend/` là một thành viên.
 ```
 backend/
   app/
-    main.py        khởi tạo FastAPI, gắn router
-    core/          cấu hình và kết nối cơ sở dữ liệu
+    main.py        khởi tạo FastAPI, gắn router, tạo Super Admin lúc khởi động
+    core/          cấu hình, kết nối cơ sở dữ liệu, bảo mật
       config.py    đọc .env ở gốc repo
       db.py        engine, session, lớp Base của model
+      security.py  băm mật khẩu, ký và xác minh access token
     api/
-      deps.py      SessionDep — phụ thuộc session dùng chung cho mọi endpoint
-      routes/      mỗi tệp một nhóm endpoint
-    services/      tính KPI từ bảng dẫn xuất; route chỉ đọc tham số và gọi vào đây
+      deps.py      SessionDep, CurrentUserDep — phụ thuộc dùng chung cho các endpoint
+      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me)
+    services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
+      auth.py      đăng nhập, cấp và xoay vòng refresh token
+      users.py     tạo User, Super Admin, đặt lại mật khẩu
+    scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
     alembic/       migration
   tests/
   alembic.ini
@@ -33,7 +37,8 @@ Bố cục theo `fastapi/full-stack-fastapi-template`.
 
 ## Khởi động
 
-Chép tệp môi trường rồi điền `POSTGRES_USER` và `POSTGRES_PASSWORD` của bạn:
+Chép tệp môi trường rồi điền `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
+và ba biến `SUPER_ADMIN_*` của bạn:
 
 ```bash
 cp .env.example .env
@@ -68,6 +73,49 @@ endpoint trả mã 503 kèm `{"status":"degraded","database":"disconnected"}`.
 Kiểm tra tiếp: `curl http://localhost:8000/dashboard` trả về kỳ báo cáo mặc định
 kèm khối KPI. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
 số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
+
+## Đăng nhập
+
+Cơ chế token theo `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`: access
+token JWT sống 15 phút gửi qua header `Authorization: Bearer`, refresh token sống
+7 ngày trong cookie `httpOnly` chỉ đi kèm `/auth/*`.
+
+Lần khởi động đầu tiên tạo `Super Admin` từ `SUPER_ADMIN_EMAIL`,
+`SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME`. Từ đó các biến này bị bỏ qua — đổi
+chúng rồi khởi động lại không tạo thêm hay sửa tài khoản nào. Backend **không
+khởi động** nếu chưa chạy migration, hoặc nếu `SUPER_ADMIN_EMAIL` trùng một
+`User` thường đã có; thông báo lỗi nêu rõ lý do.
+
+```bash
+curl -i -X POST http://localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"..."}'
+curl http://localhost:8000/me -H 'Authorization: Bearer <access_token>'
+```
+
+| Endpoint | Việc |
+| --- | --- |
+| `POST /auth/login` | Trả access token, đặt cookie refresh token. Sai mật khẩu, email không tồn tại và tài khoản bị khóa đều nhận cùng một 401 |
+| `POST /auth/refresh` | Đổi cookie hiện có lấy access token và cookie mới; cookie cũ bị thu hồi, dùng lại nhận 401 |
+| `POST /auth/logout` | Thu hồi cookie hiện có và xóa nó khỏi trình duyệt |
+| `GET /me` | Người đang đăng nhập: email, tên, vai trò, claim. Thiếu token hợp lệ thì 401 |
+
+`/dashboard` và `/sellers` **chưa** đòi đăng nhập — việc khóa đi cùng cổng đăng
+nhập phía trình duyệt.
+
+Cookie refresh token chưa đặt cờ `Secure` vì môi trường phát triển chạy http.
+Triển khai qua HTTPS thì phải bật lại.
+
+### Đặt lại mật khẩu Super Admin
+
+Không có luồng quên mật khẩu qua email. Người có quyền vào máy chủ chạy:
+
+```bash
+uv run python -m app.scripts.reset_super_admin_password
+```
+
+Lệnh hỏi mật khẩu mới hai lần (tối thiểu 8 ký tự, không hiện khi gõ). Đặt lại
+xong, mọi phiên cũ của Super Admin bị đăng xuất.
 
 ## Hai tầng bảng
 
@@ -181,7 +229,9 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose dựng container |
 | `DATABASE_URL` | Ứng dụng và Alembic |
 | `TEST_DATABASE_URL` | Chỉ bộ test |
-| `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md` |
+| `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md` |
+| `JWT_SECRET_KEY` | Khóa ký access token. Đổi khóa thì mọi access token đang có hết hiệu lực ngay |
+| `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME` | Chỉ đọc ở lần khởi động đầu, khi chưa có Super Admin — xem [Đăng nhập](#đăng-nhập) |
 
 Ghi lược đồ `postgresql://` thuần — mã tự thêm trình điều khiển `+asyncpg`.
 
