@@ -25,7 +25,7 @@ backend/
       routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
-      users.py     tạo User, Super Admin, đặt lại mật khẩu
+      users.py     tạo User, Super Admin, đặt lại và tự đổi mật khẩu
     scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
     alembic/       migration
   tests/
@@ -99,10 +99,12 @@ curl http://localhost:8000/me -H 'Authorization: Bearer <access_token>'
 | `POST /auth/login` | Trả access token, đặt cookie refresh token. Sai mật khẩu, email không tồn tại và tài khoản bị khóa đều nhận cùng một 401 |
 | `POST /auth/refresh` | Đổi cookie hiện có lấy access token và cookie mới; cookie cũ bị thu hồi, dùng lại nhận 401 |
 | `POST /auth/logout` | Thu hồi cookie hiện có và xóa nó khỏi trình duyệt |
+| `POST /auth/password` | Tự đổi mật khẩu, cần access token; body `{"current_password", "new_password"}`. Thu hồi mọi refresh token của người đó rồi trả access token và cookie mới cho phiên đang dùng — mọi phiên khác bị đăng xuất. Sai mật khẩu cũ nhận 400, mật khẩu mới dưới 8 ký tự nhận 422 (không phải 401: frontend hiểu 401 là phiên hết hạn) |
 | `GET /me` | Người đang đăng nhập: email, tên, vai trò, claim. Thiếu token hợp lệ thì 401 |
 
 Mọi route khác đều đòi access token hợp lệ, thiếu thì 401 — trừ `/health` và
-`/auth/*` (`/auth/logout` chỉ cần cookie).
+`/auth/*` (`/auth/logout` chỉ cần cookie; `/auth/password` là ngoại lệ, vẫn đòi
+access token).
 
 Cookie refresh token chưa đặt cờ `Secure` vì môi trường phát triển chạy http.
 Triển khai qua HTTPS thì phải bật lại.

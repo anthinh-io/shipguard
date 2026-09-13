@@ -25,26 +25,36 @@ frontend/
     globals.css          nạp Tailwind, bộ token màu shadcn, nhánh sáng/tối
     (app)/               route group của mọi trang cần đăng nhập — không
                          thêm tiền tố nào vào URL
-      layout.tsx         bọc các trang trong <AuthGate />
-      page.tsx           Server Component: khung trang, nút đổi ngôn ngữ,
-                         gọi <Dashboard />
+      layout.tsx         bọc các trang trong <AuthGate /> và khung sidebar;
+                         đọc cookie sidebar_state để giữ trạng thái thu gọn
+      page.tsx           Server Component: gọi <Dashboard />
     login/
       page.tsx           trang đăng nhập, nằm ngoài (app)/ nên không bị chặn
     lib/
       api.ts             access token trong bộ nhớ, apiFetch tự gắn và làm
-                         mới token, login
+                         mới token, login, logout, changePassword
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
     components/
       auth-gate.tsx      Client Component: chờ /auth/refresh trước khi vẽ
                          trang, thất bại thì về /login?next=...
       login-form.tsx     Client Component: form đăng nhập
+      app-sidebar.tsx    Client Component: sidebar chung, NAV_ITEMS là danh
+                         sách mục điều hướng
+      app-header.tsx     Client Component: nút menu và tiêu đề trang hiện tại
+      nav-user.tsx       Client Component: menu người dùng ở đáy sidebar —
+                         tên, vai trò (từ /me), đổi mật khẩu, ngôn ngữ, đăng xuất
+      change-password-dialog.tsx
+                         Client Component: hộp thoại tự đổi mật khẩu
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
       language-toggle.tsx
-                         Client Component: nút đổi ngôn ngữ, gọi server action
-                         ghi cookie
+                         Client Component: nút đổi ngôn ngữ ở trang đăng nhập
+                         và hook useLocaleSwitch dùng chung với menu người dùng
       ui/                component do shadcn sinh ra — mã của dự án, sửa trực
                          tiếp được, không phải phụ thuộc trong node_modules
+    hooks/
+      use-mobile.ts      useIsMobile cho sidebar (shadcn sinh, đã viết lại
+                         bằng useSyncExternalStore)
   i18n/
     config.ts            danh sách ngôn ngữ, mặc định, tên cookie
     request.ts           đọc cookie mỗi lần dựng trang, nạp bộ chuỗi, khai các
@@ -60,8 +70,13 @@ frontend/
                          lại, và quy ước số/ngày của từng ngôn ngữ
       auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
                          trang, giữ phiên khi tải lại, làm mới token giữa chừng
+      app-shell.spec.ts  Playwright: sidebar, thu gọn giữ sau tải lại, ngăn kéo
+                         trên màn hình hẹp, đổi ngôn ngữ từ menu, đăng xuất
+      change-password.spec.ts
+                         Playwright: hộp thoại đổi mật khẩu (giả lập máy chủ)
       next-path.spec.ts  kiểm safeNextPath, không mở trình duyệt
-      session.ts         mockSession / signInForReal dùng chung cho các spec
+      session.ts         mockSession / mockMe / signInForReal / switchLanguage
+                         dùng chung cho các spec
   components.json        cấu hình shadcn CLI: thư viện nền và alias đường dẫn
   next.config.ts         bọc qua plugin của next-intl
   playwright.config.ts
@@ -90,10 +105,10 @@ bun run dev
 Mở http://localhost:3000 — lần đầu sẽ được đưa tới trang đăng nhập; đăng nhập
 bằng tài khoản Super Admin khai trong `.env` gốc (xem `backend/README.md`). Sau
 đó bảng điều khiển hiện tỷ lệ giao đúng hạn và số đơn trễ của kỳ mặc định,
-không phải chọn bộ lọc nào trước. Giao diện lên tiếng Việt, nút ở góc trên bên
-phải đổi sang tiếng Anh. Nếu backend chưa chạy, trang không xác nhận được phiên
-nên cũng dừng ở trang đăng nhập, và bấm đăng nhập sẽ báo không kết nối được máy
-chủ.
+không phải chọn bộ lọc nào trước. Giao diện lên tiếng Việt; đổi sang tiếng Anh,
+đổi mật khẩu và đăng xuất nằm trong menu người dùng ở đáy sidebar. Nếu backend
+chưa chạy, trang không xác nhận được phiên nên cũng dừng ở trang đăng nhập, và
+bấm đăng nhập sẽ báo không kết nối được máy chủ.
 
 ## Đăng nhập và gọi backend
 
@@ -102,7 +117,10 @@ httpOnly (`docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`). Máy chủ Nex
 không thấy token, nên việc chặn nằm ở client, trong `(app)/layout.tsx` — **không
 có `middleware.ts` / `proxy.ts`**.
 
-- Trang mới cần đăng nhập đặt trong `app/(app)/`; nó tự đi qua cổng chặn.
+- Trang mới cần đăng nhập đặt trong `app/(app)/`; nó tự đi qua cổng chặn và tự
+  có sidebar. Thêm mục điều hướng cho nó vào `NAV_ITEMS` trong `app-sidebar.tsx`
+  (tiêu đề trên thanh đầu trang cũng lấy từ đó) cùng khoá `nav.*` trong
+  `messages/`.
 - Mọi lời gọi backend đi qua `apiFetch` trong `app/lib/api.ts`, **đừng gọi
   `fetch` trần**: thiếu header `Authorization` là 401, và chỉ `apiFetch` biết làm
   mới token rồi thử lại.
@@ -180,9 +198,11 @@ thay vì âm thầm qua. Hai tệp này đăng nhập thật bằng `SUPER_ADMIN
 `SUPER_ADMIN_PASSWORD` đọc từ `.env` gốc (`signInForReal`), nên nếu đã đổi mật
 khẩu Super Admin bằng script đặt lại thì phải sửa `.env` theo.
 
-Spec giả lập `/dashboard` thì giả lập luôn `/auth/refresh` bằng `mockSession`
-trong `beforeEach`; thiếu nó thì cổng chặn đưa trang về `/login` và bài test
-không thấy bảng điều khiển.
+Spec giả lập `/dashboard` thì giả lập luôn `/auth/refresh` và `/me` bằng
+`mockSession` trong `beforeEach`; thiếu nó thì cổng chặn (hoặc lời gọi `/me` của
+sidebar mang token giả) đưa trang về `/login` và bài test không thấy bảng điều
+khiển. Spec tự giả lập `/auth/refresh` thì gọi `mockMe`. Đừng viết bài Playwright
+đổi mật khẩu thật: `signInForReal` sẽ hỏng ở mọi lần chạy sau.
 
 ```bash
 bun run test
@@ -199,4 +219,4 @@ mặc định tính động từ dữ liệu, nên con số đổi mà hành vi 
 
 | Biến | Dùng ở đâu |
 | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/seller-combobox.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
+| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/seller-combobox.tsx`, `app/components/nav-user.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
