@@ -1,11 +1,27 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { expect, type BrowserContext } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 // Trình duyệt gọi thẳng backend (ADR-0006), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+
+// Sidebar hỏi /me trên mọi trang. Token giả gửi tới backend thật sẽ nhận 401 và apiFetch
+// đưa trang về /login, nên spec nào tự giả lập phiên cũng phải giả lập luôn /me.
+export async function mockMe(context: BrowserContext) {
+  await context.route(`${BACKEND_URL}/me`, (route) =>
+    route.fulfill({
+      json: {
+        id: 1,
+        email: "lan@shipguard.vn",
+        display_name: "Nguyễn Lan",
+        role: "operations_staff",
+        claims: [],
+      },
+    }),
+  );
+}
 
 // Cho spec giả lập /dashboard: cổng chặn chỉ cần /auth/refresh trả một token bất kỳ, vì
 // mọi lời gọi số liệu phía sau cũng bị chặn lại và không bao giờ tới backend thật.
@@ -13,6 +29,13 @@ export async function mockSession(context: BrowserContext) {
   await context.route(`${BACKEND_URL}/auth/refresh`, (route) =>
     route.fulfill({ json: { access_token: "test-access-token", token_type: "bearer" } }),
   );
+  await mockMe(context);
+}
+
+// Nút đổi ngôn ngữ của các trang sau đăng nhập nằm trong menu người dùng ở đáy sidebar.
+export async function switchLanguage(page: Page) {
+  await page.getByTestId("user-menu").click();
+  await page.getByTestId("user-menu-language").click();
 }
 
 // Cho spec gọi backend thật: token giả sẽ nhận 401 từ /dashboard. Đăng nhập thật bằng
