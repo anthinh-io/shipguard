@@ -45,9 +45,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# Mọi route yêu cầu access token trừ /health và /auth/* (ADR-0006) — /auth/logout cũng
+# mở, vì nó chỉ cần cookie refresh token.
 app.include_router(health.router)
-# /dashboard và /sellers chưa gắn CurrentUserDep: khóa chúng đi cùng cổng đăng nhập phía
-# trình duyệt ở ticket sau, nếu không bảng điều khiển đang chạy sẽ hỏng.
 app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(users.router)
