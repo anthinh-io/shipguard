@@ -1,10 +1,32 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import auth, dashboard, health, users
 from app.core.config import settings
+from app.core.db import SessionLocal
+from app.services.users import ensure_super_admin
+
+
+# Lỗi ở đây để nguyên cho uvicorn in ra và dừng: backend chạy mà không có lối vào nào
+# còn tệ hơn không chạy. Logic nằm ở ensure_super_admin để test gọi thẳng được — httpx
+# ASGITransport không chạy lifespan.
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async with SessionLocal() as session:
+        await ensure_super_admin(
+            session,
+            email=settings.SUPER_ADMIN_EMAIL,
+            password=settings.SUPER_ADMIN_PASSWORD,
+            display_name=settings.SUPER_ADMIN_NAME,
+        )
+    yield
+
 
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.PROJECT_NAME,
     description=(
         "A web application for managing and predicting delivery performance in "
