@@ -1,6 +1,7 @@
 # ADR-0002: Trình duyệt gọi thẳng backend, mở CORS thay vì proxy qua Next
 
-**Trạng thái:** Đã chấp nhận
+**Trạng thái:** Bị thay thế
+**Thay bởi:** ADR-0006
 **Ngày:** 2026-09-11
 **Người quyết định:** Chủ dự án
 
