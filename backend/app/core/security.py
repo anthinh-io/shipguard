@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -17,12 +18,14 @@ ALGORITHM = "HS256"
 password_hash = PasswordHash((Argon2Hasher(),))
 
 
-def hash_password(password: str) -> str:
-    return password_hash.hash(password)
+# Argon2 cố ý tốn CPU hàng chục mili giây; chạy trong luồng riêng để một lần đăng nhập
+# không chặn event loop của mọi request khác.
+async def hash_password(password: str) -> str:
+    return await asyncio.to_thread(password_hash.hash, password)
 
 
-def verify_password(password: str, stored_hash: str) -> bool:
-    return password_hash.verify(password, stored_hash)
+async def verify_password(password: str, stored_hash: str) -> bool:
+    return await asyncio.to_thread(password_hash.verify, password, stored_hash)
 
 
 # Người đang gọi, dựng hoàn toàn từ access token — không tra cơ sở dữ liệu (ADR-0006).
