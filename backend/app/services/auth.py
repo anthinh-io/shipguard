@@ -26,7 +26,7 @@ async def authenticate(session: AsyncSession, email: str, password: str) -> Row 
     ).one_or_none()
     if user is None or user.is_locked:
         return None
-    if not verify_password(password, user.password_hash):
+    if not await verify_password(password, user.password_hash):
         return None
     return user
 

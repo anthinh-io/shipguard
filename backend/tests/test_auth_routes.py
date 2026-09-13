@@ -296,6 +296,8 @@ async def test_cors_preflight_allows_credentialed_auth_calls(
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
     assert response.headers["access-control-allow-credentials"] == "true"
+    methods = response.headers["access-control-allow-methods"]
+    assert {"GET", "POST", "PATCH"} <= {m.strip() for m in methods.split(",")}
     allowed = response.headers["access-control-allow-headers"].lower()
     assert "authorization" in allowed
     assert "content-type" in allowed

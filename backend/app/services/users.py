@@ -1,9 +1,10 @@
+from pydantic import BaseModel
 from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.models.auth import Role, users
-from app.services.auth import normalize_email, revoke_all_refresh_tokens
+from app.services.auth import load_claims, normalize_email, revoke_all_refresh_tokens
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -29,9 +30,29 @@ class SuperAdminMissingError(RuntimeError):
         )
 
 
+class UserProfile(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    role: Role
+    claims: list[str]
+
+
 def check_password_policy(password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise PasswordTooShortError
+
+
+# User không bao giờ bị xóa (CONTEXT.md), nên một user_id lấy từ token đã ký luôn có dòng.
+async def get_user_profile(session: AsyncSession, user_id: int) -> UserProfile:
+    user = (await session.execute(select(users).where(users.c.id == user_id))).one()
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        claims=await load_claims(session, user_id),
+    )
 
 
 async def create_user(
@@ -49,7 +70,7 @@ async def create_user(
         .values(
             email=normalize_email(email),
             display_name=display_name,
-            password_hash=hash_password(password),
+            password_hash=await hash_password(password),
             role=role,
             is_locked=is_locked,
         )
@@ -96,7 +117,7 @@ async def reset_super_admin_password(session: AsyncSession, new_password: str) -
     await session.execute(
         update(users)
         .where(users.c.id == user_id)
-        .values(password_hash=hash_password(new_password))
+        .values(password_hash=await hash_password(new_password))
     )
     await revoke_all_refresh_tokens(session, user_id)
     await session.commit()

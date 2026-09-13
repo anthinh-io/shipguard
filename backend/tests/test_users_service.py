@@ -94,7 +94,7 @@ async def test_database_allows_only_one_super_admin(
             insert(users).values(
                 email="second@shipguard.local",
                 display_name="Second",
-                password_hash=hash_password("whatever-password"),
+                password_hash=await hash_password("whatever-password"),
                 role="super_admin",
             )
         )
@@ -110,7 +110,7 @@ async def test_database_rejects_emails_differing_only_in_case(
             insert(users).values(
                 email="ADMIN@SHIPGUARD.LOCAL",
                 display_name="Copy",
-                password_hash=hash_password("whatever-password"),
+                password_hash=await hash_password("whatever-password"),
                 role="operations_staff",
             )
         )

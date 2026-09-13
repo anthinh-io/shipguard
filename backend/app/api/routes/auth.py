@@ -1,7 +1,9 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, HTTPException, Response
 from pydantic import BaseModel
+from sqlalchemy import Row
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
 from app.core.security import REFRESH_TOKEN_TTL, create_access_token
@@ -42,19 +44,25 @@ def set_refresh_cookie(response: Response, raw: str) -> None:
     )
 
 
+async def token_response(
+    response: Response, session: AsyncSession, user: Row, refresh_token: str
+) -> TokenResponse:
+    # Claim đọc ngay lúc cấp token, nên claim mới gán có hiệu lực từ lần làm mới kế tiếp.
+    claims = await load_claims(session, user.id)
+    set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=create_access_token(user.id, user.role, claims))
+
+
 @router.post("/login")
 async def login(
     body: LoginRequest, response: Response, session: SessionDep
 ) -> TokenResponse:
     user = await authenticate(session, body.email, body.password)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-    claims = await load_claims(session, user.id)
-    set_refresh_cookie(response, await issue_refresh_token(session, user.id))
-    return TokenResponse(access_token=create_access_token(user.id, user.role, claims))
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return await token_response(
+        response, session, user, await issue_refresh_token(session, user.id)
+    )
 
 
 @router.post("/refresh")
@@ -69,16 +77,12 @@ async def refresh(
         else await rotate_refresh_token(session, refresh_token)
     )
     if rotated is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        )
-    user, new_raw = rotated
-    claims = await load_claims(session, user.id)
-    set_refresh_cookie(response, new_raw)
-    return TokenResponse(access_token=create_access_token(user.id, user.role, claims))
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    user, rotated_refresh_token = rotated
+    return await token_response(response, session, user, rotated_refresh_token)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=204)
 async def logout(
     response: Response,
     session: SessionDep,
