@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { mockSession } from "./session";
+
 // Trình duyệt gọi thẳng backend (ADR-0002), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang. Hai endpoint là anh em, không lồng nhau — `**` vượt cả
 // dấu gạch chéo nên `/dashboard**` sẽ nuốt mất `/dashboard/sellers` nếu đặt lồng.
@@ -13,6 +15,7 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
   ]);
+  await mockSession(context);
 });
 
 // smallSample là tham số chứ không suy ra từ deliveredOrders: ngưỡng 30 là quyết định

@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { mockSession } from "./session";
+
 // Trình duyệt gọi thẳng backend (ADR-0002), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
@@ -10,6 +12,7 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
   ]);
+  await mockSession(context);
 });
 
 function fulfillWith(page: Page, granularity: "day" | "week" | "month") {
