@@ -54,5 +54,17 @@
   "language": {
     "switchTo": "Tiếng Việt",
     "switchLabel": "Switch to Vietnamese"
+  },
+  "auth": {
+    "checking": "Checking your session…"
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalidCredentials": "Incorrect email or password.",
+    "unreachable": "Could not reach the server. Please try again."
   }
 }

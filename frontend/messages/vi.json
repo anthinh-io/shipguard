@@ -54,5 +54,17 @@
   "language": {
     "switchTo": "English",
     "switchLabel": "Chuyển sang tiếng Anh"
+  },
+  "auth": {
+    "checking": "Đang kiểm tra phiên đăng nhập…"
+  },
+  "login": {
+    "title": "Đăng nhập",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "submit": "Đăng nhập",
+    "submitting": "Đang đăng nhập…",
+    "invalidCredentials": "Email hoặc mật khẩu không đúng.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronsUpDownIcon } from "lucide-react";
 
+import { apiFetch } from "@/app/lib/api";
 import { Button } from "./ui/button";
 import {
   Command,
@@ -61,7 +62,7 @@ export function SellerCombobox({
         }
         return;
       }
-      fetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(trimmed)}`, {
+      apiFetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(trimmed)}`, {
         cache: "no-store",
       })
         .then((response) => {
