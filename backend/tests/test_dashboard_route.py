@@ -378,6 +378,16 @@ async def test_unknown_comparison_mode_is_rejected(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
+async def test_dashboard_is_open_without_login(client: AsyncClient) -> None:
+    # Khóa bảng điều khiển đi cùng cổng đăng nhập phía trình duyệt ở ticket sau. Tới lúc
+    # đó, gọi không kèm Authorization phải chạy như trước khi có đăng nhập.
+    dashboard = await client.get("/dashboard")
+    sellers = await client.get("/sellers", params={"q": "a"})
+
+    assert dashboard.status_code == 200
+    assert sellers.status_code == 200
+
+
 async def test_cors_header_present_for_an_allowed_origin(
     client: AsyncClient,
 ) -> None:
