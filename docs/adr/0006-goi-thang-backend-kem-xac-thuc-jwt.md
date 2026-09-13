@@ -101,7 +101,7 @@ B rụng vì refresh token 7 ngày nằm trong localStorage. C rụng vì cái g
 ## Việc cần làm
 
 1. [x] Bảng `users`, `refresh_tokens`, `user_claims` qua Alembic
-2. [ ] Endpoint `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `/me`
+2. [x] Endpoint `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `/me`
 3. [x] Dependency xác minh access token, áp cho mọi route trừ `/health` và `/auth/*`
 4. [x] Tạo `Super Admin` lúc khởi động; script CLI đặt lại mật khẩu `Super Admin`
 5. [x] Mở rộng `CORSMiddleware` và cập nhật test header CORS
