@@ -126,6 +126,10 @@ _Avoid_: Admin, Supervisor
 Vai trò của đúng một `User` duy nhất, sinh ra từ cấu hình lúc cài đặt để có người đầu tiên cấp tài khoản cho các `Logistics Manager`. Làm được mọi việc của `Logistics Manager`, và không ai khóa, đổi vai trò hay đặt lại mật khẩu của nó qua giao diện — để hệ thống luôn còn một lối vào.
 _Avoid_: Root, Owner, Admin
 
+**User Claim**:
+Một quyền lẻ gán riêng cho một `User`, cộng thêm vào những gì vai trò của họ đã cho phép. Không thay thế vai trò, và không lấy đi quyền nào vai trò đã cho.
+_Avoid_: Permission, Grant, Privilege
+
 **Locked User**:
 `User` bị khóa: không đăng nhập được, nhưng vẫn là tác giả của mọi `Internal Note` đã viết.
 _Avoid_: Disabled User, Deactivated User, Deleted User
