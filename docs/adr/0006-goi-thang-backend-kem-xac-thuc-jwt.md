@@ -18,7 +18,7 @@ Các lực tác động:
 
 ## Quyết định
 
-1. **Access token** là JWT sống 15 phút, chứa định danh `User` và vai trò. Frontend giữ nó trong bộ nhớ và gửi qua header `Authorization: Bearer`. API chỉ xác minh chữ ký, không tra cơ sở dữ liệu.
+1. **Access token** là JWT sống 15 phút, chứa định danh `User`, vai trò và các `User Claim` của người đó. Frontend giữ nó trong bộ nhớ và gửi qua header `Authorization: Bearer`. API chỉ xác minh chữ ký, không tra cơ sở dữ liệu.
 2. **Refresh token** sống 7 ngày, là chuỗi ngẫu nhiên được băm rồi lưu trong PostgreSQL, gửi qua cookie `httpOnly`, `SameSite=Lax`, `Path=/auth`. Mỗi lần dùng thì xoay vòng: token cũ bị thu hồi, token mới được cấp. Tải lại trang thì frontend gọi `/auth/refresh` để lấy access token mới.
 3. **Thu hồi mọi refresh token của một `User`** khi người đó bị khóa, bị đổi vai trò, bị đặt lại mật khẩu, hoặc tự đổi mật khẩu.
 4. **CORS** bật `allow_credentials`, mở thêm `POST`, `PATCH` và các header `Authorization`, `Content-Type`.
@@ -100,10 +100,10 @@ B rụng vì refresh token 7 ngày nằm trong localStorage. C rụng vì cái g
 
 ## Việc cần làm
 
-1. [ ] Bảng `users`, `refresh_tokens` qua Alembic
+1. [x] Bảng `users`, `refresh_tokens`, `user_claims` qua Alembic
 2. [ ] Endpoint `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `/me`
 3. [ ] Dependency xác minh access token, áp cho mọi route trừ `/health` và `/auth/*`
-4. [ ] Tạo `Super Admin` lúc khởi động; script CLI đặt lại mật khẩu `Super Admin`
-5. [ ] Mở rộng `CORSMiddleware` và cập nhật test header CORS
+4. [x] Tạo `Super Admin` lúc khởi động; script CLI đặt lại mật khẩu `Super Admin`
+5. [x] Mở rộng `CORSMiddleware` và cập nhật test header CORS
 6. [ ] Lớp gọi API phía frontend: gắn token, làm mới khi 401, chuyển về `/login`
 7. [ ] Giả lập `/auth/refresh` trong các spec Playwright hiện có
