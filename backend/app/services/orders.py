@@ -209,9 +209,11 @@ class OrderSeller(BaseModel):
 
 
 class ShippingAddress(BaseModel):
-    customer_city: str
+    # Thành phố và mã bưu chính là None nếu đã chạy migration 0007 mà chưa dựng lại bảng
+    # dẫn xuất. Trang chi tiết vẫn phải mở được, chỉ ghi là chưa có.
+    customer_city: str | None
     customer_state: str
-    customer_zip_code_prefix: str
+    customer_zip_code_prefix: str | None
 
 
 class OrderPayment(BaseModel):

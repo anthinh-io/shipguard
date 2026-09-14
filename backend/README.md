@@ -207,8 +207,9 @@ tên trần là tầng dẫn xuất.
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
 
 Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
-mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`, nếu
-không cột mới để trống. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
+mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
+chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
+chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
 cột thô là số nguyên nên `01310` đã nạp thành `1310`.
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện

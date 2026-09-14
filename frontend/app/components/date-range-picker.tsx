@@ -91,13 +91,22 @@ export function DateRangePicker({
 }
 
 // new Date("2018-01-01") đọc chuỗi chỉ có ngày thành nửa đêm UTC — nhất quán với format
-// fullDate khai UTC, nên hiển thị không lệch ngày.
+// fullDate khai UTC, nên nhãn trên nút không lệch ngày.
 function fromISODate(value: string): Date {
   return new Date(value);
 }
 
+// Lịch làm việc theo giờ địa phương, nên khoảng đưa vào lịch phải là nửa đêm giờ địa
+// phương — khác fromISODate, vốn chỉ để hiện nhãn qua format UTC. Dùng nửa đêm UTC ở
+// đây thì máy phía tây UTC thấy ngày đầu lùi một ngày, và toISODate ghi lùi luôn khi
+// người dùng chọn tiếp.
+function toCalendarDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function toDateRange(range: DayRange | null): DateRange | undefined {
-  return range ? { from: fromISODate(range.from), to: fromISODate(range.to) } : undefined;
+  return range ? { from: toCalendarDate(range.from), to: toCalendarDate(range.to) } : undefined;
 }
 
 // Ngược lại: Date người dùng chọn trên lịch là giờ địa phương lúc nửa đêm.

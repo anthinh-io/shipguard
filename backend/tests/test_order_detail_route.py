@@ -288,6 +288,46 @@ async def test_the_shipping_address_has_city_state_and_a_five_digit_zip_prefix(
     }
 
 
+async def test_detail_still_opens_before_the_derived_tables_are_rebuilt(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # Migration 0007 thêm hai cột cho phép NULL; tới lúc chạy lại build_derived_data thì
+    # chúng trống. Trang chi tiết phải mở được chứ không trả 500 cho mọi đơn.
+    order_id = "e481f51cbdc54678b7cc49136f2d6af7"
+    original = (
+        await session.execute(
+            text(
+                "SELECT customer_city, customer_zip_code_prefix FROM orders "
+                "WHERE order_id = :order"
+            ),
+            {"order": order_id},
+        )
+    ).one()
+    await session.execute(
+        text(
+            "UPDATE orders SET customer_city = NULL, customer_zip_code_prefix = NULL "
+            "WHERE order_id = :order"
+        ),
+        {"order": order_id},
+    )
+    await session.commit()
+    try:
+        address = (await get_detail(client, order_id))["address"]
+    finally:
+        await session.execute(
+            text(
+                "UPDATE orders SET customer_city = :city, customer_zip_code_prefix = :zip "
+                "WHERE order_id = :order"
+            ),
+            {"city": original.customer_city, "zip": original.customer_zip_code_prefix, "order": order_id},
+        )
+        await session.commit()
+
+    assert address["customer_city"] is None
+    assert address["customer_zip_code_prefix"] is None
+    assert address["customer_state"]
+
+
 async def test_an_unknown_order_is_not_found(client: AsyncClient) -> None:
     response = await client.get("/orders/00000000000000000000000000000000")
 
