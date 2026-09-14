@@ -44,8 +44,12 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
       direction === "asc" || direction === "desc"
         ? direction
         : DEFAULT_ORDER_LIST_PARAMS.direction,
-    // Chỉ nhận chuỗi toàn chữ số: Number() còn nhận "1e3" và "1.5".
-    page: page && /^[1-9]\d*$/.test(page) ? Number(page) : DEFAULT_ORDER_LIST_PARAMS.page,
+    // Chỉ nhận chuỗi toàn chữ số: Number() còn nhận "1e3" và "1.5". Số quá lớn thì làm
+    // tròn mất chữ số, và backend từ chối trang vượt giới hạn OFFSET của Postgres.
+    page:
+      page && /^[1-9]\d*$/.test(page) && Number.isSafeInteger(Number(page))
+        ? Number(page)
+        : DEFAULT_ORDER_LIST_PARAMS.page,
   };
 }
 
