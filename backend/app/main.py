@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, dashboard, health, users
+from app.api.routes import auth, dashboard, health, orders, users
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.services.users import ensure_super_admin
@@ -49,5 +49,6 @@ app.add_middleware(
 # mở, vì nó chỉ cần cookie refresh token.
 app.include_router(health.router)
 app.include_router(dashboard.router)
+app.include_router(orders.router)
 app.include_router(auth.router)
 app.include_router(users.router)
