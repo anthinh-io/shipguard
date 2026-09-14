@@ -151,3 +151,35 @@ test("đăng xuất thì về trang đăng nhập, tải lại hay bấm Back c�
   await expect(page.getByTestId("login-form")).toBeVisible();
   await expect(page.getByTestId("kpi-grid")).toHaveCount(0);
 });
+
+test("đăng xuất không tới được máy chủ thì báo lỗi, vẫn ở lại phiên và thử lại được", async ({
+  page,
+  context,
+}) => {
+  const session = await mockSessionWithLogout(context);
+  // Cookie refresh chưa bị thu hồi: coi như đã đăng xuất là người sau mở lại ứng dụng trên
+  // máy dùng chung sẽ vào thẳng phiên này. Lần đầu mất mạng, lần sau rơi về route của
+  // helper (route đăng ký sau được hỏi trước).
+  let attempts = 0;
+  await context.route(`${BACKEND_URL}/auth/logout`, (route) => {
+    attempts += 1;
+    return attempts === 1 ? route.abort() : route.fallback();
+  });
+  await page.goto("/");
+  await expect(page.getByTestId("kpi-grid")).toBeVisible();
+
+  await page.getByTestId("user-menu").click();
+  await page.getByTestId("user-menu-logout").click();
+
+  await expect(page.getByTestId("logout-error")).toContainText("Chưa đăng xuất được");
+  await expect(page).toHaveURL("/");
+  await expect(page.getByTestId("kpi-grid")).toBeVisible();
+  expect(session.active).toBe(true);
+
+  await page.getByTestId("user-menu-logout").click();
+
+  await expect(page).toHaveURL("/login");
+  expect(session.logouts).toBe(1);
+  await page.reload();
+  await expect(page).toHaveURL("/login");
+});

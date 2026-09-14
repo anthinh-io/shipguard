@@ -82,7 +82,9 @@
   },
   "userMenu": {
     "changePassword": "Đổi mật khẩu",
-    "logout": "Đăng xuất"
+    "logout": "Đăng xuất",
+    "signingOut": "Đang đăng xuất…",
+    "logoutFailed": "Chưa đăng xuất được vì không kết nối được máy chủ — bạn vẫn đang đăng nhập. Hãy thử lại trước khi rời máy."
   },
   "changePassword": {
     "title": "Đổi mật khẩu",

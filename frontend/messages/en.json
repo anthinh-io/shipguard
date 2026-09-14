@@ -82,7 +82,9 @@
   },
   "userMenu": {
     "changePassword": "Change password",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "signingOut": "Signing out…",
+    "logoutFailed": "Could not reach the server, so you are still signed in. Try again before leaving this device."
   },
   "changePassword": {
     "title": "Change password",
