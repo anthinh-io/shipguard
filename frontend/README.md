@@ -28,7 +28,7 @@ frontend/
       layout.tsx         bọc các trang trong <AuthGate />, <ProfileProvider /> và
                          khung sidebar; đọc cookie sidebar_state để giữ trạng
                          thái thu gọn
-      page.tsx           Server Component: gọi <Dashboard />
+      page.tsx           Server Component: đọc searchParams, gọi <Dashboard />
       orders/
         page.tsx         Server Component: đọc searchParams, gọi <OrderList />
       admin/users/
@@ -39,6 +39,8 @@ frontend/
       api.ts             access token trong bộ nhớ, apiFetch tự gắn và làm
                          mới token, login, logout, changePassword
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
+      dashboard-filters.ts
+                         đọc/ghi bộ lọc bảng điều khiển trên URL
       order-list-params.ts
                          đọc/ghi tìm kiếm, sắp xếp, trang của /orders trên URL
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
@@ -66,7 +68,8 @@ frontend/
                          Client Component: tạo tài khoản, xác nhận khóa, đặt
                          lại mật khẩu cho người khác
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
-                         (đang tải / lỗi / có số liệu) và hàng ô KPI
+                         (đang tải / lỗi / có số liệu) và hàng ô KPI; bộ lọc
+                         đọc từ và ghi lên URL
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
                          bảng 8 cột sắp được, phân trang nhảy trang
       language-toggle.tsx
@@ -93,6 +96,13 @@ frontend/
                          sắp xếp, nhảy trang, đường liên kết chia sẻ
       order-list-params.spec.ts
                          kiểm đọc/ghi tham số URL của /orders, không mở trình duyệt
+      url-filters.spec.ts
+                         Playwright: bộ lọc bảng điều khiển trên URL (giả lập
+                         máy chủ) — đường liên kết chia sẻ, tải lại, Back, nhãn
+                         người bán, xoá hết
+      dashboard-filters.spec.ts
+                         kiểm đọc/ghi bộ lọc bảng điều khiển trên URL, không mở
+                         trình duyệt
       i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
                          lại, và quy ước số/ngày của từng ngôn ngữ
       auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
@@ -214,10 +224,11 @@ lệch một ngày ở máy phía đông UTC.
 ## Trạng thái trang trên URL
 
 Trang nào cần giữ tìm kiếm, sắp xếp hay số trang trên URL (để gửi đường liên kết
-cho người khác) thì làm như `app/(app)/orders/page.tsx`: Server Component đọc prop
-`searchParams`, chuẩn hoá rồi truyền xuống Client Component; client đổi URL bằng
-`router.push` / `router.replace` và Next dựng lại trang với tham số mới. Đừng
-dùng `useSearchParams` — nó bắt buộc bọc `<Suspense>`, thiếu thì `next build` hỏng.
+cho người khác) thì làm như `app/(app)/orders/page.tsx` hay `app/(app)/page.tsx`:
+Server Component đọc prop `searchParams`, chuẩn hoá rồi truyền xuống Client
+Component; client đổi URL bằng `router.push` / `router.replace` và Next dựng lại
+trang với tham số mới. Đừng dùng `useSearchParams` — nó bắt buộc bọc
+`<Suspense>`, thiếu thì `next build` hỏng.
 
 Ngôn ngữ nằm trong cookie `NEXT_LOCALE`, không nằm trong đường dẫn, nên **không
 có thư mục `app/[locale]/` và không có `middleware.ts`** — đừng thêm vào, phần
