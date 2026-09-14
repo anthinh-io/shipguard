@@ -1,8 +1,9 @@
-import type { Role } from "@/app/components/profile-provider";
 import { apiFetch } from "./api";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+export type Role = "operations_staff" | "logistics_manager" | "super_admin";
 
 export type AdminUser = {
   id: number;
@@ -43,7 +44,10 @@ export type NewUser = {
   password: string;
 };
 
-export type CreateUserFailure = "emailTaken" | "invalidEmail" | "tooShort" | "unreachable";
+export type CreateUserFailure =
+  "emailTaken" | "invalidEmail" | "blankName" | "tooShort" | "unreachable";
+
+export type UserPatch = { role?: AssignableRole; is_locked?: boolean };
 
 type ValidationDetail = { loc: (string | number)[] }[];
 
@@ -67,11 +71,17 @@ export async function createUser(
   }
   if (response.status === 422) {
     // 422 do Pydantic trả detail dạng mảng kèm vị trí trường lỗi; 422 do chính sách mật
-    // khẩu trả detail là một chuỗi.
+    // khẩu trả detail là một chuỗi. Tên chỉ gồm khoảng trắng vượt qua `required` của ô
+    // nhập, nên máy chủ là nơi duy nhất bắt được nó.
     const { detail } = (await response.json()) as { detail: string | ValidationDetail };
-    const emailInvalid =
-      Array.isArray(detail) && detail.some((error) => error.loc.includes("email"));
-    return { kind: emailInvalid ? "invalidEmail" : "tooShort" };
+    if (!Array.isArray(detail)) {
+      return { kind: "tooShort" };
+    }
+    const invalidField = (field: string) => detail.some((error) => error.loc.includes(field));
+    if (invalidField("email")) {
+      return { kind: "invalidEmail" };
+    }
+    return { kind: invalidField("display_name") ? "blankName" : "unreachable" };
   }
   if (!response.ok) {
     return { kind: "unreachable" };
@@ -81,10 +91,7 @@ export async function createUser(
 
 // null cho mọi kiểu thất bại: menu thao tác chỉ có một thông báo lỗi chung, vì các lý do máy
 // chủ từ chối (Super Admin, chính mình) đã bị ẩn khỏi menu từ trước.
-export async function updateUser(
-  id: number,
-  patch: { role?: AssignableRole; is_locked?: boolean },
-): Promise<AdminUser | null> {
+export async function updateUser(id: number, patch: UserPatch): Promise<AdminUser | null> {
   try {
     const response = await apiFetch(`${BACKEND_URL}/users/${id}`, {
       method: "PATCH",

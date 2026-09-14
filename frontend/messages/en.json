@@ -183,6 +183,7 @@
     "cancel": "Cancel",
     "emailTaken": "This email is already used by another account.",
     "invalidEmail": "This email address is not valid.",
+    "blankName": "The display name cannot be blank.",
     "tooShort": "The password must be at least 8 characters.",
     "unreachable": "Could not reach the server. Please try again."
   },

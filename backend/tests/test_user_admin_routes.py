@@ -75,10 +75,37 @@ async def act(
     return await client.request(method, url, headers=headers, json=json)
 
 
-async def test_listing_users_requires_a_session(
-    client: AsyncClient, accounts: dict[str, int]
+ADMIN_ENDPOINTS = [
+    ("GET", "/users", None),
+    (
+        "POST",
+        "/users",
+        {
+            "display_name": "Người mới",
+            "email": "new@shipguard.vn",
+            "role": "operations_staff",
+            "password": PASSWORD,
+        },
+    ),
+    ("PATCH", "/users/{target}", {"is_locked": True}),
+    ("POST", "/users/{target}/password", {"new_password": NEW_PASSWORD}),
+]
+ADMIN_ENDPOINT_IDS = ["list", "create", "update", "reset password"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json"), ADMIN_ENDPOINTS, ids=ADMIN_ENDPOINT_IDS
+)
+async def test_every_admin_endpoint_requires_a_session(
+    client: AsyncClient,
+    accounts: dict[str, int],
+    method: str,
+    path: str,
+    json: dict[str, Any] | None,
 ) -> None:
-    response = await client.get("/users")
+    url = path.format(target=accounts[OTHER_MANAGER])
+
+    response = await client.request(method, url, json=json)
 
     assert response.status_code == 401
 
@@ -109,23 +136,7 @@ async def test_manager_and_super_admin_see_every_account(
 # Mỗi thao tác đều nhắm vào một người quản lý được, để 403 chỉ có thể đến từ vai trò
 # người gọi chứ không phải từ quy tắc bảo vệ Super Admin hay chính mình.
 @pytest.mark.parametrize(
-    ("method", "path", "json"),
-    [
-        ("GET", "/users", None),
-        (
-            "POST",
-            "/users",
-            {
-                "display_name": "Người mới",
-                "email": "new@shipguard.vn",
-                "role": "operations_staff",
-                "password": PASSWORD,
-            },
-        ),
-        ("PATCH", "/users/{target}", {"is_locked": True}),
-        ("POST", "/users/{target}/password", {"new_password": NEW_PASSWORD}),
-    ],
-    ids=["list", "create", "update", "reset password"],
+    ("method", "path", "json"), ADMIN_ENDPOINTS, ids=ADMIN_ENDPOINT_IDS
 )
 async def test_operations_staff_is_refused_every_admin_endpoint(
     client: AsyncClient,

@@ -10,6 +10,7 @@ import {
   updateUser,
   type AdminUser,
   type AssignableRole,
+  type UserPatch,
 } from "@/app/lib/users-api";
 import { CreateUserDialog } from "./create-user-dialog";
 import { LockUserDialog } from "./lock-user-dialog";
@@ -65,10 +66,7 @@ export function UserAdmin() {
 
   // Cập nhật bảng bằng dòng máy chủ trả về chứ không tự sửa tại chỗ: bảng luôn khớp thứ
   // máy chủ đã thật sự ghi.
-  async function applyUpdate(
-    user: AdminUser,
-    patch: { role?: AssignableRole; is_locked?: boolean },
-  ) {
+  async function applyUpdate(user: AdminUser, patch: UserPatch) {
     setActionFailed(false);
     const updated = await updateUser(user.id, patch);
     if (!updated) {

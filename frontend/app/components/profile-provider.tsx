@@ -3,11 +3,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { apiFetch } from "@/app/lib/api";
+import type { Role } from "@/app/lib/users-api";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-export type Role = "operations_staff" | "logistics_manager" | "super_admin";
 
 export type Profile = {
   id: number;

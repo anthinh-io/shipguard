@@ -56,7 +56,10 @@ function seedUsers(): User[] {
 type Call = { method: string; path: string; body: unknown };
 
 // Máy chủ giả giữ danh sách trong bộ nhớ để phản hồi của PATCH khớp dữ liệu bảng sau đó.
-async function mockUsersApi(page: Page, options: { createStatus?: number } = {}) {
+async function mockUsersApi(
+  page: Page,
+  options: { createRejection?: { status: number; body: unknown } } = {},
+) {
   const users = seedUsers();
   const calls: Call[] = [];
   await page.route(USERS_API, async (route) => {
@@ -70,11 +73,9 @@ async function mockUsersApi(page: Page, options: { createStatus?: number } = {})
       return route.fulfill({ json: users });
     }
     if (method === "POST" && path === "/users") {
-      if (options.createStatus) {
-        return route.fulfill({
-          status: options.createStatus,
-          json: { detail: "Email is already in use" },
-        });
+      if (options.createRejection) {
+        const { status, body: json } = options.createRejection;
+        return route.fulfill({ status, json });
       }
       const created = { id: 5, is_locked: false, ...body, password: undefined };
       users.push(created);
@@ -152,6 +153,22 @@ test("quản lý hậu cần mở mục Quản trị thì thấy mọi tài kho�
   await expect(row(page, "minh@shipguard.vn").getByTestId("user-row-status")).toHaveText("Đã khóa");
 });
 
+test("Super Admin cũng thấy mục Quản trị", async ({ page, context }) => {
+  await mockSession(context, {
+    id: 1,
+    email: "admin@shipguard.vn",
+    display_name: "Super Admin",
+    role: "super_admin",
+  });
+  await mockUsersApi(page);
+
+  await page.goto("/admin/users");
+
+  await expect(page.getByTestId("nav-admin")).toBeVisible();
+  await expect(page.getByTestId("user-row")).toHaveCount(4);
+  await expect(row(page, "admin@shipguard.vn")).toContainText("(bạn)");
+});
+
 test("dòng Super Admin và dòng của chính mình không có menu thao tác", async ({
   page,
   context,
@@ -204,27 +221,58 @@ test("tạo tài khoản: ô vai trò chỉ có hai lựa chọn, lưu xong thì
   ]);
 });
 
-test("tạo tài khoản bằng email đã có thì báo email đã được dùng và giữ hộp thoại", async ({
-  page,
-  context,
-}) => {
-  await signInAsManager(context);
-  await mockUsersApi(page, { createStatus: 409 });
-  await page.goto("/admin/users");
-
-  await page.getByTestId("user-admin-create").click();
-  const dialog = page.getByTestId("create-user-dialog");
-  await dialog.getByTestId("create-user-name").fill("Nguyễn Lan");
-  await dialog.getByTestId("create-user-email").fill("LAN@shipguard.vn");
-  await dialog.getByTestId("create-user-password").fill("staple-battery-horse");
-  await dialog.getByTestId("create-user-submit").click();
-
-  await expect(dialog.getByTestId("create-user-error")).toHaveText(
-    "Email này đã được dùng cho một tài khoản khác.",
-  );
-  await expect(dialog).toBeVisible();
-  await expect(page.getByTestId("user-row")).toHaveCount(4);
+// Thân phản hồi theo đúng dạng backend trả: 422 của Pydantic là mảng kèm vị trí trường lỗi,
+// 422 của chính sách mật khẩu là một chuỗi.
+const pydanticError = (field: string) => ({
+  detail: [{ type: "value_error", loc: ["body", field], msg: "invalid", input: "" }],
 });
+
+for (const { reason, status, body, message } of [
+  {
+    reason: "email đã có",
+    status: 409,
+    body: { detail: "Email is already in use" },
+    message: "Email này đã được dùng cho một tài khoản khác.",
+  },
+  {
+    reason: "email sai định dạng",
+    status: 422,
+    body: pydanticError("email"),
+    message: "Email không hợp lệ.",
+  },
+  {
+    reason: "tên chỉ có khoảng trắng",
+    status: 422,
+    body: pydanticError("display_name"),
+    message: "Tên hiển thị không được để trống.",
+  },
+  {
+    reason: "mật khẩu quá ngắn",
+    status: 422,
+    body: { detail: "Password must be at least 8 characters" },
+    message: "Mật khẩu phải có ít nhất 8 ký tự.",
+  },
+]) {
+  test(`tạo tài khoản bị từ chối vì ${reason} thì báo đúng lý do và giữ hộp thoại`, async ({
+    page,
+    context,
+  }) => {
+    await signInAsManager(context);
+    await mockUsersApi(page, { createRejection: { status, body } });
+    await page.goto("/admin/users");
+
+    await page.getByTestId("user-admin-create").click();
+    const dialog = page.getByTestId("create-user-dialog");
+    await dialog.getByTestId("create-user-name").fill("Nguyễn Lan");
+    await dialog.getByTestId("create-user-email").fill("LAN@shipguard.vn");
+    await dialog.getByTestId("create-user-password").fill("staple-battery-horse");
+    await dialog.getByTestId("create-user-submit").click();
+
+    await expect(dialog.getByTestId("create-user-error")).toHaveText(message);
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId("user-row")).toHaveCount(4);
+  });
+}
 
 test("khóa tài khoản phải qua bước xác nhận; hủy thì không gửi gì", async ({ page, context }) => {
   await signInAsManager(context);

@@ -6,7 +6,8 @@ import { useTranslations } from "next-intl";
 import { LayoutDashboard, Package, UsersRound } from "lucide-react";
 
 import { NavUser } from "./nav-user";
-import { useProfile, type Role } from "./profile-provider";
+import type { Role } from "@/app/lib/users-api";
+import { useProfile } from "./profile-provider";
 import {
   Sidebar,
   SidebarContent,

@@ -183,6 +183,7 @@
     "cancel": "Hủy",
     "emailTaken": "Email này đã được dùng cho một tài khoản khác.",
     "invalidEmail": "Email không hợp lệ.",
+    "blankName": "Tên hiển thị không được để trống.",
     "tooShort": "Mật khẩu phải có ít nhất 8 ký tự.",
     "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
   },
