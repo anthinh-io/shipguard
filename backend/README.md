@@ -21,12 +21,14 @@ backend/
       db.py        engine, session, lớp Base của model
       security.py  băm mật khẩu, ký và xác minh access token
     api/
-      deps.py      SessionDep, CurrentUserDep — phụ thuộc dùng chung cho các endpoint
-      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me,
-                   orders.py: /orders)
+      deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
+                   cho các endpoint
+      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
+                   /users, orders.py: /orders)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
-      users.py     tạo User, Super Admin, đặt lại và tự đổi mật khẩu
+      users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
+                   lại mật khẩu), tự đổi mật khẩu
       orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
       queries.py   mảnh truy vấn dùng chung: vị ngữ DELIVERED, like_prefix
     scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
@@ -128,6 +130,25 @@ access token).
 
 Cookie refresh token chưa đặt cờ `Secure` vì môi trường phát triển chạy http.
 Triển khai qua HTTPS thì phải bật lại.
+
+### Quản trị User
+
+Bốn endpoint dưới đây chỉ dành cho `logistics_manager` và `super_admin`; vai trò
+khác nhận 403, thiếu token nhận 401. Vai trò người gọi đọc từ access token, nên
+người vừa bị hạ vai trò vẫn gọi được tối đa 15 phút.
+
+| Endpoint | Việc |
+| --- | --- |
+| `GET /users` | Mọi `User`, theo thứ tự tạo: `id`, `email`, `display_name`, `role`, `is_locked` |
+| `POST /users` | Tạo `User`; body `{"display_name", "email", "role", "password"}`, trả 201 kèm dòng vừa tạo. Email trùng (không phân biệt hoa thường) nhận 409; tên trống, email sai định dạng, mật khẩu dưới 8 ký tự hay `role` ngoài `operations_staff` / `logistics_manager` nhận 422 |
+| `PATCH /users/{id}` | Đổi vai trò hoặc khóa / mở khóa; body `{"role"?, "is_locked"?}`, trả dòng sau khi đổi. Đổi vai trò và khóa thu hồi mọi refresh token của người đó |
+| `POST /users/{id}/password` | Đặt lại mật khẩu; body `{"new_password"}`, trả 204. Thu hồi mọi refresh token của người đó |
+
+Quy tắc bảo vệ kiểm ở backend: thao tác lên `Super Admin` hay lên chính người gọi
+nhận 403 (tự đổi mật khẩu dùng `POST /auth/password`), id không tồn tại nhận 404,
+và không có endpoint xóa `User`. Email kiểm bằng `EmailStr`, vốn từ chối tên miền
+dành riêng như `.local`, `.test`, `.localhost` — tài khoản tạo qua API phải dùng
+tên miền thật.
 
 ### Đặt lại mật khẩu Super Admin
 

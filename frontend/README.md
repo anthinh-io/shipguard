@@ -25,11 +25,14 @@ frontend/
     globals.css          nạp Tailwind, bộ token màu shadcn, nhánh sáng/tối
     (app)/               route group của mọi trang cần đăng nhập — không
                          thêm tiền tố nào vào URL
-      layout.tsx         bọc các trang trong <AuthGate /> và khung sidebar;
-                         đọc cookie sidebar_state để giữ trạng thái thu gọn
+      layout.tsx         bọc các trang trong <AuthGate />, <ProfileProvider /> và
+                         khung sidebar; đọc cookie sidebar_state để giữ trạng
+                         thái thu gọn
       page.tsx           Server Component: gọi <Dashboard />
       orders/
         page.tsx         Server Component: đọc searchParams, gọi <OrderList />
+      admin/users/
+        page.tsx         Server Component: gọi <UserAdmin />
     login/
       page.tsx           trang đăng nhập, nằm ngoài (app)/ nên không bị chặn
     lib/
@@ -38,18 +41,30 @@ frontend/
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
       order-list-params.ts
                          đọc/ghi tìm kiếm, sắp xếp, trang của /orders trên URL
+      users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
+                         mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện
     components/
       auth-gate.tsx      Client Component: chờ /auth/refresh trước khi vẽ
                          trang, thất bại thì về /login?next=...
       login-form.tsx     Client Component: form đăng nhập
+      profile-provider.tsx
+                         Client Component: gọi /me một lần cho cả khung,
+                         useProfile() trả tên, vai trò, id người đang đăng nhập
       app-sidebar.tsx    Client Component: sidebar chung, NAV_ITEMS là danh
-                         sách mục điều hướng
+                         sách mục điều hướng; mục có `roles` chỉ hiện với các
+                         vai trò đó
       app-header.tsx     Client Component: nút menu và tiêu đề trang hiện tại
       nav-user.tsx       Client Component: menu người dùng ở đáy sidebar —
-                         tên, vai trò (từ /me), đổi mật khẩu, ngôn ngữ, đăng xuất
-                         (chỉ rời phiên khi máy chủ xác nhận đã thu hồi)
+                         tên, vai trò (từ useProfile), đổi mật khẩu, ngôn ngữ,
+                         đăng xuất (chỉ rời phiên khi máy chủ xác nhận đã thu hồi)
       change-password-dialog.tsx
                          Client Component: hộp thoại tự đổi mật khẩu
+      user-admin.tsx     Client Component: trang Quản trị — bảng tài khoản, menu
+                         "…" mỗi dòng (ẩn ở dòng Super Admin và dòng của chính
+                         mình), từ chối khi GET /users trả 403
+      create-user-dialog.tsx, lock-user-dialog.tsx, reset-user-password-dialog.tsx
+                         Client Component: tạo tài khoản, xác nhận khóa, đặt
+                         lại mật khẩu cho người khác
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
@@ -86,6 +101,9 @@ frontend/
                          trên màn hình hẹp, đổi ngôn ngữ từ menu, đăng xuất
       change-password.spec.ts
                          Playwright: hộp thoại đổi mật khẩu (giả lập máy chủ)
+      user-admin.spec.ts Playwright: trang Quản trị (giả lập máy chủ) — ẩn và
+                         từ chối theo vai trò, tạo, khóa có xác nhận, đổi vai
+                         trò, đặt lại mật khẩu, song ngữ
       next-path.spec.ts  kiểm safeNextPath, không mở trình duyệt
       session.ts         mockSession / mockMe / signInForReal / switchLanguage
                          dùng chung cho các spec
@@ -132,7 +150,8 @@ có `middleware.ts` / `proxy.ts`**.
 - Trang mới cần đăng nhập đặt trong `app/(app)/`; nó tự đi qua cổng chặn và tự
   có sidebar. Thêm mục điều hướng cho nó vào `NAV_ITEMS` trong `app-sidebar.tsx`
   (tiêu đề trên thanh đầu trang cũng lấy từ đó) cùng khoá `nav.*` trong
-  `messages/`.
+  `messages/`; trang chỉ dành cho một số vai trò thì khai `roles` cho mục đó —
+  đó chỉ là ẩn mục, máy chủ vẫn phải tự trả 403.
 - Mọi lời gọi backend đi qua `apiFetch` trong `app/lib/api.ts`, **đừng gọi
   `fetch` trần**: thiếu header `Authorization` là 401, và chỉ `apiFetch` biết làm
   mới token rồi thử lại.
@@ -227,9 +246,12 @@ khẩu Super Admin bằng script đặt lại thì phải sửa `.env` theo.
 
 Spec giả lập `/dashboard` thì giả lập luôn `/auth/refresh` và `/me` bằng
 `mockSession` trong `beforeEach`; thiếu nó thì cổng chặn (hoặc lời gọi `/me` của
-sidebar mang token giả) đưa trang về `/login` và bài test không thấy bảng điều
-khiển. Spec tự giả lập `/auth/refresh` thì gọi `mockMe`. Đừng viết bài Playwright
-đổi mật khẩu thật: `signInForReal` sẽ hỏng ở mọi lần chạy sau.
+khung ứng dụng mang token giả) đưa trang về `/login` và bài test không thấy bảng
+điều khiển. Spec tự giả lập `/auth/refresh` thì gọi `mockMe`. Cả hai mặc định là
+một nhân viên vận hành; truyền thêm hồ sơ (`mockSession(context, { role:
+"logistics_manager" })`) khi cần vai trò khác. Đừng viết bài Playwright đổi mật
+khẩu thật: `signInForReal` sẽ hỏng ở mọi lần chạy sau. Trang Quản trị cũng luôn
+giả lập `/users`: tài khoản không xóa được, tạo thật là để lại rác sau mỗi lần chạy.
 
 ```bash
 bun run test
