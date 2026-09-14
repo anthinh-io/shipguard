@@ -105,7 +105,10 @@ nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì th
 
 `GET /customer-states` (đòi token) trả mảng mọi bang có đơn, sắp tăng dần, không áp bộ
 lọc nào — tuỳ chọn cho ô chọn bang của trang đơn hàng. Khác danh sách bang trong
-`/dashboard`, vốn chỉ tính đơn đã giao.
+`/dashboard`, vốn chỉ tính đơn đã giao. Cùng lý do, ô gợi ý người bán của trang đơn
+hàng gọi `GET /sellers?q=...&delivered_only=false`: mặc định `/sellers` chỉ gợi ý người
+bán có đơn đã giao (đúng cho bảng điều khiển), còn `false` gợi ý cả 125 người bán chưa
+giao xong đơn nào. Số `delivered_orders` trên gợi ý vẫn luôn là số đơn đã giao.
 
 Ô trống (`delivered_at` của đơn chưa giao,
 `order_value` của đơn không có sản phẩm) luôn nằm cuối, cả khi sắp tăng lẫn giảm.

@@ -45,6 +45,7 @@
       "sellerPlaceholder": "Gõ mã, bang hoặc thành phố…",
       "sellerNoResults": "Không tìm thấy người bán nào",
       "sellerHint": "{state} · {city} · {count, number} đơn",
+      "sellerHintDelivered": "{state} · {city} · {count, number} đơn đã giao",
       "comparison": "Chế độ so sánh",
       "comparisonNone": "Không so sánh",
       "comparisonPrevious": "Kỳ liền trước",

@@ -45,6 +45,7 @@
       "sellerPlaceholder": "Type an id, state or city…",
       "sellerNoResults": "No sellers found",
       "sellerHint": "{state} · {city} · {count, number} orders",
+      "sellerHintDelivered": "{state} · {city} · {count, number} delivered",
       "comparison": "Comparison mode",
       "comparisonNone": "No comparison",
       "comparisonPrevious": "Previous period",

@@ -140,6 +140,7 @@ export function OrderFilterBar({
       <SellerCombobox
         sellerId={filters.sellerId}
         onChange={(sellerId) => onChange({ ...filters, sellerId })}
+        deliveredOnly={false}
       />
 
       <Button
