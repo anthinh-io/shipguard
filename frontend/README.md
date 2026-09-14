@@ -31,6 +31,8 @@ frontend/
       page.tsx           Server Component: đọc searchParams, gọi <Dashboard />
       orders/
         page.tsx         Server Component: đọc searchParams, gọi <OrderList />
+        [orderId]/
+          page.tsx       Server Component: đọc params, gọi <OrderDetail />
       admin/users/
         page.tsx         Server Component: gọi <UserAdmin />
     login/
@@ -46,6 +48,8 @@ frontend/
       order-list-params.ts
                          đọc/ghi tìm kiếm, bộ lọc, sắp xếp, trang của /orders
                          trên URL
+      order-format.ts    BRL, utcDay, utcTimestamp, màu nhãn kết quả giao — dùng
+                         chung cho danh sách và chi tiết đơn
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
                          mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện
     components/
@@ -78,7 +82,12 @@ frontend/
                          Client Component: ô chọn khoảng ngày, bang, người bán
                          dùng chung cho cả hai thanh lọc
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
-                         bảng 8 cột sắp được, phân trang nhảy trang
+                         bảng 8 cột sắp được, phân trang nhảy trang; bấm một
+                         dòng mở /orders/[orderId]
+      order-detail.tsx   Client Component: gọi GET /orders/{order_id} — đầu
+                         trang, dòng thời gian và ba chặng, sản phẩm, người bán,
+                         địa chỉ giao, thanh toán, đánh giá; 404 thì báo không
+                         tìm thấy
       order-filter-bar.tsx
                          Client Component: thanh lọc /orders — trạng thái, kết
                          quả giao, ngày đặt, ngày giao, bang (GET /customer-states),
@@ -105,6 +114,10 @@ frontend/
                          Đơn hàng với dữ liệu thật
       orders.spec.ts     Playwright: trang Đơn hàng (giả lập máy chủ) — tìm,
                          sắp xếp, nhảy trang, đường liên kết chia sẻ
+      order-detail.spec.ts
+                         Playwright: trang chi tiết đơn (giả lập máy chủ) — mở
+                         từ danh sách, phần thiếu, 404, Back về đúng danh sách,
+                         màn hẹp
       order-filters.spec.ts
                          Playwright: thanh lọc /orders (giả lập máy chủ) — từng
                          bộ lọc, nửa khoảng ngày chưa lọc, kết hợp, xoá hết, tải lại
@@ -228,12 +241,13 @@ không bao giờ đổi theo nút chuyển ngữ. Và `fullDate` mang theo `time
 — thiếu nó thì máy đặt ở múi giờ phía tây UTC hiện ranh giới kỳ báo cáo lệch
 đúng một ngày.
 
-Ngoại lệ duy nhất: `Order Value` trong `order-list.tsx` luôn hiện kiểu Brazil
-(`R$ 13.664,08`) ở cả hai ngôn ngữ, nên bộ định dạng `pt-BR` ở đó cố ý đóng cứng
-ở phạm vi module. Dấu thời gian backend trả không kèm múi giờ
-(`"2018-10-17T02:30:18"`) phải cắt lấy 10 ký tự ngày trước khi đưa vào `new
-Date()` — đọc nguyên chuỗi thì trình duyệt hiểu theo giờ máy, và `fullDate` hiện
-lệch một ngày ở máy phía đông UTC.
+Ngoại lệ duy nhất: `Order Value` luôn hiện kiểu Brazil (`R$ 13.664,08`) ở cả hai
+ngôn ngữ, nên bộ định dạng `BRL` trong `app/lib/order-format.ts` cố ý đóng cứng
+`pt-BR` ở phạm vi module. Dấu thời gian backend trả không kèm múi giờ
+(`"2018-10-17T02:30:18"`) không được đưa nguyên vào `new Date()` — trình duyệt hiểu
+theo giờ máy. Chỉ cần ngày thì dùng `utcDay` với `fullDate`; cần cả giờ thì dùng
+`utcTimestamp` với `fullDateTime`. Cả hai cặp đều theo UTC, nên màn hình hiện đúng
+ngày giờ trong dữ liệu ở mọi múi giờ.
 
 ## Trạng thái trang trên URL
 
