@@ -114,6 +114,23 @@ trùng hay bỏ sót đơn. Mỗi dòng mang `delivery_outcome`: `on_time` / `la
 `Delivered Order`, mọi đơn khác là `no_outcome` — kể cả đơn đã hủy lỡ có ngày giao.
 `order_value` là số thực, không phải chuỗi thập phân.
 
+`GET /orders/{order_id}` (đòi token) trả mọi thứ về một đơn cho trang chi tiết; mã
+không tồn tại nhận 404 `{"detail": "Order not found"}`.
+
+| Khối | Nội dung |
+| --- | --- |
+| `order_id`, `order_status`, `delivery_outcome`, `order_value` | Như một dòng của `GET /orders` |
+| `timeline` | Bốn mốc `purchased_at`, `payment_approved_at`, `handed_to_carrier_at`, `delivered_at` kèm `estimated_delivery_date`, và ba chặng `payment_approval_days`, `seller_handling_days`, `carrier_transit_days` (số ngày, đọc từ cột sinh). Mốc hay chặng chưa có là `null`; chặng có thể âm vì dữ liệu gốc có đơn bàn giao vận chuyển trước lúc duyệt |
+| `address` | `customer_city`, `customer_state`, `customer_zip_code_prefix` (chuỗi đủ 5 chữ số) |
+| `items` | Từng sản phẩm theo `order_item_id`: `product_id`, `category` (tên tiếng Anh; chưa có bản dịch thì tên gốc; không có danh mục thì `null`), `price`, `freight_value`, `seller_id` |
+| `sellers` | Người bán tham gia: `seller_id`, `seller_city`, `seller_state` (bang gửi đi) |
+| `payments` | Theo `payment_sequential`: `payment_type`, `payment_installments`, `payment_value` |
+| `reviews` | `review_score`, `comment_title`, `comment_message`, `created_at` |
+
+Danh sách rỗng nghĩa là đơn không có phần đó (775 đơn không có sản phẩm, nhiều đơn
+không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra theo chỉ mục
+`order_id` trên ba bảng thô tương ứng (migration `0007_order_detail`).
+
 ## Đăng nhập
 
 Cơ chế token theo `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`: access
@@ -186,8 +203,13 @@ tên trần là tầng dẫn xuất.
 | Bảng | Nội dung |
 | --- | --- |
 | `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
-| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang khách hàng, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
+| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+
+Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
+mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`, nếu
+không cột mới để trống. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
+cột thô là số nguyên nên `01310` đã nạp thành `1310`.
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
 của truy vấn KPI, không phải của bước dựng bảng.
