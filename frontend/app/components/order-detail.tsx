@@ -33,9 +33,9 @@ type OrderDetailData = {
     carrier_transit_days: number | null;
   };
   address: {
-    customer_city: string;
+    customer_city: string | null;
     customer_state: string;
-    customer_zip_code_prefix: string;
+    customer_zip_code_prefix: string | null;
   };
   items: {
     order_item_id: number;
@@ -356,9 +356,11 @@ function Address({ data }: { data: OrderDetailData }) {
   return (
     <Section title={t("address.title")} testId="order-address">
       <dl className="flex flex-col gap-2">
-        <Field label={t("address.city")}>{address.customer_city}</Field>
+        <Field label={t("address.city")}>{address.customer_city ?? t("notAvailable")}</Field>
         <Field label={t("address.state")}>{address.customer_state}</Field>
-        <Field label={t("address.zip")}>{address.customer_zip_code_prefix}</Field>
+        <Field label={t("address.zip")}>
+          {address.customer_zip_code_prefix ?? t("notAvailable")}
+        </Field>
       </dl>
     </Section>
   );

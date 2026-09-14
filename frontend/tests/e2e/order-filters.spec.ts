@@ -149,6 +149,29 @@ test("mới chọn ngày bắt đầu thì chưa lọc, chọn đủ hai đầu 
   expect(calls.at(-1)?.searchParams.has("delivered_from")).toBe(false);
 });
 
+test.describe("ở múi giờ phía tây UTC", () => {
+  test.use({ timezoneId: "America/Sao_Paulo" });
+
+  test("mở lại lịch rồi chọn tiếp thì ngày đầu của khoảng đang áp không lùi một ngày", async ({
+    page,
+  }) => {
+    const calls = await mockOrders(page);
+    await page.goto("/orders?purchased_from=2018-01-05&purchased_to=2018-01-10");
+    await expect(page.getByTestId("filter-purchased-range")).toContainText(
+      "05/01/2018 – 10/01/2018",
+    );
+
+    // Khoảng đang áp là một khoảng đủ hai đầu; bấm một ngày sau nó thì react-day-picker
+    // giữ ngày đầu và thay ngày cuối. Ngày đầu phải vẫn là 05/01, không phải 04/01.
+    const today = new Date();
+    await page.getByTestId("filter-purchased-range").click();
+    await dayCell(page, new Date(today.getFullYear(), today.getMonth(), 15)).click();
+
+    await expect.poll(() => calls.at(-1)?.searchParams.get("purchased_to")).not.toBe("2018-01-10");
+    expect(calls.at(-1)?.searchParams.get("purchased_from")).toBe("2018-01-05");
+  });
+});
+
 test("khoảng ngày giao là bộ lọc riêng, độc lập với khoảng ngày đặt", async ({ page }) => {
   const calls = await mockOrders(page);
   await page.goto("/orders?purchased_from=2017-01-01&purchased_to=2018-06-30");
