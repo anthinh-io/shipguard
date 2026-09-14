@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.derived import order_sellers, orders, sellers
+from app.services.queries import DELIVERED, like_prefix
 
 # Bộ Olist thực chất kết thúc tháng 8/2018: tháng 9 chỉ còn 56 đơn giao, tháng 10 chỉ
 # còn 3. Không có ngưỡng thì kỳ mặc định kéo tới tận những tháng đó, tỷ lệ dựng trên
@@ -27,15 +28,6 @@ WEEKLY_MAX_SPAN_DAYS = 183  # "dưới 6 tháng" → kỳ 182 ngày gom theo tu�
 
 # Small Sample theo CONTEXT.md: dưới 30 đơn sau khi lọc. Đúng 30 đơn KHÔNG bị gắn cờ.
 SMALL_SAMPLE_MAX_ORDERS = 30
-
-# Delivered Order theo CONTEXT.md: đơn đã tới tay khách và có ngày giao thực tế. Đây là
-# tập đơn duy nhất được tính vào KPI — bảng dẫn xuất cố ý giữ mọi đơn kèm cột trạng
-# thái, việc lọc thuộc về truy vấn KPI. Dựng bằng Core chứ không phải chuỗi SQL để các
-# truy vấn sau còn ghép thêm điều kiện lọc và mệnh đề gom nhóm lên trên.
-DELIVERED = sa.and_(
-    orders.c.order_status == "delivered",
-    orders.c.delivered_to_customer_at.is_not(None),
-)
 
 
 class ReportingPeriod(BaseModel):
@@ -461,14 +453,6 @@ async def list_customer_states(session: AsyncSession) -> list[str]:
     return [row.customer_state for row in rows]
 
 
-def _like_prefix(query: str) -> str:
-    # seller_city nhận chuỗi tự do người dùng gõ vào, nên "%" và "_" phải thành ký tự
-    # thường. Không thoát thì gõ đúng một dấu "%" sẽ khớp toàn bộ 3.095 người bán.
-    # Dấu chéo ngược phải thoát trước, nếu không nó sẽ thoát nhầm hai lần sau đó.
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"{escaped}%"
-
-
 async def search_sellers(
     session: AsyncSession, query: str, limit: int
 ) -> list[SellerOption]:
@@ -486,7 +470,7 @@ async def search_sellers(
     if not query.strip():
         return []
 
-    pattern = _like_prefix(query.strip())
+    pattern = like_prefix(query.strip())
     delivered_orders = sa.func.count().label("delivered_orders")
     statement = (
         sa.select(
