@@ -113,7 +113,8 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "orders": "Orders"
+    "orders": "Orders",
+    "admin": "Administration"
   },
   "sidebar": {
     "toggle": "Toggle sidebar",
@@ -143,6 +144,64 @@
     "close": "Close",
     "success": "Password changed. Other devices will be signed out within 15 minutes.",
     "wrongCurrent": "The current password is incorrect.",
+    "tooShort": "The new password must be at least 8 characters.",
+    "mismatch": "The two new passwords do not match.",
+    "unreachable": "Could not reach the server. Please try again."
+  },
+  "userAdmin": {
+    "loading": "Loading accounts…",
+    "error": "Could not load accounts from the server. Please try again.",
+    "forbidden": "You do not have permission to open the administration page.",
+    "create": "Create account",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "locked": "Locked"
+    },
+    "you": "(you)",
+    "actions": "Actions",
+    "changeRole": "Change role",
+    "lock": "Lock account",
+    "unlock": "Unlock account",
+    "resetPassword": "Reset password",
+    "actionFailed": "The action could not be completed. Please try again."
+  },
+  "createUser": {
+    "title": "Create account",
+    "description": "The new person can sign in right away with this email and initial password.",
+    "displayName": "Display name",
+    "email": "Email",
+    "role": "Role",
+    "password": "Initial password (at least 8 characters)",
+    "submit": "Create",
+    "submitting": "Creating…",
+    "cancel": "Cancel",
+    "emailTaken": "This email is already used by another account.",
+    "invalidEmail": "This email address is not valid.",
+    "tooShort": "The password must be at least 8 characters.",
+    "unreachable": "Could not reach the server. Please try again."
+  },
+  "lockUser": {
+    "title": "Lock this account?",
+    "description": "{name} will no longer be able to sign in. Open sessions end within 15 minutes.",
+    "confirm": "Lock",
+    "cancel": "Cancel"
+  },
+  "resetUserPassword": {
+    "title": "Reset password",
+    "description": "Set a new password for {name}. All their open sessions end within 15 minutes.",
+    "newPassword": "New password (at least 8 characters)",
+    "confirmPassword": "Repeat new password",
+    "submit": "Save",
+    "submitting": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "success": "Password reset for {name}.",
     "tooShort": "The new password must be at least 8 characters.",
     "mismatch": "The two new passwords do not match.",
     "unreachable": "Could not reach the server. Please try again."

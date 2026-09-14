@@ -34,10 +34,7 @@ export async function mockMe(context: BrowserContext, profile: Partial<MockProfi
 
 // Cho spec giả lập /dashboard: cổng chặn chỉ cần /auth/refresh trả một token bất kỳ, vì
 // mọi lời gọi số liệu phía sau cũng bị chặn lại và không bao giờ tới backend thật.
-export async function mockSession(
-  context: BrowserContext,
-  profile: Partial<MockProfile> = {},
-) {
+export async function mockSession(context: BrowserContext, profile: Partial<MockProfile> = {}) {
   await context.route(`${BACKEND_URL}/auth/refresh`, (route) =>
     route.fulfill({ json: { access_token: "test-access-token", token_type: "bearer" } }),
   );
