@@ -113,7 +113,8 @@
   },
   "nav": {
     "dashboard": "Bảng điều khiển",
-    "orders": "Đơn hàng"
+    "orders": "Đơn hàng",
+    "admin": "Quản trị"
   },
   "sidebar": {
     "toggle": "Đóng/mở thanh bên",
@@ -143,6 +144,64 @@
     "close": "Đóng",
     "success": "Đã đổi mật khẩu. Các thiết bị khác sẽ bị đăng xuất trong vòng 15 phút.",
     "wrongCurrent": "Mật khẩu hiện tại không đúng.",
+    "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự.",
+    "mismatch": "Hai lần nhập mật khẩu mới không khớp.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "userAdmin": {
+    "loading": "Đang tải danh sách tài khoản…",
+    "error": "Không lấy được danh sách tài khoản từ máy chủ. Vui lòng thử lại.",
+    "forbidden": "Bạn không có quyền truy cập trang quản trị.",
+    "create": "Tạo tài khoản",
+    "columns": {
+      "name": "Tên",
+      "email": "Email",
+      "role": "Vai trò",
+      "status": "Trạng thái"
+    },
+    "status": {
+      "active": "Đang hoạt động",
+      "locked": "Đã khóa"
+    },
+    "you": "(bạn)",
+    "actions": "Thao tác",
+    "changeRole": "Đổi vai trò",
+    "lock": "Khóa tài khoản",
+    "unlock": "Mở khóa",
+    "resetPassword": "Đặt lại mật khẩu",
+    "actionFailed": "Không thực hiện được thao tác. Vui lòng thử lại."
+  },
+  "createUser": {
+    "title": "Tạo tài khoản",
+    "description": "Người mới đăng nhập được ngay bằng email và mật khẩu ban đầu này.",
+    "displayName": "Tên hiển thị",
+    "email": "Email",
+    "role": "Vai trò",
+    "password": "Mật khẩu ban đầu (tối thiểu 8 ký tự)",
+    "submit": "Tạo",
+    "submitting": "Đang tạo…",
+    "cancel": "Hủy",
+    "emailTaken": "Email này đã được dùng cho một tài khoản khác.",
+    "invalidEmail": "Email không hợp lệ.",
+    "tooShort": "Mật khẩu phải có ít nhất 8 ký tự.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "lockUser": {
+    "title": "Khóa tài khoản?",
+    "description": "{name} sẽ không đăng nhập được nữa. Các phiên đang mở bị đăng xuất chậm nhất sau 15 phút.",
+    "confirm": "Khóa",
+    "cancel": "Hủy"
+  },
+  "resetUserPassword": {
+    "title": "Đặt lại mật khẩu",
+    "description": "Đặt mật khẩu mới cho {name}. Mọi phiên đang mở của họ bị đăng xuất chậm nhất sau 15 phút.",
+    "newPassword": "Mật khẩu mới (tối thiểu 8 ký tự)",
+    "confirmPassword": "Nhập lại mật khẩu mới",
+    "submit": "Lưu",
+    "submitting": "Đang lưu…",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "success": "Đã đặt lại mật khẩu cho {name}.",
     "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự.",
     "mismatch": "Hai lần nhập mật khẩu mới không khớp.",
     "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
