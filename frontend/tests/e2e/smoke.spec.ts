@@ -93,3 +93,23 @@ test("số liệu chưa về thì hiện trạng thái đang tải", async ({ pa
   await expectKpiTiles(page);
   await expect(page.getByTestId("dashboard-loading")).toHaveCount(0);
 });
+
+// Khác ô KPI ở trên, các con số này không đổi theo kỳ mặc định: tổng số đơn, đơn giá trị
+// lớn nhất và mã "e481f5" là bất biến của bộ CSV — chính là bộ số vàng của #19.
+test("trang Đơn hàng chạy thật: tổng số đơn, tìm theo mã và sắp theo giá trị", async ({
+  page,
+}) => {
+  await page.goto("/orders");
+
+  await expect(page.getByTestId("orders-total")).toHaveText("99.441 đơn");
+  await expect(page.getByTestId("order-row")).toHaveCount(50);
+
+  await page.getByTestId("orders-search").fill("E481F5");
+  await expect(page.getByTestId("orders-total")).toHaveText("1 đơn");
+  await expect(page.getByTestId("order-row")).toHaveCount(1);
+
+  await page.goto("/orders?sort=order_value");
+  await expect(
+    page.getByTestId("order-row").first().getByRole("cell").last(),
+  ).toHaveText("R$ 13.664,08");
+});

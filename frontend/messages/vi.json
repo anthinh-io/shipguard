@@ -67,8 +67,53 @@
     "invalidCredentials": "Email hoặc mật khẩu không đúng.",
     "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
   },
+  "orders": {
+    "loading": "Đang tải danh sách đơn…",
+    "error": "Không lấy được danh sách đơn từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "searchLabel": "Tìm theo mã đơn",
+    "searchPlaceholder": "Gõ vài ký tự đầu của mã đơn…",
+    "total": "{count, number} đơn",
+    "columns": {
+      "orderId": "Mã đơn",
+      "status": "Trạng thái",
+      "outcome": "Kết quả giao",
+      "purchasedAt": "Ngày đặt",
+      "estimatedDeliveryDate": "Ngày cam kết",
+      "deliveredAt": "Ngày giao",
+      "customerState": "Bang",
+      "orderValue": "Giá trị"
+    },
+    "status": {
+      "created": "Mới tạo",
+      "approved": "Đã duyệt",
+      "invoiced": "Đã xuất hóa đơn",
+      "processing": "Đang xử lý",
+      "shipped": "Đang vận chuyển",
+      "delivered": "Đã giao",
+      "canceled": "Đã hủy",
+      "unavailable": "Không có hàng"
+    },
+    "outcome": {
+      "on_time": "Đúng hạn",
+      "late": "Trễ",
+      "no_outcome": "Chưa có kết quả"
+    },
+    "noMatch": "Không có đơn nào có mã bắt đầu bằng “{orderId}”.",
+    "pageEmpty": "Trang này không có đơn nào.",
+    "backToFirst": "Về trang 1",
+    "pagination": "Phân trang",
+    "previous": "Trang trước",
+    "next": "Trang sau",
+    "page": "Trang",
+    "pageCount": "/ {count, number}"
+  },
   "nav": {
-    "dashboard": "Bảng điều khiển"
+    "dashboard": "Bảng điều khiển",
+    "orders": "Đơn hàng"
   },
   "sidebar": {
     "toggle": "Đóng/mở thanh bên",
