@@ -442,7 +442,7 @@ async def list_customer_states(session: AsyncSession) -> list[str]:
 
 
 async def search_sellers(
-    session: AsyncSession, query: str, limit: int
+    session: AsyncSession, query: str, limit: int, *, delivered_only: bool = True
 ) -> list[SellerOption]:
     """Gợi ý người bán cho ô gõ dần, khớp tiền tố trên mã, bang và thành phố.
 
@@ -453,13 +453,22 @@ async def search_sellers(
     tuỳ chọn cho bộ lọc nên chọn một tuỳ chọn không được làm biến mất hay thu nhỏ các
     lựa chọn còn lại. Hệ quả cần biết: một gợi ý ghi 45 đơn vẫn có thể chạm ngưỡng mẫu
     nhỏ sau khi người dùng áp thêm khoảng thời gian hay bang.
+
+    `delivered_only=False` là cho danh sách đơn, vốn gồm cả đơn chưa giao: khi đó người
+    bán chưa có đơn nào giao xong vẫn được gợi ý, với `delivered_orders` bằng 0.
     """
     # Chuỗi rỗng khớp mọi thứ, và đổ cả 3.095 dòng ra không phải là "gợi ý".
     if not query.strip():
         return []
 
     pattern = like_prefix(query.strip())
-    delivered_orders = sa.func.count().label("delivered_orders")
+    matches = sa.or_(
+        sellers.c.seller_id.ilike(pattern, escape="\\"),
+        sellers.c.seller_state.ilike(pattern, escape="\\"),
+        sellers.c.seller_city.ilike(pattern, escape="\\"),
+    )
+    # Số trên gợi ý luôn là số đơn đã giao, ở cả hai chế độ; chỉ tập người bán đổi.
+    delivered_orders = sa.func.count().filter(DELIVERED).label("delivered_orders")
     statement = (
         sa.select(
             sellers.c.seller_id,
@@ -470,16 +479,7 @@ async def search_sellers(
         .select_from(sellers)
         .join(order_sellers, order_sellers.c.seller_id == sellers.c.seller_id)
         .join(orders, orders.c.order_id == order_sellers.c.order_id)
-        .where(
-            sa.and_(
-                DELIVERED,
-                sa.or_(
-                    sellers.c.seller_id.ilike(pattern, escape="\\"),
-                    sellers.c.seller_state.ilike(pattern, escape="\\"),
-                    sellers.c.seller_city.ilike(pattern, escape="\\"),
-                ),
-            )
-        )
+        .where(sa.and_(DELIVERED, matches) if delivered_only else matches)
         .group_by(sellers.c.seller_id, sellers.c.seller_city, sellers.c.seller_state)
         # Xếp theo số đơn giảm dần là chủ ý, không phải theo độ khớp: gõ tên bang hay
         # thành phố thì người dùng muốn thấy đối tác lớn trước. Hoà thì theo mã để kết

@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
+from app.services.orders import get_order_detail
 
 EDGE_CASE_ORDERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
@@ -289,20 +290,15 @@ async def test_the_shipping_address_has_city_state_and_a_five_digit_zip_prefix(
 
 
 async def test_detail_still_opens_before_the_derived_tables_are_rebuilt(
-    client: AsyncClient, session: AsyncSession
+    session: AsyncSession,
 ) -> None:
     # Migration 0007 thêm hai cột cho phép NULL; tới lúc chạy lại build_derived_data thì
     # chúng trống. Trang chi tiết phải mở được chứ không trả 500 cho mọi đơn.
+    #
+    # Gọi thẳng service trong cùng một giao dịch rồi rollback, không commit: bảng dẫn xuất
+    # dùng chung cả phiên test, và một lần chạy bị ngắt giữa chừng không được để lại đơn
+    # thiếu địa chỉ cho test khác.
     order_id = "e481f51cbdc54678b7cc49136f2d6af7"
-    original = (
-        await session.execute(
-            text(
-                "SELECT customer_city, customer_zip_code_prefix FROM orders "
-                "WHERE order_id = :order"
-            ),
-            {"order": order_id},
-        )
-    ).one()
     await session.execute(
         text(
             "UPDATE orders SET customer_city = NULL, customer_zip_code_prefix = NULL "
@@ -310,19 +306,13 @@ async def test_detail_still_opens_before_the_derived_tables_are_rebuilt(
         ),
         {"order": order_id},
     )
-    await session.commit()
     try:
-        address = (await get_detail(client, order_id))["address"]
+        detail = await get_order_detail(session, order_id)
     finally:
-        await session.execute(
-            text(
-                "UPDATE orders SET customer_city = :city, customer_zip_code_prefix = :zip "
-                "WHERE order_id = :order"
-            ),
-            {"city": original.customer_city, "zip": original.customer_zip_code_prefix, "order": order_id},
-        )
-        await session.commit()
+        await session.rollback()
 
+    assert detail is not None
+    address = detail.address.model_dump()
     assert address["customer_city"] is None
     assert address["customer_zip_code_prefix"] is None
     assert address["customer_state"]

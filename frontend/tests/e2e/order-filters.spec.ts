@@ -193,7 +193,16 @@ test("kết hợp người bán, bang, kết quả giao và khoảng ngày đặ
   await page.goto("/orders?purchased_from=2017-01-01&purchased_to=2018-06-30");
 
   await page.getByTestId("filter-seller").click();
+  const suggestionRequest = page.waitForRequest((request) =>
+    request.url().startsWith(`${BACKEND_URL}/sellers?q=656`),
+  );
   await page.getByTestId("filter-seller-input").fill("656");
+  // Danh sách đơn gồm cả đơn chưa giao, nên gợi ý cả người bán chưa giao xong đơn nào,
+  // và số trên gợi ý nói rõ là số đơn đã giao.
+  expect(new URL((await suggestionRequest).url()).searchParams.get("delivered_only")).toBe(
+    "false",
+  );
+  await expect(page.getByTestId("seller-option").first()).toContainText("1.819 đơn đã giao");
   await page.getByTestId("seller-option").first().click();
   await expect(page.getByTestId("filter-seller")).toContainText("6560211a… · SP");
 

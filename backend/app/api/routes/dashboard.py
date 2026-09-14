@@ -128,5 +128,8 @@ async def sellers(
     session: SessionDep,
     q: str = "",
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    # Bảng điều khiển chỉ tính đơn đã giao nên mặc định chỉ gợi ý người bán có đơn đã
+    # giao. Danh sách đơn gửi false để chọn được cả người bán chưa có đơn nào giao xong.
+    delivered_only: bool = True,
 ) -> list[SellerOption]:
-    return await search_sellers(session, q, limit)
+    return await search_sellers(session, q, limit, delivered_only=delivered_only)

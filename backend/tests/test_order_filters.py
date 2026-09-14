@@ -312,6 +312,33 @@ async def test_invalid_filter_values_are_rejected(
     assert response.status_code == 422
 
 
+async def test_sellers_without_a_delivered_order_are_suggested_only_when_asked(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # 125 người bán chưa có đơn nào giao xong. Gợi ý của bảng điều khiển bỏ họ là đúng,
+    # nhưng danh sách đơn gồm cả đơn chưa giao, nên ở đó họ phải chọn được.
+    seller_id = await session.scalar(
+        text(
+            "SELECT s.seller_id FROM sellers s WHERE NOT EXISTS ("
+            "  SELECT 1 FROM order_sellers os JOIN orders o ON o.order_id = os.order_id "
+            "  WHERE os.seller_id = s.seller_id AND o.order_status = 'delivered' "
+            "  AND o.delivered_to_customer_at IS NOT NULL) "
+            "ORDER BY s.seller_id LIMIT 1"
+        )
+    )
+    orders_of_seller = await get_orders(client, seller_id=seller_id)
+    assert orders_of_seller["total"] > 0
+
+    default = await client.get("/sellers", params={"q": seller_id})
+    every_seller = await client.get(
+        "/sellers", params={"q": seller_id, "delivered_only": "false"}
+    )
+
+    assert default.json() == []
+    assert [option["seller_id"] for option in every_seller.json()] == [seller_id]
+    assert every_seller.json()[0]["delivered_orders"] == 0
+
+
 async def test_customer_states_cover_every_order(client: AsyncClient) -> None:
     response = await client.get("/customer-states")
 

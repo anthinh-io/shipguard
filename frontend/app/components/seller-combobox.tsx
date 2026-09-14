@@ -41,9 +41,14 @@ function shortId(sellerId: string): string {
 export function SellerCombobox({
   sellerId,
   onChange,
+  deliveredOnly = true,
 }: {
   sellerId: string | null;
   onChange: (sellerId: string | null) => void;
+  // Bảng điều khiển chỉ tính đơn đã giao nên chỉ gợi ý người bán có đơn đã giao. Danh
+  // sách đơn gồm cả đơn chưa giao, nên tắt đi để người bán chưa giao xong đơn nào vẫn
+  // chọn được.
+  deliveredOnly?: boolean;
 }) {
   const t = useTranslations("dashboard");
   const [open, setOpen] = useState(false);
@@ -53,6 +58,7 @@ export function SellerCombobox({
   // nào, và bấm Back qua lại giữa vài người bán cũng không tra lại.
   const [known, setKnown] = useState<Record<string, SellerOption>>({});
   const current = sellerId ? known[sellerId] : undefined;
+  const scope = deliveredOnly ? "" : "&delivered_only=false";
 
   // URL chỉ mang seller_id, mà nhãn cần bang của người bán. /sellers khớp tiền tố trên
   // mã, và mã đủ 32 ký tự là tiền tố của chính nó; vẫn lọc đúng mã cho chắc, vì cùng
@@ -62,7 +68,7 @@ export function SellerCombobox({
       return;
     }
     let cancelled = false;
-    apiFetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(sellerId)}`, {
+    apiFetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(sellerId)}${scope}`, {
       cache: "no-store",
     })
       .then((response) =>
@@ -79,7 +85,7 @@ export function SellerCombobox({
     return () => {
       cancelled = true;
     };
-  }, [sellerId, current]);
+  }, [sellerId, current, scope]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -93,7 +99,7 @@ export function SellerCombobox({
         }
         return;
       }
-      apiFetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(trimmed)}`, {
+      apiFetch(`${BACKEND_URL}/sellers?q=${encodeURIComponent(trimmed)}${scope}`, {
         cache: "no-store",
       })
         .then((response) => {
@@ -120,7 +126,7 @@ export function SellerCombobox({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, scope]);
 
   function handleSelect(option: SellerOption | null) {
     if (option) {
@@ -190,7 +196,10 @@ export function SellerCombobox({
                   {/* Bang và số đơn là hai thứ duy nhất phân biệt được các dòng gợi ý
                       với nhau — xem #12. */}
                   <span className="text-muted-foreground text-xs">
-                    {t("filters.sellerHint", {
+                    {/* Số trên gợi ý luôn là số đơn đã giao. Trên danh sách đơn, nơi
+                        người bán còn có đơn chưa giao, phải nói rõ như vậy để con số
+                        không bị đọc thành số dòng sẽ hiện ra. */}
+                    {t(deliveredOnly ? "filters.sellerHint" : "filters.sellerHintDelivered", {
                       state: option.seller_state,
                       city: option.seller_city,
                       count: option.delivered_orders,
