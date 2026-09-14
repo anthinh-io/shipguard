@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronsUpDown, CircleUser, KeyRound, Languages, LogOut } from "lucide-react";
 
-import { apiFetch, logout } from "@/app/lib/api";
+import { logout } from "@/app/lib/api";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { useLocaleSwitch } from "./language-toggle";
+import { useProfile } from "./profile-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,42 +17,15 @@ import {
 } from "./ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "./ui/sidebar";
 
-// Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-type Profile = {
-  display_name: string;
-  role: "operations_staff" | "logistics_manager" | "super_admin";
-};
-
 export function NavUser() {
   const t = useTranslations("userMenu");
   const tRole = useTranslations("roles");
   const tLanguage = useTranslations("language");
   const { isPending, switchLocale } = useLocaleSwitch();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const profile = useProfile();
   const [changingPassword, setChangingPassword] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
-
-  // Hỏi /me thay vì đọc access token: tên hiển thị không nằm trong token, và vai trò
-  // trong token có thể lệch hiện trạng tới 15 phút.
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch(`${BACKEND_URL}/me`)
-      .then((response) => (response.ok ? (response.json() as Promise<Profile>) : null))
-      .then((body) => {
-        if (!cancelled) {
-          setProfile(body);
-        }
-      })
-      .catch(() => {
-        // Thiếu tên ở đáy sidebar không chặn việc gì khác; menu vẫn dùng được.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function handleLogout() {
     setSigningOut(true);

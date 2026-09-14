@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AppHeader } from "@/app/components/app-header";
 import { AppSidebar } from "@/app/components/app-sidebar";
 import { AuthGate } from "@/app/components/auth-gate";
+import { ProfileProvider } from "@/app/components/profile-provider";
 import { SidebarInset, SidebarProvider } from "@/app/components/ui/sidebar";
 import { TooltipProvider } from "@/app/components/ui/tooltip";
 
@@ -15,19 +16,21 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const defaultOpen = (await cookies()).get("sidebar_state")?.value !== "false";
 
   return (
-    // Cổng chặn bọc ngoài cả khung: chưa xác nhận phiên thì sidebar (và lời gọi /me của
-    // nó) chưa được vẽ.
+    // Cổng chặn bọc ngoài cả khung: chưa xác nhận phiên thì sidebar và ProfileProvider
+    // (cùng lời gọi /me của nó) chưa được vẽ.
     <AuthGate>
-      {/* Tooltip của mục sidebar khi thu gọn thành dải icon cần provider này. */}
-      <TooltipProvider>
-        <SidebarProvider defaultOpen={defaultOpen}>
-          <AppSidebar />
-          <SidebarInset>
-            <AppHeader />
-            {children}
-          </SidebarInset>
-        </SidebarProvider>
-      </TooltipProvider>
+      <ProfileProvider>
+        {/* Tooltip của mục sidebar khi thu gọn thành dải icon cần provider này. */}
+        <TooltipProvider>
+          <SidebarProvider defaultOpen={defaultOpen}>
+            <AppSidebar />
+            <SidebarInset>
+              <AppHeader />
+              {children}
+            </SidebarInset>
+          </SidebarProvider>
+        </TooltipProvider>
+      </ProfileProvider>
     </AuthGate>
   );
 }
