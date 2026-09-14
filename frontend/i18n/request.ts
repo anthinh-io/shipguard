@@ -26,6 +26,18 @@ export default getRequestConfig(async () => {
           year: "numeric",
           timeZone: "UTC",
         },
+        // Mốc thời gian trên trang chi tiết đơn (#21), nơi giờ có ý nghĩa: duyệt thanh
+        // toán sau vài phút hay sau một ngày là hai chuyện khác nhau. Dữ liệu Olist theo
+        // quy ước UTC của ADR-0005 — đi cùng utcTimestamp trong app/lib/order-format.ts.
+        fullDateTime: {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+          timeZone: "UTC",
+        },
         // Nhãn trục hoành của biểu đồ xu hướng (#9). Cùng lý do timeZone UTC với
         // fullDate — nếu không, máy ở múi giờ phía tây UTC lệch mất một ngày.
         axisDate: { day: "2-digit", month: "2-digit", timeZone: "UTC" },

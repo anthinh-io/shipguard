@@ -32,6 +32,8 @@ raw_order_items = sa.Table(
     sa.Column("shipping_limit_date", sa.DateTime),
     sa.Column("price", sa.Numeric(12, 2)),
     sa.Column("freight_value", sa.Numeric(12, 2)),
+    # Trang chi tiết đơn tra sản phẩm, thanh toán và đánh giá theo từng order_id.
+    sa.Index("ix_raw_order_items_order_id", "order_id"),
 )
 
 raw_order_payments = sa.Table(
@@ -42,6 +44,7 @@ raw_order_payments = sa.Table(
     sa.Column("payment_type", sa.Text),
     sa.Column("payment_installments", sa.Integer),
     sa.Column("payment_value", sa.Numeric(12, 2)),
+    sa.Index("ix_raw_order_payments_order_id", "order_id"),
 )
 
 raw_order_reviews = sa.Table(
@@ -54,6 +57,7 @@ raw_order_reviews = sa.Table(
     sa.Column("review_comment_message", sa.Text),
     sa.Column("review_creation_date", sa.DateTime),
     sa.Column("review_answer_timestamp", sa.DateTime),
+    sa.Index("ix_raw_order_reviews_order_id", "order_id"),
 )
 
 raw_orders = sa.Table(

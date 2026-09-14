@@ -123,6 +123,66 @@
     "page": "Page",
     "pageCount": "of {count, number}"
   },
+  "orderDetail": {
+    "loading": "Loading order details…",
+    "error": "Couldn't load the order from the server ({detail}). Please try again.",
+    "notFound": "Order “{orderId}” was not found.",
+    "notAvailable": "Not yet",
+    "orderValue": "Order value",
+    "timeline": {
+      "title": "Timeline",
+      "purchasedAt": "Purchased",
+      "paymentApprovedAt": "Payment approved",
+      "handedToCarrierAt": "Handed to carrier",
+      "deliveredAt": "Delivered",
+      "estimatedDeliveryDate": "Estimated delivery date"
+    },
+    "stages": {
+      "title": "Stage durations",
+      "paymentApproval": "Payment approval",
+      "sellerHandling": "Seller handling",
+      "carrierTransit": "Carrier transit",
+      "days": "{value} days"
+    },
+    "items": {
+      "title": "Items",
+      "category": "Category",
+      "price": "Price",
+      "freight": "Freight",
+      "seller": "Seller",
+      "empty": "This order has no items."
+    },
+    "sellers": {
+      "title": "Sellers",
+      "empty": "This order has no sellers."
+    },
+    "address": {
+      "title": "Shipping address",
+      "city": "City",
+      "state": "State",
+      "zip": "ZIP code prefix"
+    },
+    "payments": {
+      "title": "Payments",
+      "type": "Method",
+      "installments": "Installments",
+      "value": "Amount",
+      "empty": "No payments recorded for this order.",
+      "types": {
+        "credit_card": "Credit card",
+        "boleto": "Boleto",
+        "voucher": "Voucher",
+        "debit_card": "Debit card",
+        "not_defined": "Not defined"
+      }
+    },
+    "reviews": {
+      "title": "Customer review",
+      "score": "{score}/5 stars",
+      "noComment": "No comment left.",
+      "empty": "No review for this order yet."
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "orders": "Orders",

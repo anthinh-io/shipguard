@@ -7,11 +7,13 @@ from app.api.deps import SessionDep, get_current_user
 from app.services.orders import (
     PAGE_SIZE,
     DeliveryOutcome,
+    OrderDetail,
     OrderFilters,
     OrderList,
     OrderSort,
     OrderStatus,
     SortDirection,
+    get_order_detail,
     list_customer_states,
     list_orders,
 )
@@ -66,6 +68,14 @@ async def orders(
     return await list_orders(
         session, filters, sort=sort, direction=direction, page=page
     )
+
+
+@router.get("/orders/{order_id}", response_model=OrderDetail)
+async def order_detail(session: SessionDep, order_id: str) -> OrderDetail:
+    detail = await get_order_detail(session, order_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return detail
 
 
 # Tuỳ chọn cho ô chọn bang của trang đơn hàng. Tách khỏi /orders vì danh sách này không
