@@ -1,3 +1,10 @@
+import {
+  first,
+  parseDayRange,
+  type DayRange,
+  type RawSearchParams,
+} from "./search-params";
+
 // Tên tham số trên URL trùng tên tham số của GET /orders, nên cùng một chuỗi truy vấn
 // dùng được cho cả đường dẫn trang lẫn lời gọi backend.
 export const ORDER_SORTS = [
@@ -10,11 +17,51 @@ export const ORDER_SORTS = [
 export type OrderSort = (typeof ORDER_SORTS)[number];
 export type SortDirection = "asc" | "desc";
 
+// Order Status theo CONTEXT.md, theo thứ tự vòng đời để ô chọn đọc xuôi.
+export const ORDER_STATUSES = [
+  "created",
+  "approved",
+  "invoiced",
+  "processing",
+  "shipped",
+  "delivered",
+  "canceled",
+  "unavailable",
+] as const;
+
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const DELIVERY_OUTCOMES = ["on_time", "late", "no_outcome"] as const;
+
+export type DeliveryOutcome = (typeof DELIVERY_OUTCOMES)[number];
+
+export type OrderFilters = {
+  orderStatus: OrderStatus | null;
+  deliveryOutcome: DeliveryOutcome | null;
+  purchased: DayRange | null;
+  delivered: DayRange | null;
+  customerState: string | null;
+  // Chỉ mã, vì URL chỉ mang mã. Nhãn trên nút tự tra bang của người bán — xem
+  // seller-combobox.tsx.
+  sellerId: string | null;
+};
+
 export type OrderListParams = {
   orderId: string;
   sort: OrderSort;
   direction: SortDirection;
   page: number;
+  filters: OrderFilters;
+};
+
+// null ở mỗi trường nghĩa là không gắn tham số đó vào chuỗi truy vấn.
+export const EMPTY_ORDER_FILTERS: OrderFilters = {
+  orderStatus: null,
+  deliveryOutcome: null,
+  purchased: null,
+  delivered: null,
+  customerState: null,
+  sellerId: null,
 };
 
 export const DEFAULT_ORDER_LIST_PARAMS: OrderListParams = {
@@ -22,12 +69,11 @@ export const DEFAULT_ORDER_LIST_PARAMS: OrderListParams = {
   sort: "purchased_at",
   direction: "desc",
   page: 1,
+  filters: EMPTY_ORDER_FILTERS,
 };
 
-type RawSearchParams = Record<string, string | string[] | undefined>;
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
+export function hasActiveFilters(filters: OrderFilters): boolean {
+  return Object.values(filters).some((value) => value !== null);
 }
 
 // Giá trị lạ trên một đường liên kết sửa tay quay về mặc định: người mở link vẫn thấy một
@@ -36,6 +82,8 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
   const sort = first(raw.sort);
   const direction = first(raw.direction);
   const page = first(raw.page);
+  const orderStatus = first(raw.order_status);
+  const deliveryOutcome = first(raw.delivery_outcome);
 
   return {
     orderId: first(raw.order_id)?.trim() ?? "",
@@ -50,6 +98,16 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
       page && /^[1-9]\d*$/.test(page) && Number.isSafeInteger(Number(page))
         ? Number(page)
         : DEFAULT_ORDER_LIST_PARAMS.page,
+    filters: {
+      orderStatus: ORDER_STATUSES.find((value) => value === orderStatus) ?? null,
+      deliveryOutcome: DELIVERY_OUTCOMES.find((value) => value === deliveryOutcome) ?? null,
+      // Một đầu thì bỏ cả khoảng: người mở link thấy danh sách chưa lọc theo khoảng đó,
+      // giống lúc mới chọn ngày đầu trên lịch.
+      purchased: parseDayRange(raw.purchased_from, raw.purchased_to),
+      delivered: parseDayRange(raw.delivered_from, raw.delivered_to),
+      customerState: first(raw.customer_state) || null,
+      sellerId: first(raw.seller_id) || null,
+    },
   };
 }
 
@@ -58,6 +116,27 @@ export function toOrderListQuery(params: OrderListParams): string {
   const orderId = params.orderId.trim();
   if (orderId) {
     query.set("order_id", orderId);
+  }
+  const { filters } = params;
+  if (filters.orderStatus) {
+    query.set("order_status", filters.orderStatus);
+  }
+  if (filters.deliveryOutcome) {
+    query.set("delivery_outcome", filters.deliveryOutcome);
+  }
+  if (filters.purchased) {
+    query.set("purchased_from", filters.purchased.from);
+    query.set("purchased_to", filters.purchased.to);
+  }
+  if (filters.delivered) {
+    query.set("delivered_from", filters.delivered.from);
+    query.set("delivered_to", filters.delivered.to);
+  }
+  if (filters.customerState) {
+    query.set("customer_state", filters.customerState);
+  }
+  if (filters.sellerId) {
+    query.set("seller_id", filters.sellerId);
   }
   if (params.sort !== DEFAULT_ORDER_LIST_PARAMS.sort) {
     query.set("sort", params.sort);

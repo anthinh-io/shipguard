@@ -103,6 +103,18 @@
       "no_outcome": "Chưa có kết quả"
     },
     "noMatch": "Không có đơn nào có mã bắt đầu bằng “{orderId}”.",
+    "noMatchFilters": "Không có đơn nào khớp các bộ lọc đang chọn.",
+    "filters": {
+      "orderStatus": "Trạng thái đơn",
+      "allStatuses": "Mọi trạng thái",
+      "deliveryOutcome": "Kết quả giao",
+      "allOutcomes": "Mọi kết quả giao",
+      "purchasedRange": "Khoảng ngày đặt",
+      "purchasedPlaceholder": "Ngày đặt",
+      "deliveredRange": "Khoảng ngày giao",
+      "deliveredPlaceholder": "Ngày giao",
+      "clearAll": "Xoá hết bộ lọc"
+    },
     "pageEmpty": "Trang này không có đơn nào.",
     "backToFirst": "Về trang 1",
     "pagination": "Phân trang",

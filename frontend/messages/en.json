@@ -103,6 +103,18 @@
       "no_outcome": "No outcome yet"
     },
     "noMatch": "No order ID starts with “{orderId}”.",
+    "noMatchFilters": "No orders match the selected filters.",
+    "filters": {
+      "orderStatus": "Order status",
+      "allStatuses": "All statuses",
+      "deliveryOutcome": "Delivery outcome",
+      "allOutcomes": "All outcomes",
+      "purchasedRange": "Purchase date range",
+      "purchasedPlaceholder": "Purchase date",
+      "deliveredRange": "Delivery date range",
+      "deliveredPlaceholder": "Delivery date",
+      "clearAll": "Clear all filters"
+    },
     "pageEmpty": "There are no orders on this page.",
     "backToFirst": "Back to page 1",
     "pagination": "Pagination",
