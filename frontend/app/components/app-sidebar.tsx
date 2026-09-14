@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { LayoutDashboard } from "lucide-react";
+import { LayoutDashboard, Package } from "lucide-react";
 
 import { NavUser } from "./nav-user";
 import {
@@ -18,9 +18,10 @@ import {
   SidebarRail,
 } from "./ui/sidebar";
 
-// Mục Đơn hàng và Quản trị do ticket của trang đó thêm vào khi trang có thật.
+// Mục Quản trị do ticket của trang đó thêm vào khi trang có thật.
 export const NAV_ITEMS = [
   { href: "/", labelKey: "dashboard", icon: LayoutDashboard },
+  { href: "/orders", labelKey: "orders", icon: Package },
 ] as const;
 
 export function AppSidebar() {

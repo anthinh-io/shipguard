@@ -67,8 +67,53 @@
     "invalidCredentials": "Incorrect email or password.",
     "unreachable": "Could not reach the server. Please try again."
   },
+  "orders": {
+    "loading": "Loading orders…",
+    "error": "Could not load orders from the server ({detail}). Please try again.",
+    "errorDetail": {
+      "missingBackendUrl": "the NEXT_PUBLIC_BACKEND_URL environment variable is missing",
+      "httpStatus": "the server returned status {status}"
+    },
+    "searchLabel": "Search by order ID",
+    "searchPlaceholder": "Type the first few characters of an order ID…",
+    "total": "{count, plural, one {# order} other {# orders}}",
+    "columns": {
+      "orderId": "Order ID",
+      "status": "Status",
+      "outcome": "Delivery outcome",
+      "purchasedAt": "Purchased",
+      "estimatedDeliveryDate": "Estimated delivery",
+      "deliveredAt": "Delivered",
+      "customerState": "State",
+      "orderValue": "Value"
+    },
+    "status": {
+      "created": "Created",
+      "approved": "Approved",
+      "invoiced": "Invoiced",
+      "processing": "Processing",
+      "shipped": "Shipped",
+      "delivered": "Delivered",
+      "canceled": "Canceled",
+      "unavailable": "Unavailable"
+    },
+    "outcome": {
+      "on_time": "On time",
+      "late": "Late",
+      "no_outcome": "No outcome yet"
+    },
+    "noMatch": "No order ID starts with “{orderId}”.",
+    "pageEmpty": "There are no orders on this page.",
+    "backToFirst": "Back to page 1",
+    "pagination": "Pagination",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "pageCount": "of {count, number}"
+  },
   "nav": {
-    "dashboard": "Dashboard"
+    "dashboard": "Dashboard",
+    "orders": "Orders"
   },
   "sidebar": {
     "toggle": "Toggle sidebar",
