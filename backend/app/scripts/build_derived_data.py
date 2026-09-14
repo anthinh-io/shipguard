@@ -16,7 +16,8 @@ ORDERS_SQL = """
         handed_to_carrier_at,
         delivered_to_customer_at,
         estimated_delivery_date,
-        worst_review_score
+        worst_review_score,
+        order_value
     )
     SELECT
         o.order_id,
@@ -27,7 +28,8 @@ ORDERS_SQL = """
         o.order_delivered_carrier_date,
         o.order_delivered_customer_date,
         o.order_estimated_delivery_date::date,
-        r.worst_review_score
+        r.worst_review_score,
+        v.order_value
     FROM raw_orders o
     JOIN raw_customers c ON c.customer_id = o.customer_id
     LEFT JOIN (
@@ -35,6 +37,11 @@ ORDERS_SQL = """
         FROM raw_order_reviews
         GROUP BY order_id
     ) r ON r.order_id = o.order_id
+    LEFT JOIN (
+        SELECT order_id, sum(price + freight_value) AS order_value
+        FROM raw_order_items
+        GROUP BY order_id
+    ) v ON v.order_id = o.order_id
 """
 
 ORDER_SELLERS_SQL = """
