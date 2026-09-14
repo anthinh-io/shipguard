@@ -39,3 +39,16 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+USER_ADMIN_ROLES = ("logistics_manager", "super_admin")
+
+
+# Vai trò đọc từ token (ADR-0006): người vừa bị hạ vai trò vẫn qua được cửa này tối đa
+# 15 phút, cho tới khi access token hết hạn và refresh token đã bị thu hồi.
+async def require_user_admin(current_user: CurrentUserDep) -> CurrentUser:
+    if current_user.role not in USER_ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Not allowed to manage users")
+    return current_user
+
+
+UserAdminDep = Annotated[CurrentUser, Depends(require_user_admin)]
