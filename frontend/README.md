@@ -28,12 +28,16 @@ frontend/
       layout.tsx         bọc các trang trong <AuthGate /> và khung sidebar;
                          đọc cookie sidebar_state để giữ trạng thái thu gọn
       page.tsx           Server Component: gọi <Dashboard />
+      orders/
+        page.tsx         Server Component: đọc searchParams, gọi <OrderList />
     login/
       page.tsx           trang đăng nhập, nằm ngoài (app)/ nên không bị chặn
     lib/
       api.ts             access token trong bộ nhớ, apiFetch tự gắn và làm
                          mới token, login, logout, changePassword
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
+      order-list-params.ts
+                         đọc/ghi tìm kiếm, sắp xếp, trang của /orders trên URL
     components/
       auth-gate.tsx      Client Component: chờ /auth/refresh trước khi vẽ
                          trang, thất bại thì về /login?next=...
@@ -48,6 +52,8 @@ frontend/
                          Client Component: hộp thoại tự đổi mật khẩu
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI
+      order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
+                         bảng 8 cột sắp được, phân trang nhảy trang
       language-toggle.tsx
                          Client Component: nút đổi ngôn ngữ ở trang đăng nhập
                          và hook useLocaleSwitch dùng chung với menu người dùng
@@ -66,7 +72,12 @@ frontend/
   tests/
     e2e/
       smoke.spec.ts      Playwright: số liệu hiện khi mở trang, đúng một lần
-                         gọi máy chủ, trạng thái tải và trạng thái lỗi
+                         gọi máy chủ, trạng thái tải và trạng thái lỗi; trang
+                         Đơn hàng với dữ liệu thật
+      orders.spec.ts     Playwright: trang Đơn hàng (giả lập máy chủ) — tìm,
+                         sắp xếp, nhảy trang, đường liên kết chia sẻ
+      order-list-params.spec.ts
+                         kiểm đọc/ghi tham số URL của /orders, không mở trình duyệt
       i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
                          lại, và quy ước số/ngày của từng ngôn ngữ
       auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
@@ -174,6 +185,21 @@ không bao giờ đổi theo nút chuyển ngữ. Và `fullDate` mang theo `time
 — thiếu nó thì máy đặt ở múi giờ phía tây UTC hiện ranh giới kỳ báo cáo lệch
 đúng một ngày.
 
+Ngoại lệ duy nhất: `Order Value` trong `order-list.tsx` luôn hiện kiểu Brazil
+(`R$ 13.664,08`) ở cả hai ngôn ngữ, nên bộ định dạng `pt-BR` ở đó cố ý đóng cứng
+ở phạm vi module. Dấu thời gian backend trả không kèm múi giờ
+(`"2018-10-17T02:30:18"`) phải cắt lấy 10 ký tự ngày trước khi đưa vào `new
+Date()` — đọc nguyên chuỗi thì trình duyệt hiểu theo giờ máy, và `fullDate` hiện
+lệch một ngày ở máy phía đông UTC.
+
+## Trạng thái trang trên URL
+
+Trang nào cần giữ tìm kiếm, sắp xếp hay số trang trên URL (để gửi đường liên kết
+cho người khác) thì làm như `app/(app)/orders/page.tsx`: Server Component đọc prop
+`searchParams`, chuẩn hoá rồi truyền xuống Client Component; client đổi URL bằng
+`router.push` / `router.replace` và Next dựng lại trang với tham số mới. Đừng
+dùng `useSearchParams` — nó bắt buộc bọc `<Suspense>`, thiếu thì `next build` hỏng.
+
 Ngôn ngữ nằm trong cookie `NEXT_LOCALE`, không nằm trong đường dẫn, nên **không
 có thư mục `app/[locale]/` và không có `middleware.ts`** — đừng thêm vào, phần
 lớn tài liệu next-intl ngoài kia dạy kiểu có tiền tố URL. Lý do chọn cách này:
@@ -220,4 +246,4 @@ mặc định tính động từ dữ liệu, nên con số đổi mà hành vi 
 
 | Biến | Dùng ở đâu |
 | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/seller-combobox.tsx`, `app/components/nav-user.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
+| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/order-list.tsx`, `app/components/seller-combobox.tsx`, `app/components/nav-user.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
