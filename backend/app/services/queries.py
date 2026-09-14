@@ -1,6 +1,8 @@
+from datetime import date, datetime, time, timedelta
+
 import sqlalchemy as sa
 
-from app.models.derived import orders
+from app.models.derived import order_sellers, orders
 
 # Delivered Order theo CONTEXT.md: đơn đã tới tay khách và có ngày giao thực tế. Đây là
 # tập đơn duy nhất được tính vào KPI — bảng dẫn xuất cố ý giữ mọi đơn kèm cột trạng
@@ -19,3 +21,26 @@ def like_prefix(query: str) -> str:
     # Dấu chéo ngược phải thoát trước, nếu không nó sẽ thoát nhầm hai lần sau đó.
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"{escaped}%"
+
+
+def within_days(
+    column: sa.ColumnElement, start_date: date, end_date: date
+) -> sa.ColumnElement[bool]:
+    # Chặn bằng dấu thời gian thay vì ép column::date, để chỉ mục trên cột còn dùng được.
+    # Cận trên là nửa đêm đầu ngày kế tiếp, nên kết quả trùng khít với phép so ở mức ngày
+    # lịch, tính cả ngày đầu lẫn ngày cuối.
+    return sa.and_(
+        column >= datetime.combine(start_date, time.min),
+        column < datetime.combine(end_date + timedelta(days=1), time.min),
+    )
+
+
+def sold_by(seller_id: str) -> sa.ColumnElement[bool]:
+    # EXISTS chứ không JOIN nên vẫn đúng một dòng mỗi đơn. Đơn ghép nhiều người bán vì vậy
+    # thuộc về MỌI người bán tham gia — đúng CONTEXT.md mục Multi-Seller Order. Đừng khử.
+    return sa.exists().where(
+        sa.and_(
+            order_sellers.c.order_id == orders.c.order_id,
+            order_sellers.c.seller_id == seller_id,
+        )
+    )

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.derived import order_sellers, orders, sellers
-from app.services.queries import DELIVERED, like_prefix
+from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 # Bộ Olist thực chất kết thúc tháng 8/2018: tháng 9 chỉ còn 56 đơn giao, tháng 10 chỉ
 # còn 3. Không có ngưỡng thì kỳ mặc định kéo tới tận những tháng đó, tỷ lệ dựng trên
@@ -106,14 +106,7 @@ def _where(filters: DashboardFilters) -> list[sa.ColumnElement[bool]]:
         # Đơn ghép nhiều người bán vì vậy thuộc về MỌI người bán tham gia — đúng
         # CONTEXT.md mục Multi-Seller Order, và là nguồn của sai lệch ~1,3% đã chấp
         # nhận trong #1. Đừng khử.
-        clauses.append(
-            sa.exists().where(
-                sa.and_(
-                    order_sellers.c.order_id == orders.c.order_id,
-                    order_sellers.c.seller_id == filters.seller_id,
-                )
-            )
-        )
+        clauses.append(sold_by(filters.seller_id))
     return clauses
 
 
@@ -268,15 +261,10 @@ async def compute_kpis(session: AsyncSession, filters: DashboardFilters) -> Dash
 
 
 def _delivered_within(period: ReportingPeriod) -> sa.ColumnElement[bool]:
-    # Chặn bằng dấu thời gian thay vì ép delivered_to_customer_at::date, để chỉ mục
-    # ix_orders_delivered_to_customer_at còn dùng được. Cận trên là nửa đêm đầu ngày kế
-    # tiếp, nên kết quả trùng khít với phép so ở mức ngày lịch.
-    return sa.and_(
-        orders.c.delivered_to_customer_at >= datetime.combine(
-            period.start_date, time.min
-        ),
-        orders.c.delivered_to_customer_at
-        < datetime.combine(period.end_date + timedelta(days=1), time.min),
+    # Khoảng nửa mở trên dấu thời gian để ix_orders_delivered_to_customer_at còn dùng
+    # được — xem within_days.
+    return within_days(
+        orders.c.delivered_to_customer_at, period.start_date, period.end_date
     )
 
 
