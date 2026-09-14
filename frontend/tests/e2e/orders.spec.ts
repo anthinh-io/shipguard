@@ -17,6 +17,11 @@ test.beforeEach(async ({ context }) => {
     { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
   ]);
   await mockSession(context);
+  // Thanh lọc tải danh sách bang khi mở trang. Không giả lập thì token giả tới backend
+  // thật nhận 401, và apiFetch đưa cả trang về /login.
+  await context.route(`${BACKEND_URL}/customer-states`, (route) =>
+    route.fulfill({ json: ["RJ", "SP"] }),
+  );
 });
 
 type Item = Record<string, string | number | null>;

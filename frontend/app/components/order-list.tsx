@@ -7,10 +7,12 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
 import {
+  hasActiveFilters,
   toOrderListQuery,
   type OrderListParams,
   type OrderSort,
 } from "@/app/lib/order-list-params";
+import { OrderFilterBar } from "./order-filter-bar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -209,9 +211,13 @@ export function OrderList({ params }: { params: OrderListParams }) {
       </p>
     );
   } else if (state.data.total === 0) {
+    // Có bộ lọc nào đang bật thì không nói "không có mã bắt đầu bằng…": mã có thể có thật,
+    // chỉ là không thỏa bộ lọc.
     content = (
       <p data-testid="orders-no-match" className="text-muted-foreground">
-        {t("noMatch", { orderId: params.orderId })}
+        {hasActiveFilters(params.filters) || !params.orderId
+          ? t("noMatchFilters")
+          : t("noMatch", { orderId: params.orderId })}
       </p>
     );
   } else {
@@ -337,6 +343,12 @@ export function OrderList({ params }: { params: OrderListParams }) {
           autoComplete="off"
         />
       </InputGroup>
+      {/* push chứ không replace: mỗi lần đổi bộ lọc là một bước Back được. Đổi bộ lọc thì
+          về trang 1, cùng lý do với ô tìm. */}
+      <OrderFilterBar
+        filters={params.filters}
+        onChange={(filters) => navigate({ ...params, filters, page: 1 }, "push")}
+      />
       <div className="mt-4">{content}</div>
     </div>
   );
