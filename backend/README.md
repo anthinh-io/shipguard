@@ -22,10 +22,13 @@ backend/
       security.py  băm mật khẩu, ký và xác minh access token
     api/
       deps.py      SessionDep, CurrentUserDep — phụ thuộc dùng chung cho các endpoint
-      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me)
+      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me,
+                   orders.py: /orders)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
       users.py     tạo User, Super Admin, đặt lại và tự đổi mật khẩu
+      orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
+      queries.py   mảnh truy vấn dùng chung: vị ngữ DELIVERED, like_prefix
     scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
     alembic/       migration
   tests/
@@ -74,6 +77,23 @@ Kiểm tra tiếp: `curl http://localhost:8000/dashboard -H 'Authorization: Bear
 <access_token>'` (lấy token ở mục [Đăng nhập](#đăng-nhập)) trả về kỳ báo cáo mặc
 định kèm khối KPI; thiếu token thì 401. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
 số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
+
+`GET /orders` (cũng đòi token) trả một trang 50 đơn: `{"items", "total", "page",
+"page_size"}`. Tham số, đều không bắt buộc:
+
+| Tham số | Giá trị | Mặc định |
+| --- | --- | --- |
+| `order_id` | Tiền tố mã đơn, không phân biệt hoa thường; `%` và `_` là ký tự thường | không lọc |
+| `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
+| `direction` | `asc`, `desc` | `desc` |
+| `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên | `1` |
+
+Giá trị ngoài danh sách nhận 422. Ô trống (`delivered_at` của đơn chưa giao,
+`order_value` của đơn không có sản phẩm) luôn nằm cuối, cả khi sắp tăng lẫn giảm.
+Đơn trùng giá trị sắp xếp được xếp tiếp theo `order_id`, nên lật trang không trả
+trùng hay bỏ sót đơn. Mỗi dòng mang `delivery_outcome`: `on_time` / `late` chỉ với
+`Delivered Order`, mọi đơn khác là `no_outcome` — kể cả đơn đã hủy lỡ có ngày giao.
+`order_value` là số thực, không phải chuỗi thập phân.
 
 ## Đăng nhập
 
@@ -128,7 +148,7 @@ tên trần là tầng dẫn xuất.
 | Bảng | Nội dung |
 | --- | --- |
 | `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
-| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang khách hàng, điểm đánh giá thấp nhất, trạng thái đơn |
+| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang khách hàng, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
@@ -150,6 +170,18 @@ migration sẽ hỏng.
 Lưu ý khi viết truy vấn: `is_late` là `NULL` chứ không phải `false` với đơn chưa
 giao, nên cả `WHERE is_late` lẫn `WHERE NOT is_late` đều loại các đơn đó ra. Dùng
 `IS TRUE` / `IS NOT TRUE` nếu cần nói rõ ý định.
+
+`order_value` là tổng `price + freight_value` của các dòng sản phẩm, tính sẵn lúc
+dựng bảng; 775 đơn không có sản phẩm nào để `NULL`. Đây không phải số tiền khách
+thanh toán: 303 đơn lệch tổng thanh toán hơn 1 xu, và như vậy là đúng (so bằng
+tuyệt đối ra 576, vì trả góp làm tròn từng kỳ). Bộ số vàng tính thẳng từ CSV nằm
+ở `tests/test_order_value_golden.py`.
+
+Tìm mã đơn dùng chỉ mục biểu thức `lower(order_id) text_pattern_ops`. Cơ sở dữ
+liệu chạy collation `en_US.utf8`, mà btree thường theo collation đó — kể cả khoá
+chính — không phục vụ được `LIKE 'abc%'`; `ILIKE` thì không đi qua chỉ mục kiểu
+này. Truy vấn tiền tố mã đơn vì thế phải viết đúng dạng
+`lower(order_id) LIKE '...%'`.
 
 ## Tập đơn biên dùng cho test
 
