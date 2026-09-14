@@ -5,7 +5,12 @@ import { useFormatter, useTranslations } from "next-intl";
 import { CalendarIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 
-import { SellerCombobox, type SellerOption } from "./seller-combobox";
+import {
+  EMPTY_FILTERS,
+  type ComparisonMode,
+  type DashboardFilters,
+} from "@/app/lib/dashboard-filters";
+import { SellerCombobox } from "./seller-combobox";
 import { Button } from "./ui/button";
 import { Calendar } from "./ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -16,26 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-
-export type ComparisonMode = "previous" | "year_over_year";
-
-export type Filters = {
-  range: { from: string; to: string } | null;
-  customerState: string | null;
-  // Giữ cả đối tượng chứ không chỉ mã: nhãn trên nút cần bang của người bán, mà không
-  // có nơi nào khác để tra lại nó. Chỉ seller_id đi vào chuỗi truy vấn.
-  seller: SellerOption | null;
-  comparison: ComparisonMode | null;
-};
-
-// null ở mỗi trường nghĩa là không gắn tham số đó vào chuỗi truy vấn, chứ không phải
-// "gắn giá trị mặc định" — xem dashboard.tsx.
-export const EMPTY_FILTERS: Filters = {
-  range: null,
-  customerState: null,
-  seller: null,
-  comparison: null,
-};
 
 // shadcn Select không chấp nhận value="" cho một item, nên cần một giá trị đặc biệt
 // riêng cho lựa chọn "tất cả các bang".
@@ -51,21 +36,27 @@ export function FilterBar({
   customerStates,
   onChange,
 }: {
-  filters: Filters;
+  filters: DashboardFilters;
   customerStates: string[];
-  onChange: (filters: Filters) => void;
+  onChange: (filters: DashboardFilters) => void;
 }) {
   const t = useTranslations("dashboard");
   const format = useFormatter();
   const [open, setOpen] = useState(false);
   // Trạng thái tạm trong lúc người dùng đang chọn khoảng (mới chọn một đầu, chưa chọn
   // đầu kia) — chỉ commit vào filters, và do đó gọi lại máy chủ, khi cả hai đầu đã
-  // chọn xong. Khởi tạo từ filters.range để mở lại popover vẫn thấy khoảng đang áp.
-  const [pendingRange, setPendingRange] = useState<DateRange | undefined>(
-    filters.range
-      ? { from: fromISODate(filters.range.from), to: fromISODate(filters.range.to) }
-      : undefined,
+  // chọn xong.
+  const [pendingRange, setPendingRange] = useState<DateRange | undefined>(() =>
+    toDateRange(filters.range),
   );
+
+  // Danh sách bang đi kèm phản hồi /dashboard, nên lúc đang tải hay tải hỏng thì nó rỗng.
+  // Radix Select chỉ hiện được giá trị có mục tương ứng; thiếu mục thì ô bang để trống
+  // trong khi đường liên kết đang lọc theo bang đó.
+  const stateOptions =
+    filters.customerState && !customerStates.includes(filters.customerState)
+      ? [filters.customerState, ...customerStates]
+      : customerStates;
 
   const dateRangeLabel = filters.range
     ? `${format.dateTime(fromISODate(filters.range.from), "fullDate")} – ${format.dateTime(
@@ -73,6 +64,16 @@ export function FilterBar({
         "fullDate",
       )}`
     : t("filters.pickDateRange");
+
+  // Nạp lại mỗi lần mở chứ không chỉ lúc khởi tạo: bấm Back đổi filters.range mà không
+  // dựng lại thanh bộ lọc, và popover phải thấy khoảng đang áp chứ không phải khoảng của
+  // lần chọn trước.
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setPendingRange(toDateRange(filters.range));
+    }
+    setOpen(next);
+  }
 
   function handleRangeSelect(range: DateRange | undefined) {
     setPendingRange(range);
@@ -96,13 +97,12 @@ export function FilterBar({
   }
 
   function handleClearAll() {
-    setPendingRange(undefined);
     onChange(EMPTY_FILTERS);
   }
 
   return (
     <div data-testid="filter-bar" className="mt-4 flex flex-wrap items-center gap-3">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -142,7 +142,7 @@ export function FilterBar({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL_STATES}>{t("filters.allStates")}</SelectItem>
-          {customerStates.map((state) => (
+          {stateOptions.map((state) => (
             <SelectItem key={state} value={state}>
               {state}
             </SelectItem>
@@ -151,8 +151,8 @@ export function FilterBar({
       </Select>
 
       <SellerCombobox
-        seller={filters.seller}
-        onChange={(seller) => onChange({ ...filters, seller })}
+        sellerId={filters.sellerId}
+        onChange={(sellerId) => onChange({ ...filters, sellerId })}
       />
 
       <Select
@@ -201,6 +201,10 @@ export function FilterBar({
 // dashboard.tsx đọc reporting_period, nên hiển thị không lệch ngày dù format khai UTC.
 function fromISODate(value: string): Date {
   return new Date(value);
+}
+
+function toDateRange(range: DashboardFilters["range"]): DateRange | undefined {
+  return range ? { from: fromISODate(range.from), to: fromISODate(range.to) } : undefined;
 }
 
 // Ngược lại: Date người dùng chọn trên lịch là giờ địa phương lúc nửa đêm.

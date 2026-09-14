@@ -84,7 +84,8 @@ test("đổi thành công thì báo đã đổi và ở lại phiên bằng toke
   await page.getByRole("option", { name: "AL" }).click();
 
   await expect.poll(() => authorizations.at(-1)).toBe("Bearer after-change");
-  await expect(page).toHaveURL("/");
+  // Vẫn ở bảng điều khiển, không bị đưa về /login; bộ lọc vừa chọn nằm trên URL (#24).
+  await expect(page).toHaveURL("/?customer_state=AL");
 });
 
 for (const { status, detail, message } of [

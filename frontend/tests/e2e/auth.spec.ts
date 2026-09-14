@@ -155,7 +155,8 @@ test("phiên ngắn hạn hết hạn giữa chừng thì số liệu vẫn tả
 
   await expect(page.getByTestId("kpi-on-time-rate")).toContainText("397");
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
-  await expect(page).toHaveURL("/");
+  // Vẫn ở bảng điều khiển, không bị đưa về /login; bộ lọc vừa chọn nằm trên URL (#24).
+  await expect(page).toHaveURL("/?customer_state=AL");
   expect(calls.refresh).toBe(2);
 });
 
