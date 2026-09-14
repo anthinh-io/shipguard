@@ -6,11 +6,16 @@ from app.core.config import settings
 
 # worst_review_score lấy min chứ không phải điểm mới nhất: một đơn có thể có nhiều
 # dòng đánh giá với điểm khác nhau, và Low Review nghĩa là đã từng bị chấm 1–2 sao.
+#
+# customer_zip_code_prefix đệm lại cho đủ 5 chữ số: tệp CSV ghi "01310" nhưng cột thô là
+# số nguyên nên đã nạp thành 1310.
 ORDERS_SQL = """
     INSERT INTO orders (
         order_id,
         order_status,
         customer_state,
+        customer_city,
+        customer_zip_code_prefix,
         purchased_at,
         payment_approved_at,
         handed_to_carrier_at,
@@ -23,6 +28,8 @@ ORDERS_SQL = """
         o.order_id,
         o.order_status,
         c.customer_state,
+        c.customer_city,
+        lpad(c.customer_zip_code_prefix::text, 5, '0'),
         o.order_purchase_timestamp,
         o.order_approved_at,
         o.order_delivered_carrier_date,

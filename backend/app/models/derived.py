@@ -8,6 +8,10 @@ orders = sa.Table(
     sa.Column("order_id", sa.Text, primary_key=True),
     sa.Column("order_status", sa.Text, nullable=False),
     sa.Column("customer_state", sa.Text, nullable=False, index=True),
+    # Địa chỉ giao cho trang chi tiết đơn. Mã bưu chính là chuỗi 5 chữ số chứ không phải
+    # số: cột thô là số nguyên nên đã mất số 0 đầu — xem build_derived_data.py.
+    sa.Column("customer_city", sa.Text),
+    sa.Column("customer_zip_code_prefix", sa.Text),
     sa.Column("purchased_at", sa.DateTime, nullable=False, index=True),
     sa.Column("payment_approved_at", sa.DateTime),
     sa.Column("handed_to_carrier_at", sa.DateTime),

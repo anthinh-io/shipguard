@@ -132,3 +132,21 @@ test("thanh lọc đơn hàng chạy thật: trạng thái, kết quả giao và
   await expect(page).toHaveURL(/\/orders$/);
   await expect(page.getByTestId("orders-total")).toHaveText("99.441 đơn");
 });
+
+test("trang chi tiết đơn chạy thật: mở từ danh sách, đủ các phần, Back về đúng danh sách", async ({
+  page,
+}) => {
+  await page.goto("/orders?order_id=e481f5");
+  await expect(page.getByTestId("orders-total")).toHaveText("1 đơn");
+
+  await page.getByTestId("order-id").click();
+
+  await expect(page.getByTestId("order-detail-id")).toHaveText("e481f51cbdc54678b7cc49136f2d6af7");
+  await expect(page.getByTestId("timeline-purchased-at")).toHaveText("10:56 02/10/2017");
+  await expect(page.getByTestId("order-item")).toHaveCount(1);
+  await expect(page.getByTestId("order-payment").first()).toBeVisible();
+  await expect(page.getByTestId("order-address")).toContainText("sao paulo");
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/orders\?order_id=e481f5$/);
+});

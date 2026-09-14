@@ -115,6 +115,25 @@ async def test_distinct_customer_states(db: AsyncConnection) -> None:
     assert await scalar(db, "SELECT count(DISTINCT customer_state) FROM orders") == 27
 
 
+async def test_every_order_has_a_shipping_city_and_a_five_digit_zip_prefix(
+    db: AsyncConnection,
+) -> None:
+    # Cột thô là số nguyên nên mất số 0 đầu: 01310 nạp vào thành 1310. Bảng dẫn xuất phải
+    # trả lại đủ 5 chữ số, nếu không mã bưu chính của cả vùng São Paulo hiện sai.
+    assert await scalar(db, "SELECT count(*) FROM orders WHERE customer_city IS NULL") == 0
+    assert (
+        await scalar(
+            db,
+            "SELECT count(*) FROM orders WHERE customer_zip_code_prefix !~ '^[0-9]{5}$'",
+        )
+        == 0
+    )
+    assert (
+        await scalar(db, "SELECT count(*) FROM orders WHERE customer_zip_code_prefix LIKE '0%'")
+        > 0
+    )
+
+
 async def test_every_seller_is_present_with_its_city_and_state(
     db: AsyncConnection,
 ) -> None:
@@ -137,6 +156,9 @@ async def test_every_seller_is_present_with_its_city_and_state(
         "ix_order_sellers_seller_id",
         "ix_orders_purchased_at",
         "ix_orders_order_id_prefix",
+        "ix_raw_order_items_order_id",
+        "ix_raw_order_payments_order_id",
+        "ix_raw_order_reviews_order_id",
     ],
 )
 async def test_index_exists(db: AsyncConnection, index_name: str) -> None:

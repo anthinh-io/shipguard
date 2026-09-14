@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
+import {
+  BRL,
+  OUTCOME_CLASS,
+  utcDay,
+  type DeliveryOutcome,
+} from "@/app/lib/order-format";
 import {
   hasActiveFilters,
   toOrderListQuery,
@@ -37,14 +44,6 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 // Mã đơn là chuỗi băm 32 ký tự; 8 ký tự đầu đủ để phân biệt bằng mắt trên một trang.
 const SHORT_ID_LENGTH = 8;
-
-// Ngoại lệ có chủ ý với quy tắc "đừng dựng Intl tại chỗ" của README: Order Value là tiền
-// Brazil và luôn hiện theo kiểu Brazil "R$ 13.664,08", ở cả hai ngôn ngữ giao diện. Bộ
-// định dạng này cố ý không đổi theo nút chuyển ngữ, nên đóng cứng ở phạm vi module là
-// đúng — useFormatter luôn dùng ngôn ngữ giao diện và không cho đổi riêng từng lần gọi.
-const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
-type DeliveryOutcome = "on_time" | "late" | "no_outcome";
 
 type OrderListItem = {
   order_id: string;
@@ -92,19 +91,9 @@ async function fetchOrders(url: string): Promise<OrderListData> {
   return (await response.json()) as OrderListData;
 }
 
-// Backend trả dấu thời gian không kèm múi giờ ("2018-10-17T02:30:18"). new Date() đọc
-// chuỗi đó theo giờ máy, rồi fullDate hiện theo UTC — máy ở phía đông UTC lùi mất một
-// ngày. Cắt lấy phần ngày thì new Date() đọc thành nửa đêm UTC, khớp quy ước ADR-0005.
-function utcDay(value: string): Date {
-  return new Date(value.slice(0, 10));
+function orderPath(orderId: string): string {
+  return `${ORDERS_PATH}/${encodeURIComponent(orderId)}`;
 }
-
-const OUTCOME_CLASS: Record<DeliveryOutcome, string> = {
-  on_time:
-    "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  late: "border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400",
-  no_outcome: "text-muted-foreground",
-};
 
 export function OrderList({ params }: { params: OrderListParams }) {
   const t = useTranslations("orders");
@@ -261,13 +250,26 @@ export function OrderList({ params }: { params: OrderListParams }) {
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <TableRow key={item.order_id} data-testid="order-row">
+              // Bấm vào đâu trên dòng cũng mở đơn; mã đơn là một liên kết thật để còn
+              // dùng bàn phím, mở tab mới hay chép đường dẫn. push chứ không replace: Back
+              // phải về đúng danh sách này, vốn đã nằm nguyên trên URL.
+              <TableRow
+                key={item.order_id}
+                data-testid="order-row"
+                className="cursor-pointer"
+                onClick={() => router.push(orderPath(item.order_id))}
+              >
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span data-testid="order-id" tabIndex={0} className="font-mono">
+                      <Link
+                        href={orderPath(item.order_id)}
+                        data-testid="order-id"
+                        className="font-mono hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         {item.order_id.slice(0, SHORT_ID_LENGTH)}
-                      </span>
+                      </Link>
                     </TooltipTrigger>
                     <TooltipContent className="font-mono">{item.order_id}</TooltipContent>
                   </Tooltip>

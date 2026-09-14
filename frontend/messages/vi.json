@@ -123,6 +123,66 @@
     "page": "Trang",
     "pageCount": "/ {count, number}"
   },
+  "orderDetail": {
+    "loading": "Đang tải chi tiết đơn…",
+    "error": "Không lấy được chi tiết đơn từ máy chủ ({detail}). Vui lòng thử lại.",
+    "notFound": "Không tìm thấy đơn “{orderId}”.",
+    "notAvailable": "Chưa có",
+    "orderValue": "Giá trị đơn",
+    "timeline": {
+      "title": "Dòng thời gian",
+      "purchasedAt": "Đặt hàng",
+      "paymentApprovedAt": "Duyệt thanh toán",
+      "handedToCarrierAt": "Bàn giao vận chuyển",
+      "deliveredAt": "Giao hàng",
+      "estimatedDeliveryDate": "Ngày cam kết"
+    },
+    "stages": {
+      "title": "Thời gian từng chặng",
+      "paymentApproval": "Chặng duyệt thanh toán",
+      "sellerHandling": "Chặng người bán xử lý",
+      "carrierTransit": "Chặng vận chuyển",
+      "days": "{value} ngày"
+    },
+    "items": {
+      "title": "Sản phẩm",
+      "category": "Danh mục",
+      "price": "Giá",
+      "freight": "Phí vận chuyển",
+      "seller": "Người bán",
+      "empty": "Đơn này không có sản phẩm nào."
+    },
+    "sellers": {
+      "title": "Người bán",
+      "empty": "Đơn này chưa có người bán nào."
+    },
+    "address": {
+      "title": "Địa chỉ giao",
+      "city": "Thành phố",
+      "state": "Bang",
+      "zip": "Mã bưu chính"
+    },
+    "payments": {
+      "title": "Thanh toán",
+      "type": "Hình thức",
+      "installments": "Số kỳ trả góp",
+      "value": "Giá trị",
+      "empty": "Đơn này chưa có thanh toán nào.",
+      "types": {
+        "credit_card": "Thẻ tín dụng",
+        "boleto": "Boleto",
+        "voucher": "Phiếu mua hàng",
+        "debit_card": "Thẻ ghi nợ",
+        "not_defined": "Không xác định"
+      }
+    },
+    "reviews": {
+      "title": "Đánh giá của khách",
+      "score": "{score}/5 sao",
+      "noComment": "Khách không để lại bình luận.",
+      "empty": "Đơn này chưa có đánh giá."
+    }
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "orders": "Đơn hàng",

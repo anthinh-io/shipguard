@@ -5,7 +5,14 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.derived import orders
+from app.models.derived import order_sellers, orders, sellers
+from app.models.raw import (
+    raw_order_items,
+    raw_order_payments,
+    raw_order_reviews,
+    raw_product_category_name_translation,
+    raw_products,
+)
 from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 PAGE_SIZE = 50
@@ -167,6 +174,225 @@ def _delivery_outcome(is_delivered: bool, is_late: bool | None) -> DeliveryOutco
     if not is_delivered:
         return "no_outcome"
     return "late" if is_late else "on_time"
+
+
+class OrderTimeline(BaseModel):
+    purchased_at: datetime
+    payment_approved_at: datetime | None
+    handed_to_carrier_at: datetime | None
+    delivered_at: datetime | None
+    estimated_delivery_date: date
+    # Ba chặng tính bằng ngày, đọc từ cột sinh chứ không tính lại. None khi thiếu một
+    # trong hai mốc của chặng. Có thể âm: dữ liệu gốc có đơn bàn giao vận chuyển trước lúc
+    # duyệt thanh toán, và trang chi tiết hiện nguyên như vậy.
+    payment_approval_days: float | None
+    seller_handling_days: float | None
+    carrier_transit_days: float | None
+
+
+class OrderItem(BaseModel):
+    order_item_id: int
+    product_id: str
+    # Tên tiếng Anh từ bảng dịch; danh mục chưa có bản dịch giữ tên gốc tiếng Bồ, sản
+    # phẩm không có danh mục là None.
+    category: str | None
+    price: float
+    freight_value: float
+    seller_id: str
+
+
+class OrderSeller(BaseModel):
+    seller_id: str
+    # Seller State: bang người bán gửi hàng đi, khác bang khách nhận ở ShippingAddress.
+    seller_city: str
+    seller_state: str
+
+
+class ShippingAddress(BaseModel):
+    customer_city: str
+    customer_state: str
+    customer_zip_code_prefix: str
+
+
+class OrderPayment(BaseModel):
+    payment_sequential: int
+    payment_type: str
+    payment_installments: int
+    payment_value: float
+
+
+class OrderReview(BaseModel):
+    review_score: int
+    comment_title: str | None
+    comment_message: str | None
+    created_at: datetime
+
+
+class OrderDetail(BaseModel):
+    order_id: str
+    order_status: str
+    delivery_outcome: DeliveryOutcome
+    order_value: float | None
+    timeline: OrderTimeline
+    address: ShippingAddress
+    # Danh sách rỗng nghĩa là đơn không có phần đó — không phải lỗi.
+    items: list[OrderItem]
+    sellers: list[OrderSeller]
+    payments: list[OrderPayment]
+    reviews: list[OrderReview]
+
+
+def _days(column: sa.ColumnElement) -> sa.ColumnElement:
+    # Cùng cách quy đổi INTERVAL sang số ngày với _stage_percentiles của bảng điều khiển.
+    return sa.extract("epoch", column) / 86400.0
+
+
+async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail | None:
+    """Mọi thứ về một đơn cho trang chi tiết; None nếu không có đơn nào mang mã đó.
+
+    Mỗi phần một truy vấn nhỏ theo order_id thay vì một câu JOIN lớn: sản phẩm, thanh toán
+    và đánh giá là các danh sách độc lập, JOIN chung sẽ nhân chéo số dòng của nhau.
+    """
+    order = (
+        await session.execute(
+            sa.select(
+                orders.c.order_id,
+                orders.c.order_status,
+                orders.c.order_value,
+                orders.c.is_late,
+                DELIVERED.label("is_delivered"),
+                orders.c.purchased_at,
+                orders.c.payment_approved_at,
+                orders.c.handed_to_carrier_at,
+                orders.c.delivered_to_customer_at,
+                orders.c.estimated_delivery_date,
+                _days(orders.c.payment_approval).label("payment_approval_days"),
+                _days(orders.c.seller_handling).label("seller_handling_days"),
+                _days(orders.c.carrier_transit).label("carrier_transit_days"),
+                orders.c.customer_city,
+                orders.c.customer_state,
+                orders.c.customer_zip_code_prefix,
+            ).where(orders.c.order_id == order_id)
+        )
+    ).one_or_none()
+    if order is None:
+        return None
+
+    items = (
+        await session.execute(
+            sa.select(
+                raw_order_items.c.order_item_id,
+                raw_order_items.c.product_id,
+                sa.func.coalesce(
+                    raw_product_category_name_translation.c.product_category_name_english,
+                    raw_products.c.product_category_name,
+                ).label("category"),
+                raw_order_items.c.price,
+                raw_order_items.c.freight_value,
+                raw_order_items.c.seller_id,
+            )
+            .select_from(raw_order_items)
+            .outerjoin(raw_products, raw_products.c.product_id == raw_order_items.c.product_id)
+            .outerjoin(
+                raw_product_category_name_translation,
+                raw_product_category_name_translation.c.product_category_name
+                == raw_products.c.product_category_name,
+            )
+            .where(raw_order_items.c.order_id == order_id)
+            .order_by(raw_order_items.c.order_item_id)
+        )
+    ).all()
+    order_sellers_rows = (
+        await session.execute(
+            sa.select(sellers.c.seller_id, sellers.c.seller_city, sellers.c.seller_state)
+            .join(order_sellers, order_sellers.c.seller_id == sellers.c.seller_id)
+            .where(order_sellers.c.order_id == order_id)
+            .order_by(sellers.c.seller_id)
+        )
+    ).all()
+    payments = (
+        await session.execute(
+            sa.select(
+                raw_order_payments.c.payment_sequential,
+                raw_order_payments.c.payment_type,
+                raw_order_payments.c.payment_installments,
+                raw_order_payments.c.payment_value,
+            )
+            .where(raw_order_payments.c.order_id == order_id)
+            .order_by(raw_order_payments.c.payment_sequential)
+        )
+    ).all()
+    reviews = (
+        await session.execute(
+            sa.select(
+                raw_order_reviews.c.review_score,
+                raw_order_reviews.c.review_comment_title,
+                raw_order_reviews.c.review_comment_message,
+                raw_order_reviews.c.review_creation_date,
+            )
+            .where(raw_order_reviews.c.order_id == order_id)
+            .order_by(raw_order_reviews.c.review_creation_date)
+        )
+    ).all()
+
+    return OrderDetail(
+        order_id=order.order_id,
+        order_status=order.order_status,
+        delivery_outcome=_delivery_outcome(order.is_delivered, order.is_late),
+        order_value=order.order_value,
+        timeline=OrderTimeline(
+            purchased_at=order.purchased_at,
+            payment_approved_at=order.payment_approved_at,
+            handed_to_carrier_at=order.handed_to_carrier_at,
+            delivered_at=order.delivered_to_customer_at,
+            estimated_delivery_date=order.estimated_delivery_date,
+            payment_approval_days=order.payment_approval_days,
+            seller_handling_days=order.seller_handling_days,
+            carrier_transit_days=order.carrier_transit_days,
+        ),
+        address=ShippingAddress(
+            customer_city=order.customer_city,
+            customer_state=order.customer_state,
+            customer_zip_code_prefix=order.customer_zip_code_prefix,
+        ),
+        items=[
+            OrderItem(
+                order_item_id=row.order_item_id,
+                product_id=row.product_id,
+                category=row.category,
+                price=row.price,
+                freight_value=row.freight_value,
+                seller_id=row.seller_id,
+            )
+            for row in items
+        ],
+        sellers=[
+            OrderSeller(
+                seller_id=row.seller_id,
+                seller_city=row.seller_city,
+                seller_state=row.seller_state,
+            )
+            for row in order_sellers_rows
+        ],
+        payments=[
+            OrderPayment(
+                payment_sequential=row.payment_sequential,
+                payment_type=row.payment_type,
+                payment_installments=row.payment_installments,
+                payment_value=row.payment_value,
+            )
+            for row in payments
+        ],
+        reviews=[
+            OrderReview(
+                review_score=row.review_score,
+                comment_title=row.review_comment_title,
+                comment_message=row.review_comment_message,
+                created_at=row.review_creation_date,
+            )
+            for row in reviews
+        ],
+    )
 
 
 async def list_customer_states(session: AsyncSession) -> list[str]:
