@@ -43,6 +43,7 @@ frontend/
       app-header.tsx     Client Component: nút menu và tiêu đề trang hiện tại
       nav-user.tsx       Client Component: menu người dùng ở đáy sidebar —
                          tên, vai trò (từ /me), đổi mật khẩu, ngôn ngữ, đăng xuất
+                         (chỉ rời phiên khi máy chủ xác nhận đã thu hồi)
       change-password-dialog.tsx
                          Client Component: hộp thoại tự đổi mật khẩu
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái

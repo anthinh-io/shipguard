@@ -73,14 +73,23 @@ export async function login(email: string, password: string): Promise<LoginResul
   return "ok";
 }
 
-export async function logout(): Promise<void> {
+// Trả false khi máy chủ chưa xác nhận thu hồi refresh token. Khi đó cookie vẫn còn hiệu
+// lực: coi như đã đăng xuất thì người sau mở lại ứng dụng trên máy dùng chung là vào thẳng
+// phiên này, nên bên gọi phải báo lỗi và giữ người dùng lại.
+export async function logout(): Promise<boolean> {
   try {
-    await fetch(`${BACKEND_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    const response = await fetch(`${BACKEND_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      return false;
+    }
   } catch {
-    // Không tới được máy chủ thì cookie chưa bị thu hồi, nhưng vẫn rời phiên ở trình duyệt
-    // này: giữ người dùng lại vì một lỗi mạng còn tệ hơn trên máy dùng chung.
+    return false;
   }
   accessToken = null;
+  return true;
 }
 
 function withToken(init: RequestInit | undefined): RequestInit {

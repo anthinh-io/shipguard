@@ -31,6 +31,8 @@ export function NavUser() {
   const { isPending, switchLocale } = useLocaleSwitch();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   // Hỏi /me thay vì đọc access token: tên hiển thị không nằm trong token, và vai trò
   // trong token có thể lệch hiện trạng tới 15 phút.
@@ -52,16 +54,28 @@ export function NavUser() {
   }, []);
 
   async function handleLogout() {
-    await logout();
-    // Tải trang đầy đủ chứ không chuyển trang phía client: bỏ sạch bộ nhớ JavaScript
-    // (token, số liệu đã tải), và replace để trang vừa rời không nằm trong lịch sử.
-    window.location.replace("/login");
+    setSigningOut(true);
+    setSignOutFailed(false);
+    if (await logout()) {
+      // Tải trang đầy đủ chứ không chuyển trang phía client: bỏ sạch bộ nhớ JavaScript
+      // (token, số liệu đã tải), và replace để trang vừa rời không nằm trong lịch sử.
+      window.location.replace("/login");
+      return;
+    }
+    setSigningOut(false);
+    setSignOutFailed(true);
   }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (!open) {
+              setSignOutFailed(false);
+            }
+          }}
+        >
           {/* Nút không đặt aria-label: nó sẽ đè tên và vai trò, thứ trình đọc màn hình cần
               đọc ra. */}
           <DropdownMenuTrigger asChild>
@@ -96,10 +110,28 @@ export function NavUser() {
               {tLanguage("switchTo")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="user-menu-logout" onSelect={handleLogout}>
+            <DropdownMenuItem
+              data-testid="user-menu-logout"
+              disabled={signingOut}
+              onSelect={(event) => {
+                // Giữ menu mở: nếu máy chủ không xác nhận, thông báo lỗi phải hiện ngay
+                // dưới mục người dùng vừa bấm, không biến mất cùng menu.
+                event.preventDefault();
+                void handleLogout();
+              }}
+            >
               <LogOut />
-              {t("logout")}
+              {signingOut ? t("signingOut") : t("logout")}
             </DropdownMenuItem>
+            {signOutFailed ? (
+              <p
+                data-testid="logout-error"
+                role="alert"
+                className="max-w-56 px-1.5 py-1 text-sm text-red-700 dark:text-red-400"
+              >
+                {t("logoutFailed")}
+              </p>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
         {/* Dialog nằm ngoài DropdownMenu: menu đóng lại khi chọn mục, dialog đặt bên trong
