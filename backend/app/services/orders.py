@@ -47,17 +47,17 @@ class OrderList(BaseModel):
 async def list_orders(
     session: AsyncSession,
     *,
-    order_id: str,
+    order_id_prefix: str,
     sort: OrderSort,
     direction: SortDirection,
     page: int,
 ) -> OrderList:
     """Một trang danh sách đơn, lọc theo tiền tố mã đơn nếu có."""
     where: list[sa.ColumnElement[bool]] = []
-    if order_id.strip():
+    if order_id_prefix.strip():
         # Viết đúng dạng lower(order_id) LIKE để khớp chỉ mục ix_orders_order_id_prefix;
         # ILIKE cho cùng kết quả nhưng quét cả bảng.
-        pattern = like_prefix(order_id.strip().lower())
+        pattern = like_prefix(order_id_prefix.strip().lower())
         where.append(sa.func.lower(orders.c.order_id).like(pattern, escape="\\"))
 
     total = await session.scalar(sa.select(sa.func.count()).select_from(orders).where(*where))

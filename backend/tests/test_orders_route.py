@@ -252,7 +252,14 @@ async def test_delivered_orders_are_late_or_on_time(
 
 
 @pytest.mark.parametrize(
-    "params", [{"sort": "customer_state"}, {"direction": "up"}, {"page": 0}]
+    "params",
+    [
+        {"sort": "customer_state"},
+        {"direction": "up"},
+        {"page": 0},
+        # OFFSET là bigint: trang lớn cỡ này tràn số trong Postgres và thành lỗi 500.
+        {"page": "100000000000000000000"},
+    ],
 )
 async def test_invalid_parameters_are_rejected(
     client: AsyncClient, params: dict[str, Any]

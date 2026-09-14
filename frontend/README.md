@@ -240,7 +240,9 @@ Playwright tự khởi động `bun run dev` ở cổng 3000 trước khi chạy
 
 Bài test không khẳng định vào giá trị KPI cụ thể: dữ liệu nạp lại được và kỳ
 mặc định tính động từ dữ liệu, nên con số đổi mà hành vi vẫn đúng. Bộ số vàng
-được khẳng định ở tầng tính toán phía backend.
+được khẳng định ở tầng tính toán phía backend. Ngoại lệ là bài trang Đơn hàng:
+tổng 99.441 đơn, đơn giá trị lớn nhất và mã `e481f5` không phụ thuộc kỳ nào mà là
+bất biến của bộ CSV.
 
 ## Cấu hình
 

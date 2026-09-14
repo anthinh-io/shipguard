@@ -86,7 +86,7 @@ số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
 | `order_id` | Tiền tố mã đơn, không phân biệt hoa thường; `%` và `_` là ký tự thường | không lọc |
 | `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
 | `direction` | `asc`, `desc` | `desc` |
-| `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên | `1` |
+| `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên (chỉ số lớn tới mức tràn `OFFSET` bigint mới nhận 422) | `1` |
 
 Giá trị ngoài danh sách nhận 422. Ô trống (`delivered_at` của đơn chưa giao,
 `order_value` của đơn không có sản phẩm) luôn nằm cuối, cả khi sắp tăng lẫn giảm.

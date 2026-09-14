@@ -30,7 +30,7 @@ test("tham số hợp lệ đi qua nguyên vẹn, mã đơn được cắt kho�
 });
 
 test("giá trị lạ quay về mặc định thay vì để backend trả 422", () => {
-  for (const page of ["0", "-3", "abc", "1.5", "", "1e3"]) {
+  for (const page of ["0", "-3", "abc", "1.5", "", "1e3", "100000000000000000000"]) {
     expect(parseOrderListParams({ page }).page).toBe(1);
   }
   expect(parseOrderListParams({ sort: "customer_state" }).sort).toBe("purchased_at");

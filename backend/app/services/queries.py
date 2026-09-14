@@ -13,8 +13,9 @@ DELIVERED = sa.and_(
 
 
 def like_prefix(query: str) -> str:
-    # seller_city nhận chuỗi tự do người dùng gõ vào, nên "%" và "_" phải thành ký tự
-    # thường. Không thoát thì gõ đúng một dấu "%" sẽ khớp toàn bộ 3.095 người bán.
+    # Ô gợi ý người bán và ô tìm mã đơn đều nhận chuỗi tự do người dùng gõ vào, nên "%"
+    # và "_" phải thành ký tự thường. Không thoát thì gõ đúng một dấu "%" sẽ khớp toàn
+    # bộ 3.095 người bán, hay cả 99.441 đơn. Người gọi phải truyền escape="\\" cho LIKE.
     # Dấu chéo ngược phải thoát trước, nếu không nó sẽ thoát nhầm hai lần sau đó.
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"{escaped}%"
