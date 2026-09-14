@@ -86,11 +86,28 @@ số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
 | Tham số | Giá trị | Mặc định |
 | --- | --- | --- |
 | `order_id` | Tiền tố mã đơn, không phân biệt hoa thường; `%` và `_` là ký tự thường | không lọc |
+| `order_status` | Một trong tám `Order Status`: `created`, `approved`, `invoiced`, `processing`, `shipped`, `delivered`, `canceled`, `unavailable` | không lọc |
+| `delivery_outcome` | `on_time`, `late`, `no_outcome` — cùng định nghĩa với cột `delivery_outcome` của từng dòng | không lọc |
+| `purchased_from`, `purchased_to` | Khoảng ngày đặt `YYYY-MM-DD`, tính cả hai đầu; phải đi cùng nhau | không lọc |
+| `delivered_from`, `delivered_to` | Khoảng ngày giao thực tế, cùng luật; độc lập với khoảng ngày đặt | không lọc |
+| `customer_state` | Bang của khách nhận hàng (`Region`), không phải bang người bán | không lọc |
+| `seller_id` | Mã người bán; `Multi-Seller Order` thuộc về mọi người bán tham gia, vẫn một dòng mỗi đơn | không lọc |
 | `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
 | `direction` | `asc`, `desc` | `desc` |
 | `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên (chỉ số lớn tới mức tràn `OFFSET` bigint mới nhận 422) | `1` |
 
-Giá trị ngoài danh sách nhận 422. Ô trống (`delivered_at` của đơn chưa giao,
+Giá trị ngoài danh sách nhận 422, và chỉ một đầu của một khoảng ngày cũng nhận 422
+kèm lý do trong `detail` — cùng luật với `start_date` / `end_date` của `/dashboard`.
+Các bộ lọc kết hợp với nhau bằng AND. Khoảng ngày xét nửa mở trên dấu thời gian (`>=`
+nửa đêm ngày đầu, `<` nửa đêm sau ngày cuối) để còn dùng được chỉ mục, nên đơn đặt lúc
+02:30 ngày cuối vẫn được tính. Bộ lọc `late` ra 6.534 đơn; nếu thấy 6.535 là đã tính
+nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì theo ngày.
+
+`GET /customer-states` (đòi token) trả mảng mọi bang có đơn, sắp tăng dần, không áp bộ
+lọc nào — tuỳ chọn cho ô chọn bang của trang đơn hàng. Khác danh sách bang trong
+`/dashboard`, vốn chỉ tính đơn đã giao.
+
+Ô trống (`delivered_at` của đơn chưa giao,
 `order_value` của đơn không có sản phẩm) luôn nằm cuối, cả khi sắp tăng lẫn giảm.
 Đơn trùng giá trị sắp xếp được xếp tiếp theo `order_id`, nên lật trang không trả
 trùng hay bỏ sót đơn. Mỗi dòng mang `delivery_outcome`: `on_time` / `late` chỉ với

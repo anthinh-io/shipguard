@@ -39,10 +39,13 @@ frontend/
       api.ts             access token trong bộ nhớ, apiFetch tự gắn và làm
                          mới token, login, logout, changePassword
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
+      search-params.ts   dùng chung khi đọc URL: first, parseDayRange (bỏ cả
+                         khoảng nếu thiếu một đầu, sai ngày hay ngược chiều)
       dashboard-filters.ts
                          đọc/ghi bộ lọc bảng điều khiển trên URL
       order-list-params.ts
-                         đọc/ghi tìm kiếm, sắp xếp, trang của /orders trên URL
+                         đọc/ghi tìm kiếm, bộ lọc, sắp xếp, trang của /orders
+                         trên URL
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
                          mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện
     components/
@@ -70,8 +73,16 @@ frontend/
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI; bộ lọc
                          đọc từ và ghi lên URL
+      filter-bar.tsx     Client Component: thanh lọc bảng điều khiển
+      date-range-picker.tsx, customer-state-select.tsx, seller-combobox.tsx
+                         Client Component: ô chọn khoảng ngày, bang, người bán
+                         dùng chung cho cả hai thanh lọc
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
                          bảng 8 cột sắp được, phân trang nhảy trang
+      order-filter-bar.tsx
+                         Client Component: thanh lọc /orders — trạng thái, kết
+                         quả giao, ngày đặt, ngày giao, bang (GET /customer-states),
+                         người bán, xoá hết
       language-toggle.tsx
                          Client Component: nút đổi ngôn ngữ ở trang đăng nhập
                          và hook useLocaleSwitch dùng chung với menu người dùng
@@ -94,6 +105,9 @@ frontend/
                          Đơn hàng với dữ liệu thật
       orders.spec.ts     Playwright: trang Đơn hàng (giả lập máy chủ) — tìm,
                          sắp xếp, nhảy trang, đường liên kết chia sẻ
+      order-filters.spec.ts
+                         Playwright: thanh lọc /orders (giả lập máy chủ) — từng
+                         bộ lọc, nửa khoảng ngày chưa lọc, kết hợp, xoá hết, tải lại
       order-list-params.spec.ts
                          kiểm đọc/ghi tham số URL của /orders, không mở trình duyệt
       url-filters.spec.ts
@@ -281,4 +295,4 @@ bất biến của bộ CSV.
 
 | Biến | Dùng ở đâu |
 | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/order-list.tsx`, `app/components/seller-combobox.tsx`, `app/components/profile-provider.tsx`, `app/lib/users-api.ts` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
+| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/order-list.tsx`, `app/components/order-filter-bar.tsx`, `app/components/seller-combobox.tsx`, `app/components/profile-provider.tsx`, `app/lib/users-api.ts` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
