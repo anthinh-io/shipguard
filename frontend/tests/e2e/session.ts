@@ -7,9 +7,17 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
-// Sidebar hỏi /me trên mọi trang. Token giả gửi tới backend thật sẽ nhận 401 và apiFetch
-// đưa trang về /login, nên spec nào tự giả lập phiên cũng phải giả lập luôn /me.
-export async function mockMe(context: BrowserContext) {
+type MockProfile = {
+  id: number;
+  email: string;
+  display_name: string;
+  role: "operations_staff" | "logistics_manager" | "super_admin";
+};
+
+// Khung ứng dụng hỏi /me trên mọi trang. Token giả gửi tới backend thật sẽ nhận 401 và
+// apiFetch đưa trang về /login, nên spec nào tự giả lập phiên cũng phải giả lập luôn /me.
+// Mặc định là một nhân viên vận hành; spec cần vai trò khác thì truyền phần muốn đổi.
+export async function mockMe(context: BrowserContext, profile: Partial<MockProfile> = {}) {
   await context.route(`${BACKEND_URL}/me`, (route) =>
     route.fulfill({
       json: {
@@ -18,6 +26,7 @@ export async function mockMe(context: BrowserContext) {
         display_name: "Nguyễn Lan",
         role: "operations_staff",
         claims: [],
+        ...profile,
       },
     }),
   );
@@ -25,11 +34,14 @@ export async function mockMe(context: BrowserContext) {
 
 // Cho spec giả lập /dashboard: cổng chặn chỉ cần /auth/refresh trả một token bất kỳ, vì
 // mọi lời gọi số liệu phía sau cũng bị chặn lại và không bao giờ tới backend thật.
-export async function mockSession(context: BrowserContext) {
+export async function mockSession(
+  context: BrowserContext,
+  profile: Partial<MockProfile> = {},
+) {
   await context.route(`${BACKEND_URL}/auth/refresh`, (route) =>
     route.fulfill({ json: { access_token: "test-access-token", token_type: "bearer" } }),
   );
-  await mockMe(context);
+  await mockMe(context, profile);
 }
 
 // Nút đổi ngôn ngữ của các trang sau đăng nhập nằm trong menu người dùng ở đáy sidebar.
