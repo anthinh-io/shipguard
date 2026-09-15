@@ -79,7 +79,7 @@ flowchart TD
 **Định hướng mở rộng:**
 
 - **Dự báo xu hướng khối lượng đơn theo mùa vụ** (cảnh báo trước cao điểm tháng 10–11) — cần một mô hình dự báo riêng, hiện chưa có mô tả kỹ thuật nào cho việc này.
-- **Đóng vòng đánh giá can thiệp vận hành** (ghi nhận quyết định A1.7 + so sánh KPI trước/sau, cảnh báo chủ động theo ngưỡng KPI) — nối tiếp cơ chế đóng vòng đã thiết kế ở Quy trình 3 (mục 4, A3.9–A3.10), nhưng chỉ nên triển khai sau khi có kinh nghiệm thực tế từ [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction): quy kết một biến động KPI tổng thể cho một quyết định vận hành đơn lẻ khó hơn nhiều so với đối chiếu một nhãn dự đoán với một đơn hàng cụ thể (nhiễu bởi nhiều yếu tố cùng lúc), và ngưỡng cảnh báo KPI hợp lý chưa có cơ sở dữ liệu để xác định.
+- **Đóng vòng đánh giá can thiệp vận hành** (ghi nhận quyết định A1.7 + so sánh KPI trước/sau, cảnh báo chủ động theo ngưỡng KPI) — nối tiếp cơ chế đóng vòng đã thiết kế ở Quy trình 3 (mục 4, A3.9–A3.11), nhưng chỉ nên triển khai sau khi có kinh nghiệm thực tế từ [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction): quy kết một biến động KPI tổng thể cho một quyết định vận hành đơn lẻ khó hơn nhiều so với đối chiếu một nhãn dự đoán với một đơn hàng cụ thể (nhiễu bởi nhiều yếu tố cùng lúc), và ngưỡng cảnh báo KPI hợp lý chưa có cơ sở dữ liệu để xác định.
 
 ## 3. Quy trình 2: Quản lý đơn hàng (Order Management)
 
@@ -87,18 +87,18 @@ flowchart TD
 - **Đầu vào:** Yêu cầu tra cứu (mã đơn, trạng thái vòng đời, kết quả giao, ngày đặt hàng, ngày giao thực tế, bang khách hàng, người bán)
 - **Đầu ra:** Thông tin chi tiết đơn hàng
 
-**Phạm vi:** quy trình này không thay đổi dữ liệu đơn hàng. Thao tác ghi duy nhất là **thêm ghi chú nội bộ** — chỉ thêm được, không sửa hay xóa, luôn gắn với tài khoản người viết. **Bộ lọc mức rủi ro, trạng thái xử lý và khối kết quả dự đoán ở A2.6 được hoãn** tới khi [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction) được xây, vì chưa có dữ liệu nguồn.
+**Phạm vi:** quy trình này không thay đổi dữ liệu đơn hàng — tạo đơn mới, ghi nhận mốc và hủy đơn thuộc [Dự đoán rủi ro giao trễ (Risk Prediction)](#4-quy-trình-3-dự-đoán-rủi-ro-giao-trễ-risk-prediction). Thao tác ghi duy nhất ở đây là **thêm ghi chú nội bộ** — chỉ thêm được, không sửa hay xóa, luôn gắn với tài khoản người viết. **Bộ lọc mức rủi ro, trạng thái xử lý và khối Risk Assessment ở trang chi tiết** được triển khai cùng Quy trình 3.
 
-**Mô tả quy trình:** Nhân viên mở trang quản lý đơn, tìm theo vài ký tự đầu của mã đơn hoặc lọc theo trạng thái vòng đời, kết quả giao (đúng hạn / trễ / chưa có kết quả), ngày đặt hàng, ngày giao thực tế, bang khách hàng, người bán → hệ thống trả về danh sách đơn phù hợp kèm tổng số, phân trang, hoặc **thông báo "không tìm thấy đơn" nếu danh sách rỗng** → nhân viên chọn một đơn để xem chi tiết → hệ thống hiển thị dòng thời gian của đơn và ba chặng thời gian, sản phẩm kèm giá và phí vận chuyển, người bán, địa chỉ giao, thanh toán, đánh giá của khách, trạng thái đúng hạn/trễ → nhân viên có thể **thêm ghi chú nội bộ** vào đơn, hoặc **xuất toàn bộ danh sách đơn đã lọc ra file CSV**.
+**Mô tả quy trình:** Nhân viên mở trang quản lý đơn, tìm theo vài ký tự đầu của mã đơn hoặc lọc theo trạng thái vòng đời, kết quả giao (đúng hạn / trễ / chưa có kết quả), ngày đặt hàng, ngày giao thực tế, bang khách hàng, người bán, mức rủi ro, trạng thái xử lý → hệ thống trả về danh sách đơn phù hợp kèm tổng số, phân trang, hoặc **thông báo "không tìm thấy đơn" nếu danh sách rỗng** → nhân viên chọn một đơn để xem chi tiết → hệ thống hiển thị dòng thời gian của đơn và ba chặng thời gian, sản phẩm kèm giá và phí vận chuyển, người bán, địa chỉ giao, thanh toán, đánh giá của khách, trạng thái đúng hạn/trễ, và khối Risk Assessment kèm lịch sử nếu đơn có → nhân viên có thể **thêm ghi chú nội bộ** vào đơn, hoặc **xuất toàn bộ danh sách đơn đã lọc ra file CSV**.
 
 | # | Hoạt động | Tài nguyên thực hiện | Đầu vào | Đầu ra |
 | --- | --- | --- | --- | --- |
-| A2.1 | Nhập điều kiện tìm kiếm/lọc (mã đơn, trạng thái vòng đời, kết quả giao, ngày đặt, ngày giao, bang, người bán) | Nhân viên vận hành | Nhu cầu tra cứu | Điều kiện truy vấn |
+| A2.1 | Nhập điều kiện tìm kiếm/lọc (mã đơn, trạng thái vòng đời, kết quả giao, ngày đặt, ngày giao, bang, người bán, mức rủi ro, trạng thái xử lý) | Nhân viên vận hành | Nhu cầu tra cứu | Điều kiện truy vấn |
 | A2.2 | Truy vấn danh sách đơn | API phía máy chủ | Điều kiện truy vấn | Danh sách đơn phù hợp (có thể rỗng) |
 | A2.3 | Hiển thị danh sách kết quả, hoặc thông báo không tìm thấy đơn | Ứng dụng web | Danh sách đơn | Bảng đơn hàng trên giao diện, hoặc thông báo rỗng |
 | A2.4 | Chọn đơn cần xem | Nhân viên vận hành | Bảng đơn hàng | Mã đơn được chọn |
 | A2.5 | Truy vấn chi tiết đơn | API phía máy chủ | Mã đơn | Dữ liệu chi tiết đơn |
-| A2.6 | Hiển thị chi tiết đơn (dòng thời gian, sản phẩm, người bán, địa chỉ, thanh toán, đánh giá) | Ứng dụng web | Dữ liệu chi tiết | Trang chi tiết đơn |
+| A2.6 | Hiển thị chi tiết đơn (dòng thời gian, sản phẩm, người bán, địa chỉ, thanh toán, đánh giá, khối Risk Assessment kèm lịch sử) | Ứng dụng web | Dữ liệu chi tiết | Trang chi tiết đơn |
 | A2.7 | Thêm ghi chú nội bộ | Nhân viên vận hành | Trang chi tiết đơn, nội dung ghi chú | Ghi chú được lưu vào đơn kèm người viết và thời điểm |
 | A2.8 | Xuất danh sách đơn ra file | Nhân viên vận hành | Danh sách đơn đã lọc | File CSV |
 
@@ -136,56 +136,64 @@ flowchart TD
 
 **Định hướng mở rộng:**
 
-- **Bộ lọc mức rủi ro, trạng thái xử lý và khối kết quả dự đoán** — thiết kế đã có (A2.1, A2.6 bản gốc), chỉ chờ dữ liệu từ Quy trình 3.
 - **Lịch sử thay đổi trạng thái đơn (audit trail)** — cần một mô hình dữ liệu log riêng (ai đổi gì, khi nào) chưa được thiết kế.
 - **Nhắc việc tự động khi có đơn rủi ro cao chưa xử lý sau một khoảng thời gian** — nối tiếp trạng thái "đã xử lý/chưa xử lý" đã có (A3.6, A3.9), nhưng thiếu một tham số cụ thể: khoảng thời gian bao lâu thì nhắc, hiện chưa có cơ sở nào để quyết định con số này.
 
 ## 4. Quy trình 3: Dự đoán rủi ro giao trễ (Risk Prediction)
 
-- **Tác nhân:** Nhân viên vận hành
-- **Đầu vào:** Thông tin đơn hàng mới (cân nặng, danh mục, hình thức thanh toán, cặp vùng người bán–người mua, thời điểm đặt hàng...)
-- **Đầu ra:** Kết quả phân loại đúng hạn/trễ + xác suất + nhóm nguyên nhân rủi ro chính (chuẩn bị hàng chậm hay vận chuyển chậm) + phân loại mức rủi ro cao/thấp
+- **Tác nhân:** Nhân viên vận hành (quản lý hậu cần xem thêm chỉ số mô hình)
+- **Đầu vào:** Thông tin đơn hàng mới (người bán, từng dòng sản phẩm — danh mục, cân nặng, giá, phí vận chuyển —, địa chỉ giao, các dòng thanh toán, thời điểm đặt hàng, ngày giao cam kết); các mốc vòng đời được ghi nhận dần
+- **Đầu ra:** Mỗi mốc một Risk Assessment — xác suất trễ, mức rủi ro cao/thấp, nhóm nguyên nhân rủi ro chính (chờ duyệt thanh toán, người bán chuẩn bị hàng, hoặc vận chuyển); biện pháp can thiệp đã ghi nhận; kết quả đối chiếu với thực tế
 
-**Mô tả quy trình:** Nhân viên nhập thông tin đơn mới vào biểu mẫu dự đoán — **hệ thống tự động điền sẵn các trường đã biết nếu đơn đã tồn tại trong hệ thống**, nhân viên chỉ cần xác nhận/bổ sung — bao gồm cả **hình thức thanh toán** (thanh toán qua thẻ tín dụng có thể phải chờ ngân hàng xác nhận trước khi đơn được xử lý, nên cũng là một yếu tố rủi ro), **cặp vùng gửi–nhận cụ thể** (không chỉ khoảng cách đường chim bay — thực tế cho thấy tuyến từ Paraná đến Distrito Federal giao dưới 10 ngày, trong khi tuyến từ Minas Gerais đến Rio Grande do Sul hoặc đến Paraná có thể mất hơn 40 ngày, và các bang Roraima/Amapá có độ trễ trung bình cao nhất) và **thời điểm đặt hàng** (để nhận diện các mùa cao điểm như tháng 10–11, khi khối lượng đơn tăng đột biến và gây áp lực lên chuỗi cung ứng) → hệ thống kiểm tra tính hợp lệ dữ liệu đầu vào → giao diện gửi yêu cầu đến REST API → API tiền xử lý dữ liệu và xây dựng đặc trưng (bao gồm cặp vùng gửi–nhận, hình thức thanh toán, mùa vụ), đưa vào mô hình học máy → mô hình trả về kết quả đúng hạn/trễ kèm xác suất và nhóm nguyên nhân rủi ro chính → **hệ thống tự động phân loại mức rủi ro cao/thấp theo ngưỡng cố định (xác suất trễ > 50% = rủi ro cao), lưu toàn bộ kết quả (nhãn, xác suất, phân loại, thời điểm) vào bản ghi đơn hàng kèm trường trạng thái "chưa xử lý", rồi hiển thị kết quả** → nhân viên xem kết quả đã phân loại sẵn và chọn hành động: rủi ro thấp → xử lý đơn bình thường; rủi ro cao → can thiệp **đúng theo nguyên nhân** (nhắc/ưu tiên người bán nếu rủi ro ở khâu chuẩn bị hàng, đổi đơn vị vận chuyển nếu rủi ro ở khâu giao hàng, hoặc chủ động thông báo khách hàng), sau đó **đánh dấu đơn là "đã xử lý"** → khi đơn thực sự được giao (chuyển trạng thái "đã giao" theo vòng đời đơn hàng), **hệ thống tự động đối chiếu nhãn dự đoán ban đầu với kết quả giao hàng thực tế**, khép lại vòng đánh giá.
+**Mô tả quy trình:** Nhân viên **tạo đơn mới** trong biểu mẫu — đơn là một đơn hàng đầy đủ nối tiếp dữ liệu lịch sử, hiện trong [Quản lý đơn hàng (Order Management)](#3-quy-trình-2-quản-lý-đơn-hàng-order-management) và được tính vào KPI khi đã giao — gồm một hoặc nhiều người bán có sẵn, từng dòng sản phẩm, địa chỉ giao, một hoặc nhiều dòng **thanh toán** (thanh toán qua thẻ tín dụng có thể phải chờ ngân hàng xác nhận trước khi đơn được xử lý, nên cũng là một yếu tố rủi ro), **thời điểm đặt hàng** (mặc định là lúc tạo, sửa được về quá khứ nhưng không ở tương lai — để nhận diện các mùa cao điểm như tháng 10–11, khi khối lượng đơn tăng đột biến) và ngày giao cam kết → hệ thống kiểm tra tính hợp lệ → API dự đoán **thời gian của từng chặng chưa xảy ra** dưới dạng phân phối: chờ duyệt thanh toán, người bán chuẩn bị hàng (dự đoán cho từng người bán, đơn chờ người chậm nhất), vận chuyển (theo **cặp vùng gửi–nhận cụ thể** — thực tế tuyến từ Paraná đến Distrito Federal giao dưới 10 ngày, trong khi tuyến từ Minas Gerais đến Rio Grande do Sul hoặc đến Paraná có thể mất hơn 40 ngày, và các bang Roraima/Amapá có độ trễ trung bình cao nhất) → từ đó tính **xác suất tổng thời gian vượt ngày cam kết** → **hệ thống tự động phân loại mức rủi ro cao/thấp theo ngưỡng lấy từ kết quả đánh giá mô hình, xác định nguyên nhân chính là chặng dự kiến vượt mức thường nhiều ngày nhất, lưu thành một Risk Assessment gắn với đơn rồi hiển thị** → nhân viên xem kết quả và chọn hành động: rủi ro thấp → xử lý đơn bình thường; rủi ro cao → can thiệp **đúng theo nguyên nhân** (liên hệ về thanh toán, nhắc/ưu tiên người bán, đổi đơn vị vận chuyển, hoặc chủ động thông báo khách hàng), sau đó **ghi nhận biện pháp đã làm và đánh dấu "đã xử lý"** → khi đơn đi tiếp, nhân viên **ghi nhận từng mốc** (thanh toán được duyệt, bàn giao cho đơn vị vận chuyển): mỗi mốc sinh một Risk Assessment mới, chặng đã xong dùng thời gian thật; các lần cũ giữ làm lịch sử, và nếu lần mới vẫn rủi ro cao thì đó là một việc cần xử lý mới → khi nhân viên ghi nhận đơn **đã giao**, **hệ thống tự động đối chiếu mọi Risk Assessment của đơn với kết quả giao hàng thực tế**, khép lại vòng đánh giá. Đơn bị hủy trước khi giao thì ngừng đánh giá và không đối chiếu. Quản lý hậu cần xem **độ tin cậy của mô hình** trên một trang chỉ số: kết quả đánh giá lúc huấn luyện và tỷ lệ đúng/sai tích lũy từ các lần đối chiếu.
 
-> **Quyết định:** việc phân loại mức rủi ro cao/thấp là **hệ thống tự động thực hiện theo ngưỡng cố định**, khác với thiết kế ban đầu vốn giao việc đánh giá này cho nhân viên vận hành. Ngưỡng 50% là giá trị khởi điểm cho MVP, không phải con số cuối cùng — cần xem lại sau khi có kết quả đánh giá mô hình (precision/recall).
+> **Quyết định:** phân loại mức rủi ro cao/thấp do **hệ thống tự động thực hiện** theo một ngưỡng chung cho mọi mốc, khác với thiết kế ban đầu vốn giao việc đánh giá này cho nhân viên vận hành. Ngưỡng không cố định 50% như bản trước: tỷ lệ trễ nền chỉ khoảng 6,8%, nên ở mốc đặt hàng gần như không đơn nào vượt 50%. Ngưỡng là mức cho F1 cao nhất trên dữ liệu kiểm định, đặt trong cấu hình.
 >
-> **Quyết định:** kết quả dự đoán được lưu lại gắn với đơn hàng (không phải phép tính thử-rồi-quên), kèm sẵn trường trạng thái "đã xử lý/chưa xử lý" — đây là điều kiện cần để đóng vòng đánh giá can thiệp rủi ro (A3.9, A3.10) hoạt động được.
+> **Quyết định:** kết quả dự đoán được lưu thành **lịch sử các Risk Assessment gắn với đơn** (không phải phép tính thử-rồi-quên), mỗi lần có trạng thái xử lý riêng — điều kiện cần để đóng vòng đánh giá can thiệp rủi ro (A3.9–A3.11).
+>
+> **Quyết định:** Ship Guard là nơi **ghi nhận đơn mới**. Dữ liệu Olist lịch sử chỉ dùng để huấn luyện và không bao giờ được dự đoán; đơn lịch sử còn dang dở giữ nguyên, chỉ đọc (ADR-0007).
+>
+> **Quyết định:** mô hình dự đoán **phân phối thời gian ba chặng** thay vì trực tiếp nhãn trễ/đúng hạn, để một bộ mô hình phục vụ mọi mốc và nguyên nhân luôn khớp với xác suất (ADR-0008). Ba thuật toán ứng viên được huấn luyện; giữ thuật toán có F1 cao nhất ở mốc đặt hàng, mục tiêu F1 ≥ 0,30. Chưa đạt vẫn triển khai và hiển thị rõ là chưa đạt. Mô hình chạy trong backend (ADR-0009).
 
-Việc phân tách nguyên nhân rủi ro (người bán hay vận chuyển) là cải tiến quan trọng so với việc chỉ dự đoán một nhãn "trễ" chung — nếu không phân tách, nhân viên vận hành có thể chọn sai biện pháp can thiệp (ví dụ đổi đơn vị vận chuyển trong khi lỗi thực chất nằm ở người bán chuẩn bị hàng chậm).
+Việc phân tách nguyên nhân rủi ro theo ba chặng là cải tiến quan trọng so với việc chỉ dự đoán một nhãn "trễ" chung — nếu không phân tách, nhân viên vận hành có thể chọn sai biện pháp can thiệp (ví dụ đổi đơn vị vận chuyển trong khi lỗi thực chất nằm ở người bán chuẩn bị hàng chậm, hoặc quy cho người bán một đơn chậm vì ngân hàng chưa duyệt thanh toán).
 
 | # | Hoạt động | Tài nguyên thực hiện | Đầu vào | Đầu ra |
 | --- | --- | --- | --- | --- |
-| A3.1 | Nhập thông tin đơn mới (tự động điền nếu đơn đã tồn tại) | Nhân viên vận hành | Thông tin đơn thực tế (cân nặng, danh mục, hình thức thanh toán, cặp vùng gửi–nhận, thời điểm đặt hàng) | Bộ tham số đầu vào |
+| A3.1 | Tạo đơn mới | Nhân viên vận hành | Thông tin đơn thực tế (người bán, sản phẩm, địa chỉ, thanh toán, thời điểm đặt hàng, ngày cam kết) | Bộ tham số đầu vào |
 | A3.2 | Kiểm tra tính hợp lệ dữ liệu | Ứng dụng web / API | Bộ tham số đầu vào | Dữ liệu hợp lệ (hoặc báo lỗi) |
-| A3.3 | Gửi yêu cầu dự đoán | Ứng dụng web | Dữ liệu hợp lệ | Yêu cầu đến API |
-| A3.4 | Tiền xử lý & xây dựng đặc trưng | API dự đoán học máy | Yêu cầu | Vec-tơ đặc trưng (gồm cặp vùng gửi–nhận, hình thức thanh toán, mùa vụ) |
-| A3.5 | Chạy mô hình dự đoán | API dự đoán học máy | Vec-tơ đặc trưng | Nhãn + xác suất + nhóm nguyên nhân rủi ro chính |
-| A3.6 | Phân loại mức rủi ro (ngưỡng 50%), lưu và hiển thị kết quả | API dự đoán học máy + Ứng dụng web | Nhãn + xác suất + nhóm nguyên nhân | Kết quả rủi ro đã phân loại, hiển thị trên giao diện + lưu vào bản ghi đơn (trạng thái "chưa xử lý") |
-| A3.7 | Xem kết quả & chọn hành động | Nhân viên vận hành | Kết quả rủi ro trên giao diện | Quyết định hành động |
+| A3.3 | Gửi yêu cầu tạo đơn | Ứng dụng web | Dữ liệu hợp lệ | Yêu cầu đến API |
+| A3.4 | Tiền xử lý & xây dựng đặc trưng | API (mô-đun dự đoán) | Đơn và các mốc đã có | Vec-tơ đặc trưng cho từng chặng chưa xảy ra (gồm cặp vùng gửi–nhận, hình thức thanh toán, mùa vụ, lịch sử người bán, khoảng cam kết) |
+| A3.5 | Dự đoán phân phối thời gian chặng và xác suất trễ | API (mô-đun dự đoán) | Vec-tơ đặc trưng, thời gian thật của chặng đã xong | Phân phối các chặng + xác suất trễ |
+| A3.6 | Phân loại mức rủi ro, xác định nguyên nhân, lưu và hiển thị Risk Assessment | API + Ứng dụng web | Xác suất trễ + phân phối các chặng | Risk Assessment lưu vào đơn, hiển thị trên giao diện |
+| A3.7 | Xem kết quả & chọn hành động | Nhân viên vận hành | Risk Assessment trên giao diện | Quyết định hành động |
 | A3.8a | Xử lý đơn bình thường | Nhân viên vận hành | Quyết định (rủi ro thấp) | Đơn vào luồng thường |
-| A3.8b | Thực hiện biện pháp can thiệp đúng nguyên nhân | Nhân viên vận hành | Quyết định (rủi ro cao) kèm nhóm nguyên nhân | Đơn được ưu tiên xử lý / đổi vận chuyển / thông báo khách |
-| A3.9 | Xác nhận đã thực hiện can thiệp | Nhân viên vận hành | Đơn đã can thiệp (A3.8b) | Trạng thái đơn → "đã xử lý" |
-| A3.10 | Đối chiếu nhãn dự đoán với kết quả giao hàng thực tế | Hệ thống (tự động, khi đơn chuyển trạng thái "đã giao") | Nhãn dự đoán đã lưu (A3.6), ngày giao thực tế | Kết quả đối chiếu (dự đoán đúng/sai) gắn vào bản ghi đơn |
+| A3.8b | Thực hiện biện pháp can thiệp đúng nguyên nhân | Nhân viên vận hành | Quyết định (rủi ro cao) kèm nhóm nguyên nhân | Đơn được ưu tiên xử lý / đổi vận chuyển / liên hệ thanh toán / thông báo khách |
+| A3.9 | Ghi nhận biện pháp và đánh dấu đã xử lý | Nhân viên vận hành | Risk Assessment rủi ro cao mới nhất đã can thiệp | Risk Assessment → "đã xử lý", kèm biện pháp và ghi chú |
+| A3.10 | Ghi nhận mốc vòng đời (sửa được mốc mới nhất khi chưa giao) | Nhân viên vận hành | Đơn chưa giao, mốc kế tiếp và thời điểm | Mốc được lưu, trạng thái đơn cập nhật; thanh toán duyệt / bàn giao → quay lại A3.4; đã giao → A3.11 |
+| A3.11 | Đối chiếu Risk Assessment với kết quả giao hàng thực tế | Hệ thống (tự động, khi ghi nhận đã giao) | Mọi Risk Assessment của đơn, ngày giao thực tế | Kết quả đối chiếu (đúng/sai) gắn vào từng Risk Assessment |
+| A3.12 | Hủy đơn | Nhân viên vận hành | Đơn chưa giao | Đơn "đã hủy", không còn việc cần xử lý, không đối chiếu |
+| A3.13 | Xem chỉ số độ tin cậy mô hình | Quản lý hậu cần | Báo cáo đánh giá lúc huấn luyện, kết quả đối chiếu tích lũy | Trang chỉ số mô hình |
 
-Giữa A3.7 và A3.8a/A3.8b có **cổng rẽ nhánh loại trừ (exclusive gateway — XOR)**, quyết định bởi phân loại mức rủi ro đã tính sẵn ở A3.6 (không còn là đánh giá chủ quan của nhân viên).
+Giữa A3.7 và A3.8a/A3.8b có **cổng rẽ nhánh loại trừ (exclusive gateway — XOR)**, quyết định bởi mức rủi ro đã tính sẵn ở A3.6 (không còn là đánh giá chủ quan của nhân viên).
 
-**Sự kiện:** bắt đầu — đơn hàng mới cần đánh giá rủi ro; trung gian — nhận kết quả từ API học máy, hoặc dữ liệu không hợp lệ (quay lại nhập), hoặc đơn chuyển trạng thái "đã giao"; kết thúc 1 — đơn được xử lý theo luồng bình thường; kết thúc 2 — đã thực hiện can thiệp và đánh dấu "đã xử lý"; kết thúc 3 — đã đối chiếu dự đoán với kết quả giao hàng thực tế (đóng vòng).
+**Sự kiện:** bắt đầu — đơn hàng mới phát sinh; trung gian — nhận Risk Assessment từ API, hoặc dữ liệu không hợp lệ (quay lại nhập), hoặc đơn qua một mốc mới; kết thúc 1 — đơn được xử lý theo luồng bình thường; kết thúc 2 — đã can thiệp và đánh dấu "đã xử lý"; kết thúc 3 — đơn đã giao và đã đối chiếu (đóng vòng); kết thúc 4 — đơn bị hủy.
 
-**Đối tượng nghiệp vụ:** Đơn hàng (mới → đã đánh giá rủi ro → đã xử lý thường/can thiệp → đã đối chiếu); Bộ tham số đầu vào (cân nặng, danh mục, hình thức thanh toán, cặp vùng gửi–nhận, thời điểm đặt hàng); Vec-tơ đặc trưng; Kết quả dự đoán (nhãn đúng hạn/trễ + xác suất + nhóm nguyên nhân rủi ro + phân loại cao/thấp); Trạng thái xử lý ("đã xử lý"/"chưa xử lý"); Kết quả đối chiếu dự đoán vs thực tế; Mô hình học máy (tệp đã huấn luyện, được API nạp).
+**Đối tượng nghiệp vụ:** Đơn hàng (mới → đã đánh giá → qua các mốc → đã giao và đối chiếu, hoặc đã hủy); Bộ tham số đầu vào; Vec-tơ đặc trưng; Risk Assessment (mốc, xác suất trễ, mức rủi ro, nhóm nguyên nhân, trạng thái xử lý, biện pháp, kết quả đối chiếu); Báo cáo đánh giá mô hình; Mô hình học máy (tệp đã huấn luyện, được backend nạp).
 
-**Giá trị nghiệp vụ** nằm ở bước A3.7→A3.8: dự đoán chỉ có ý nghĩa khi dẫn đến hành động can thiệp sớm và đúng nguyên nhân, biến quy trình từ **phản ứng** (khách phàn nàn mới biết trễ) sang **chủ động** (biết trước rủi ro để xử lý). Bước A3.9→A3.10 khép vòng đánh giá này lại: xác nhận can thiệp đã thực sự diễn ra, và đối chiếu dự đoán với kết quả thật để biết mô hình và biện pháp can thiệp có hiệu quả hay không.
+**Giá trị nghiệp vụ** nằm ở bước A3.7→A3.8: dự đoán chỉ có ý nghĩa khi dẫn đến hành động can thiệp sớm và đúng nguyên nhân, biến quy trình từ **phản ứng** (khách phàn nàn mới biết trễ) sang **chủ động** (biết trước rủi ro để xử lý). Việc đánh giá lại ở mỗi mốc giữ cho rủi ro luôn cập nhật theo diễn biến thật. Bước A3.9→A3.11 khép vòng: xác nhận can thiệp đã thực sự diễn ra, và đối chiếu dự đoán với kết quả thật để biết mô hình và biện pháp can thiệp có hiệu quả hay không.
 
 ```mermaid
 flowchart TD
-    Start3((Bắt đầu: đơn mới cần đánh giá rủi ro)) --> A3_1
+    Start3((Bắt đầu: đơn hàng mới)) --> A3_1
 
     subgraph NV3[Nhân viên vận hành]
-        A3_1["A3.1 Nhập thông tin đơn mới<br/>tự động điền nếu đã tồn tại"]
+        A3_1["A3.1 Tạo đơn mới"]
         A3_7[A3.7 Xem kết quả & chọn hành động]
         A3_8a[A3.8a Xử lý đơn bình thường]
-        A3_8b["A3.8b Can thiệp đúng nguyên nhân<br/>ưu tiên người bán / đổi vận chuyển / báo khách"]
-        A3_9[A3.9 Xác nhận đã thực hiện can thiệp]
+        A3_8b["A3.8b Can thiệp đúng nguyên nhân<br/>thanh toán / người bán / vận chuyển / báo khách"]
+        A3_9[A3.9 Ghi nhận biện pháp, đánh dấu đã xử lý]
+        A3_10{"A3.10 Ghi nhận mốc vòng đời"}
+        A3_12[A3.12 Hủy đơn]
     end
 
     subgraph VAL[Ứng dụng web / API]
@@ -193,17 +201,17 @@ flowchart TD
     end
 
     subgraph WEB3[Ứng dụng web]
-        A3_3[A3.3 Gửi yêu cầu dự đoán]
+        A3_3[A3.3 Gửi yêu cầu tạo đơn]
     end
 
-    subgraph ML[API dự đoán học máy]
+    subgraph ML["API (mô-đun dự đoán)"]
         A3_4[A3.4 Tiền xử lý & xây dựng đặc trưng]
-        A3_5[A3.5 Chạy mô hình dự đoán]
-        A3_6["A3.6 Phân loại rủi ro (ngưỡng 50%)<br/>lưu + hiển thị kết quả"]
+        A3_5["A3.5 Dự đoán phân phối chặng<br/>và xác suất trễ"]
+        A3_6["A3.6 Phân loại rủi ro, nguyên nhân<br/>lưu + hiển thị Risk Assessment"]
     end
 
     subgraph SYS[Hệ thống — tự động khi đơn đã giao]
-        A3_10["A3.10 Đối chiếu nhãn dự đoán<br/>với kết quả giao hàng thực tế"]
+        A3_11["A3.11 Đối chiếu Risk Assessment<br/>với kết quả giao hàng thực tế"]
     end
 
     A3_1 --> A3_2
@@ -211,23 +219,30 @@ flowchart TD
     A3_2 -->|hợp lệ| A3_3
     A3_3 --> A3_4 --> A3_5 --> A3_6 --> A3_7
 
-    A3_7 --> Gate{"Phân loại rủi ro<br/>đã tính sẵn ở A3.6"}
-    Gate -->|Thấp| A3_8a --> EndA((Kết thúc: luồng thường))
-    Gate -->|Cao + nhóm nguyên nhân| A3_8b --> A3_9 --> A3_10 --> EndB((Kết thúc: đã đóng vòng))
+    A3_7 --> Gate{"Mức rủi ro<br/>đã tính sẵn ở A3.6"}
+    Gate -->|Thấp| A3_8a --> A3_10
+    Gate -->|Cao + nhóm nguyên nhân| A3_8b --> A3_9 --> A3_10
+    A3_10 -->|thanh toán duyệt / bàn giao| A3_4
+    A3_10 -->|đã giao| A3_11 --> EndB((Kết thúc: đã đóng vòng))
+    A3_7 -.-> A3_12 --> EndC((Kết thúc: đơn đã hủy))
 ```
 
 **Định hướng mở rộng:**
 
-- **Huấn luyện lại mô hình định kỳ khi có thêm dữ liệu giao hàng thực tế** — thuộc vận hành hệ thống/MLOps, không có actor nghiệp vụ tương tác qua giao diện, nên không đưa vào bảng hoạt động này.
-- **Theo dõi model drift** (cảnh báo khi độ chính xác mô hình giảm dần) — phụ thuộc trực tiếp vào A3.10 (cần đủ dữ liệu đối chiếu trước mới tính được độ chính xác theo thời gian); chưa có ngưỡng cảnh báo cụ thể.
+- **Huấn luyện lại mô hình định kỳ khi có thêm dữ liệu giao hàng thực tế** — thuộc vận hành hệ thống/MLOps; cần thêm đường đưa đơn mới đã giao vào dữ liệu huấn luyện (ADR-0007).
+- **Cảnh báo model drift** — trang chỉ số mô hình (A3.13) đã hiển thị tỷ lệ đúng/sai tích lũy, nhưng chưa có ngưỡng cảnh báo cụ thể.
 - **Dự đoán hàng loạt (batch) cho nhiều đơn cùng lúc** — thay đổi cơ chế nhập liệu (upload file thay vì nhập form), nhưng định dạng file, giới hạn số lượng đơn mỗi lần chưa được xác định.
-- **Giải thích dự đoán (explainability)** — hiển thị yếu tố đóng góp nhiều nhất vào rủi ro của một đơn cụ thể, mở rộng tự nhiên từ A3.6; cơ chế tính toán cụ thể (phương pháp explainability nào) chưa được xác định.
+- **Giải thích dự đoán (explainability)** — nhóm nguyên nhân theo chặng mới là mức thô; hiển thị yếu tố đóng góp nhiều nhất trong từng chặng cần một phương pháp chưa được xác định.
+- **Sửa thông tin đơn sau khi tạo và lịch sử thay đổi** — hiện chỉ sửa được mốc mới nhất; nhập sai thông tin đơn thì hủy và tạo lại.
 
 ## 5. Giới hạn được chấp nhận
 
 - **Tần suất giám sát** chưa được định nghĩa thành chu kỳ cố định — chấp nhận: quản lý mở bảng điều khiển hoàn toàn theo nhu cầu, không có lịch cố định.
 - **Phân quyền dữ liệu theo vùng** chưa cần thiết — mọi người dùng xem được toàn bộ dữ liệu; vai trò hiện chỉ giới hạn quyền quản trị tài khoản. Cần xem lại khi có yêu cầu giới hạn dữ liệu theo vùng.
 - **Khóa tài khoản hoặc đổi vai trò có thể trễ tối đa 15 phút** mới có hiệu lực với phiên đang mở — chấp nhận đổi lấy việc không tra cơ sở dữ liệu ở mỗi yêu cầu (ADR-0006).
+- **Mô hình không học từ đơn mới** — đơn tạo trong Ship Guard đã giao không quay lại làm dữ liệu huấn luyện, và lịch sử người bán dùng làm đặc trưng dừng ở dữ liệu Olist năm 2018.
+- **Không dựng lại dữ liệu dẫn xuất sau khi đã có đơn mới** — script dựng tự dừng để không xóa đơn thật (ADR-0007).
+- **Khoảng trống trên biểu đồ xu hướng** giữa dữ liệu Olist (đến 2018) và đơn mới được chấp nhận; kỳ báo cáo mặc định vẫn cần tháng có ít nhất 100 đơn đã giao.
 
 ## 6. Định hướng mở rộng ngoài phạm vi
 
