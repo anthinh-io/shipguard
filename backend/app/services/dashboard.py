@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime, time, timedelta
 from typing import Literal
 
@@ -37,6 +38,11 @@ class ReportingPeriod(BaseModel):
 
 class TrendPoint(BaseModel):
     bucket_start: date
+    # Khoảng thật của nhóm, đã kẹp vào Reporting Period, tính cả hai đầu như
+    # start_date/end_date. bucket_start là mốc date_trunc nên có thể trước ngày đầu kỳ;
+    # drill-down chép nguyên hai giá trị này sang /orders thay vì tự suy từ bucket_start.
+    bucket_from: date
+    bucket_to: date
     delivered_orders: int
     late_orders: int
     # None nghĩa là nhóm rỗng — không có đơn nào giao trong khoảng đó — chứ không phải
@@ -314,6 +320,17 @@ def choose_granularity(period: ReportingPeriod) -> Granularity:
     return "month"
 
 
+def _bucket_end(bucket_start: date, granularity: Granularity) -> date:
+    # Ngày cuối của nhóm, chưa kẹp. Tuần của Postgres bắt đầu thứ Hai nên kết thúc Chủ
+    # nhật; tháng dài ngắn khác nhau nên phải hỏi lịch thay vì cộng một số ngày cố định.
+    if granularity == "day":
+        return bucket_start
+    if granularity == "week":
+        return bucket_start + timedelta(days=6)
+    _, days_in_month = calendar.monthrange(bucket_start.year, bucket_start.month)
+    return bucket_start.replace(day=days_in_month)
+
+
 async def compute_late_rate_trend(
     session: AsyncSession,
     filters: DashboardFilters,
@@ -380,6 +397,10 @@ async def compute_late_rate_trend(
     points = [
         TrendPoint(
             bucket_start=bucket_start.date(),
+            bucket_from=max(bucket_start.date(), period.start_date),
+            bucket_to=min(
+                _bucket_end(bucket_start.date(), granularity), period.end_date
+            ),
             delivered_orders=delivered,
             late_orders=late,
             late_rate=None if delivered == 0 else late / delivered,

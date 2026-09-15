@@ -102,9 +102,9 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
       orderStatus: ORDER_STATUSES.find((value) => value === orderStatus) ?? null,
       deliveryOutcome: DELIVERY_OUTCOMES.find((value) => value === deliveryOutcome) ?? null,
       // Một đầu thì bỏ cả khoảng: người mở link thấy danh sách chưa lọc theo khoảng đó,
-      // giống lúc mới chọn ngày đầu trên lịch.
-      purchased: parseDayRange(raw.purchased_from, raw.purchased_to),
-      delivered: parseDayRange(raw.delivered_from, raw.delivered_to),
+      // giống lúc mới chọn ngày đầu trên lịch. Một ngày thì giữ — xem parseDayRange.
+      purchased: parseDayRange(raw.purchased_from, raw.purchased_to, { allowSingleDay: true }),
+      delivered: parseDayRange(raw.delivered_from, raw.delivered_to, { allowSingleDay: true }),
       customerState: first(raw.customer_state) || null,
       sellerId: first(raw.seller_id) || null,
     },
@@ -148,4 +148,24 @@ export function toOrderListQuery(params: OrderListParams): string {
     query.set("page", String(params.page));
   }
   return query.toString();
+}
+
+// Đường liên kết drill-down từ bảng điều khiển (#25): đơn trễ đã giao trong `delivered`,
+// cùng bang và người bán đang lọc. Chỉ bộ lọc, không sắp xếp hay trang, và không có kỳ so
+// sánh — danh sách đơn không có khái niệm đó.
+export function lateOrdersQuery(
+  delivered: DayRange,
+  customerState: string | null,
+  sellerId: string | null,
+): string {
+  return toOrderListQuery({
+    ...DEFAULT_ORDER_LIST_PARAMS,
+    filters: {
+      ...EMPTY_ORDER_FILTERS,
+      deliveryOutcome: "late",
+      delivered,
+      customerState,
+      sellerId,
+    },
+  });
 }

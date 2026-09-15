@@ -1,7 +1,14 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  type MouseHandlerDataParam,
+} from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
@@ -17,6 +24,9 @@ type Granularity = "day" | "week" | "month";
 
 type TrendPoint = {
   bucket_start: string;
+  // Khoảng thật của nhóm, backend đã kẹp vào kỳ báo cáo — drill-down chép nguyên.
+  bucket_from: string;
+  bucket_to: string;
   delivered_orders: number;
   late_orders: number;
   late_rate: number | null;
@@ -30,12 +40,26 @@ type LateRateTrend = {
 export function LateRateTrendChart({
   trend,
   comparison,
+  onPointClick,
 }: {
   trend: LateRateTrend;
   comparison?: LateRateTrend | null;
+  // Luôn nhận điểm của kỳ đang xem, kể cả khi bấm lên đường kỳ đối chiếu: kỳ so sánh
+  // không mang sang danh sách đơn.
+  onPointClick?: (point: TrendPoint) => void;
 }) {
   const t = useTranslations("dashboard");
   const format = useFormatter();
+
+  // Gắn vào cả biểu đồ chứ không vào từng chấm: vùng click trùng vùng hiện tooltip có
+  // gợi ý, nên không có chỗ nào gợi ý hiện ra mà bấm lại không đi đâu. activeIndex của
+  // recharts 3 là chuỗi, và rỗng khi bấm ngoài vùng vẽ.
+  function handleChartClick({ activeIndex }: MouseHandlerDataParam) {
+    const point = activeIndex == null ? undefined : trend.points[Number(activeIndex)];
+    if (point && onPointClick) {
+      onPointClick(point);
+    }
+  }
 
   // Dựng trong component chứ không phải ở tầng module: ChartLegendContent chỉ đọc
   // `label` của chartConfig và không nhận formatter nào, nên nhãn phải được dịch ngay
@@ -86,7 +110,14 @@ export function LateRateTrendChart({
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>
-          <LineChart data={data} margin={{ left: 4, right: 12 }}>
+          {/* Con trỏ đặt qua style chứ không qua class trên ChartContainer: recharts
+              ghi cứng cursor: default lên .recharts-wrapper bằng style nội tuyến. */}
+          <LineChart
+            data={data}
+            margin={{ left: 4, right: 12 }}
+            onClick={onPointClick ? handleChartClick : undefined}
+            style={onPointClick ? { cursor: "pointer" } : undefined}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
@@ -117,12 +148,22 @@ export function LateRateTrendChart({
                     );
                     // Hai nhóm úp lên nhau theo chỉ số nhưng là hai ngày khác nhau;
                     // không nói ra thì người đọc tưởng cả hai đường cùng một mốc.
-                    return row.comparison_bucket_start
+                    const label = row.comparison_bucket_start
                       ? `${current} ↔ ${format.dateTime(
                           new Date(row.comparison_bucket_start),
                           "fullDate",
                         )}`
                       : current;
+                    return onPointClick ? (
+                      <>
+                        {label}
+                        <div className="font-normal text-muted-foreground">
+                          {t("drillDownHint")}
+                        </div>
+                      </>
+                    ) : (
+                      label
+                    );
                   }}
                   formatter={(value, name) => [
                     value === null || value === undefined
