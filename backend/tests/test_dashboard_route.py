@@ -74,6 +74,8 @@ async def test_response_shape(client: AsyncClient) -> None:
     if body["late_rate_trend"]["points"]:
         assert set(body["late_rate_trend"]["points"][0]) == {
             "bucket_start",
+            "bucket_from",
+            "bucket_to",
             "delivered_orders",
             "late_orders",
             "late_rate",

@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl";
 
 import { apiFetch } from "@/app/lib/api";
 import { toDashboardQuery, type DashboardFilters } from "@/app/lib/dashboard-filters";
+import { lateOrdersQuery } from "@/app/lib/order-list-params";
 import { FilterBar } from "./filter-bar";
 import { KpiDelta } from "./kpi-delta";
 import { KpiTile } from "./kpi-tile";
@@ -16,6 +17,7 @@ import { LateRateTrendChart } from "./late-rate-trend";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const DASHBOARD_PATH = "/";
+const ORDERS_PATH = "/orders";
 
 function buildDashboardUrl(filters: DashboardFilters): string {
   const query = toDashboardQuery(filters);
@@ -46,6 +48,8 @@ type Granularity = "day" | "week" | "month";
 
 type TrendPoint = {
   bucket_start: string;
+  bucket_from: string;
+  bucket_to: string;
   delivered_orders: number;
   late_orders: number;
   late_rate: number | null;
@@ -324,14 +328,41 @@ export default function Dashboard({ filters }: { filters: DashboardFilters }) {
         >
           {t("onTimeDefinition")}
         </p>
+        {/* Drill-down (#25): mở đúng các đơn trễ tạo nên con số vừa click, mang theo
+            bang và người bán đang lọc. Kỳ so sánh cố ý không mang sang. router.push để
+            Back về nguyên URL bảng điều khiển. */}
         <div className="mt-6">
           <LateRateTrendChart
             trend={state.data.late_rate_trend}
             comparison={state.data.comparison_late_rate_trend}
+            onPointClick={(point) =>
+              router.push(
+                `${ORDERS_PATH}?${lateOrdersQuery(
+                  { from: point.bucket_from, to: point.bucket_to },
+                  filters.customerState,
+                  filters.sellerId,
+                )}`,
+              )
+            }
           />
         </div>
         <div className="mt-6">
-          <LateRateByStateChart byState={state.data.late_rate_by_state} />
+          <LateRateByStateChart
+            byState={state.data.late_rate_by_state}
+            // Kỳ lấy từ phản hồi, không từ filters.range: kỳ mặc định không nằm trên URL.
+            onStateClick={
+              reporting_period
+                ? (customerState) =>
+                    router.push(
+                      `${ORDERS_PATH}?${lateOrdersQuery(
+                        { from: reporting_period.start_date, to: reporting_period.end_date },
+                        customerState,
+                        filters.sellerId,
+                      )}`,
+                    )
+                : undefined
+            }
+          />
         </div>
       </>
     );

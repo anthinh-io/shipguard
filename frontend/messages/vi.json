@@ -23,6 +23,7 @@
     "lateRate": "Tỷ lệ trễ",
     "trendCurrentSeries": "Kỳ đang xem",
     "trendComparisonSeries": "Kỳ đối chiếu",
+    "drillDownHint": "Xem đơn trễ",
     "deltaPercentagePoints": "{value} điểm phần trăm",
     "deltaDays": "{value} ngày",
     "deltaFlat": "Không đổi so với kỳ đối chiếu",

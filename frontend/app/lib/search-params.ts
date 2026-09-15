@@ -23,11 +23,19 @@ function isISODate(value: string | undefined): value is string {
 // sau đầu đầu: lịch không cho chọn khoảng ngược chiều hay chỉ một ngày (xem #9), nên
 // đường liên kết cũng không được dựng ra một bộ lọc mà giao diện không tạo nổi. Chuỗi
 // YYYY-MM-DD so theo thứ tự chữ là đúng thứ tự ngày.
+//
+// allowSingleDay chỉ /orders bật: drill-down từ biểu đồ (#25) dựng được khoảng một ngày
+// dù lịch không tạo được — nhóm theo ngày, hay nhóm tuần bị kẹp vào kỳ chỉ còn một ngày.
+// Bảng điều khiển giữ luật cũ vì không có đường nào dẫn tới kỳ một ngày ở đó.
 export function parseDayRange(
   from: string | string[] | undefined,
   to: string | string[] | undefined,
+  { allowSingleDay = false }: { allowSingleDay?: boolean } = {},
 ): DayRange | null {
   const start = first(from);
   const end = first(to);
-  return isISODate(start) && isISODate(end) && start < end ? { from: start, to: end } : null;
+  if (!isISODate(start) || !isISODate(end)) {
+    return null;
+  }
+  return start < end || (allowSingleDay && start === end) ? { from: start, to: end } : null;
 }

@@ -4,6 +4,7 @@ import {
   DEFAULT_ORDER_LIST_PARAMS,
   EMPTY_ORDER_FILTERS,
   hasActiveFilters,
+  lateOrdersQuery,
   parseOrderListParams,
   toOrderListQuery,
   type OrderListParams,
@@ -132,6 +133,47 @@ test("khoảng ngày thiếu một đầu, sai ngày hay ngược chiều thì b
   expect(
     toOrderListQuery(parseOrderListParams({ delivered_to: "2018-01-31", page: "2" })),
   ).toBe("page=2");
+});
+
+// Drill-down từ nhóm tuần bị kẹp chỉ còn một ngày, hay từ biểu đồ gom theo ngày, dựng ra
+// khoảng một ngày dù lịch không chọn được. Bỏ đi thì danh sách mở ra không lọc theo ngày
+// giao và số đơn lệch khỏi con số vừa click.
+test("khoảng ngày chỉ một ngày được giữ và ghi lại nguyên vẹn", () => {
+  const raw = {
+    purchased_from: "2018-03-04",
+    purchased_to: "2018-03-04",
+    delivered_from: "2018-05-28",
+    delivered_to: "2018-05-28",
+  };
+  const { filters } = parseOrderListParams(raw);
+
+  expect(filters.purchased).toEqual({ from: "2018-03-04", to: "2018-03-04" });
+  expect(filters.delivered).toEqual({ from: "2018-05-28", to: "2018-05-28" });
+  const query = toOrderListQuery({ ...DEFAULT_ORDER_LIST_PARAMS, filters });
+  expect(Object.fromEntries(new URLSearchParams(query))).toEqual(raw);
+});
+
+test("lateOrdersQuery dựng đúng bộ lọc đơn trễ, bỏ trống bang và người bán khi không có", () => {
+  const delivered = { from: "2018-01-03", to: "2018-01-07" };
+
+  const query = lateOrdersQuery(delivered, "SP", "seller-1");
+  expect(Object.fromEntries(new URLSearchParams(query))).toEqual({
+    delivery_outcome: "late",
+    delivered_from: "2018-01-03",
+    delivered_to: "2018-01-07",
+    customer_state: "SP",
+    seller_id: "seller-1",
+  });
+  // Không trang, không sắp xếp: danh sách mở ra ở mặc định, chỉ khác bộ lọc.
+  expect(lateOrdersQuery(delivered, null, null)).toBe(
+    "delivery_outcome=late&delivered_from=2018-01-03&delivered_to=2018-01-07",
+  );
+  // Đọc lại đúng như trang /orders sẽ đọc.
+  const reread = new URLSearchParams(lateOrdersQuery(delivered, "SP", null));
+  expect(parseOrderListParams(Object.fromEntries(reread))).toEqual({
+    ...DEFAULT_ORDER_LIST_PARAMS,
+    filters: { ...EMPTY_ORDER_FILTERS, deliveryOutcome: "late", delivered, customerState: "SP" },
+  });
 });
 
 test("bang và người bán rỗng thì không lọc", () => {

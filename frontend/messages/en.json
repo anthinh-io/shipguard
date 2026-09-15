@@ -23,6 +23,7 @@
     "lateRate": "Late rate",
     "trendCurrentSeries": "Current period",
     "trendComparisonSeries": "Comparison period",
+    "drillDownHint": "View late orders",
     "deltaPercentagePoints": "{value} percentage points",
     "deltaDays": "{value} days",
     "deltaFlat": "Unchanged from the comparison period",
