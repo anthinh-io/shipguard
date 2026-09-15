@@ -90,6 +90,33 @@ test("bấm Xuất CSV thì tải orders.csv theo đúng bộ lọc và thứ t�
   await expect(page.getByTestId("orders-export-error")).toHaveCount(0);
 });
 
+test("trong lúc tải, nút Xuất CSV bị vô hiệu và đổi nhãn", async ({ page }) => {
+  await mockOrders(page);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // Đăng ký sau nên được ưu tiên hơn mẫu chung của mockOrders; giữ phản hồi lại cho tới
+  // khi đã kiểm xong trạng thái đang tải.
+  await page.route(`${BACKEND_URL}/orders/export**`, async (route) => {
+    await held;
+    await route.fulfill({ body: CSV, contentType: "text/csv; charset=utf-8" });
+  });
+
+  await page.goto(`/orders?${LIST_QUERY}`);
+  await expect(page.getByTestId("order-row")).toHaveCount(1);
+  const download = page.waitForEvent("download");
+  await page.getByTestId("orders-export").click();
+
+  await expect(page.getByTestId("orders-export")).toHaveText("Đang xuất…");
+  await expect(page.getByTestId("orders-export")).toBeDisabled();
+
+  release();
+  await download;
+  await expect(page.getByTestId("orders-export")).toHaveText("Xuất CSV");
+  await expect(page.getByTestId("orders-export")).toBeEnabled();
+});
+
 test("máy chủ lỗi khi xuất thì báo lỗi, danh sách vẫn còn", async ({ page }) => {
   await mockOrders(page, 500);
 
