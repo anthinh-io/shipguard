@@ -171,6 +171,73 @@ async def test_trend_over_unfiltered_default_period_has_no_gaps(
     assert all(point.delivered_orders > 0 for point in trend.points)
 
 
+async def test_weekly_bucket_bounds_are_clamped_to_a_midweek_period(
+    session: AsyncSession,
+) -> None:
+    # Thứ Tư → thứ Năm: date_trunc kéo nhóm đầu lùi về thứ Hai 01/01 và nhóm cuối kết
+    # thúc Chủ nhật 18/03, cả hai đều tràn ra ngoài kỳ. Khoảng thật phải bị kẹp lại.
+    period = ReportingPeriod(start_date=date(2018, 1, 3), end_date=date(2018, 3, 15))
+
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
+
+    assert trend.granularity == "week"
+    first, *middle, last = trend.points
+    assert first.bucket_start == date(2018, 1, 1)
+    assert (first.bucket_from, first.bucket_to) == (date(2018, 1, 3), date(2018, 1, 7))
+    assert (last.bucket_from, last.bucket_to) == (date(2018, 3, 12), date(2018, 3, 15))
+    # Nhóm giữa kỳ không bị kẹp: đủ bảy ngày, từ thứ Hai tới Chủ nhật.
+    assert all(
+        point.bucket_from == point.bucket_start
+        and point.bucket_to == point.bucket_start + timedelta(days=6)
+        for point in middle
+    )
+
+
+async def test_weekly_edge_buckets_can_shrink_to_a_single_day(
+    session: AsyncSession,
+) -> None:
+    # Chủ nhật → thứ Hai: nhóm đầu chỉ còn ngày Chủ nhật, nhóm cuối chỉ còn ngày thứ Hai.
+    period = ReportingPeriod(start_date=date(2018, 3, 4), end_date=date(2018, 5, 28))
+
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
+
+    assert trend.granularity == "week"
+    first, last = trend.points[0], trend.points[-1]
+    assert first.bucket_from == first.bucket_to == date(2018, 3, 4)
+    assert last.bucket_from == last.bucket_to == date(2018, 5, 28)
+
+
+async def test_monthly_bucket_ends_on_the_last_day_of_the_month(
+    session: AsyncSession,
+) -> None:
+    period = await resolve_default_period(session)
+    assert period is not None
+
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
+
+    assert trend.granularity == "month"
+    assert (trend.points[0].bucket_from, trend.points[0].bucket_to) == (
+        date(2017, 9, 1),
+        date(2017, 9, 30),
+    )
+    assert trend.points[-1].bucket_to == date(2018, 8, 31)
+    # Tháng 2/2018 không nhuận: cuối tháng là ngày 28, không phải cộng cứng 30 ngày.
+    february = next(p for p in trend.points if p.bucket_start == date(2018, 2, 1))
+    assert february.bucket_to == date(2018, 2, 28)
+
+
+async def test_daily_bucket_is_its_own_day(session: AsyncSession) -> None:
+    period = ReportingPeriod(start_date=date(2018, 3, 1), end_date=date(2018, 3, 20))
+
+    trend = await compute_late_rate_trend(session, DashboardFilters(period=period))
+
+    assert trend.granularity == "day"
+    assert all(
+        point.bucket_from == point.bucket_to == point.bucket_start
+        for point in trend.points
+    )
+
+
 async def test_state_distribution_uses_customer_state_not_seller_state(
     session: AsyncSession,
 ) -> None:

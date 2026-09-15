@@ -23,6 +23,7 @@
     "lateRate": "Late rate",
     "trendCurrentSeries": "Current period",
     "trendComparisonSeries": "Comparison period",
+    "drillDownHint": "View late orders",
     "deltaPercentagePoints": "{value} percentage points",
     "deltaDays": "{value} days",
     "deltaFlat": "Unchanged from the comparison period",
@@ -45,6 +46,7 @@
       "sellerPlaceholder": "Type an id, state or city…",
       "sellerNoResults": "No sellers found",
       "sellerHint": "{state} · {city} · {count, number} orders",
+      "sellerHintDelivered": "{state} · {city} · {count, number} delivered",
       "comparison": "Comparison mode",
       "comparisonNone": "No comparison",
       "comparisonPrevious": "Previous period",
@@ -54,5 +56,247 @@
   "language": {
     "switchTo": "Tiếng Việt",
     "switchLabel": "Switch to Vietnamese"
+  },
+  "auth": {
+    "checking": "Checking your session…"
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalidCredentials": "Incorrect email or password.",
+    "unreachable": "Could not reach the server. Please try again."
+  },
+  "orders": {
+    "loading": "Loading orders…",
+    "error": "Could not load orders from the server ({detail}). Please try again.",
+    "errorDetail": {
+      "missingBackendUrl": "the NEXT_PUBLIC_BACKEND_URL environment variable is missing",
+      "httpStatus": "the server returned status {status}"
+    },
+    "searchLabel": "Search by order ID",
+    "searchPlaceholder": "Type the first few characters of an order ID…",
+    "export": "Export CSV",
+    "exporting": "Exporting…",
+    "exportError": "Could not export the file ({detail}). Please try again.",
+    "total": "{count, plural, one {# order} other {# orders}}",
+    "columns": {
+      "orderId": "Order ID",
+      "status": "Status",
+      "outcome": "Delivery outcome",
+      "purchasedAt": "Purchased",
+      "estimatedDeliveryDate": "Estimated delivery",
+      "deliveredAt": "Delivered",
+      "customerState": "State",
+      "orderValue": "Value"
+    },
+    "status": {
+      "created": "Created",
+      "approved": "Approved",
+      "invoiced": "Invoiced",
+      "processing": "Processing",
+      "shipped": "Shipped",
+      "delivered": "Delivered",
+      "canceled": "Canceled",
+      "unavailable": "Unavailable"
+    },
+    "outcome": {
+      "on_time": "On time",
+      "late": "Late",
+      "no_outcome": "No outcome yet"
+    },
+    "noMatch": "No order ID starts with “{orderId}”.",
+    "noMatchFilters": "No orders match the selected filters.",
+    "filters": {
+      "orderStatus": "Order status",
+      "allStatuses": "All statuses",
+      "deliveryOutcome": "Delivery outcome",
+      "allOutcomes": "All outcomes",
+      "purchasedRange": "Purchase date range",
+      "purchasedPlaceholder": "Purchase date",
+      "deliveredRange": "Delivery date range",
+      "deliveredPlaceholder": "Delivery date",
+      "clearAll": "Clear all filters"
+    },
+    "pageEmpty": "There are no orders on this page.",
+    "backToFirst": "Back to page 1",
+    "pagination": "Pagination",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "pageCount": "of {count, number}"
+  },
+  "orderDetail": {
+    "loading": "Loading order details…",
+    "error": "Couldn't load the order from the server ({detail}). Please try again.",
+    "notFound": "Order “{orderId}” was not found.",
+    "notAvailable": "Not yet",
+    "orderValue": "Order value",
+    "timeline": {
+      "title": "Timeline",
+      "purchasedAt": "Purchased",
+      "paymentApprovedAt": "Payment approved",
+      "handedToCarrierAt": "Handed to carrier",
+      "deliveredAt": "Delivered",
+      "estimatedDeliveryDate": "Estimated delivery date"
+    },
+    "stages": {
+      "title": "Stage durations",
+      "paymentApproval": "Payment approval",
+      "sellerHandling": "Seller handling",
+      "carrierTransit": "Carrier transit",
+      "days": "{value} days"
+    },
+    "items": {
+      "title": "Items",
+      "category": "Category",
+      "price": "Price",
+      "freight": "Freight",
+      "seller": "Seller",
+      "empty": "This order has no items."
+    },
+    "sellers": {
+      "title": "Sellers",
+      "empty": "This order has no sellers."
+    },
+    "address": {
+      "title": "Shipping address",
+      "city": "City",
+      "state": "State",
+      "zip": "ZIP code prefix"
+    },
+    "payments": {
+      "title": "Payments",
+      "type": "Method",
+      "installments": "Installments",
+      "value": "Amount",
+      "empty": "No payments recorded for this order.",
+      "types": {
+        "credit_card": "Credit card",
+        "boleto": "Boleto",
+        "voucher": "Voucher",
+        "debit_card": "Debit card",
+        "not_defined": "Not defined"
+      }
+    },
+    "reviews": {
+      "title": "Customer review",
+      "score": "{score}/5 stars",
+      "noComment": "No comment left.",
+      "empty": "No review for this order yet."
+    }
+  },
+  "orderNotes": {
+    "title": "Internal notes",
+    "placeholder": "Record how this order was handled…",
+    "submit": "Add note",
+    "submitting": "Adding…",
+    "appendOnlyHint": "Notes cannot be edited or deleted. To correct one, add a new note.",
+    "empty": "No notes yet.",
+    "loading": "Loading notes…",
+    "loadError": "Could not load notes ({detail}).",
+    "submitError": "Could not add the note ({detail}). Please try again.",
+    "blank": "The note cannot be empty.",
+    "tooLong": "The note is {length, number} characters long; the limit is 2,000.",
+    "rejected": "The server did not accept this note: it must be 1–2,000 characters long after trimming leading and trailing spaces.",
+    "byline": "{name} · {role} · {time}"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "orders": "Order management",
+    "admin": "Administration"
+  },
+  "sidebar": {
+    "toggle": "Toggle sidebar",
+    "mobileTitle": "Navigation",
+    "mobileDescription": "ShipGuard pages"
+  },
+  "roles": {
+    "operations_staff": "Operations Staff",
+    "logistics_manager": "Logistics Manager",
+    "super_admin": "Super Admin"
+  },
+  "userMenu": {
+    "changePassword": "Change password",
+    "logout": "Sign out",
+    "signingOut": "Signing out…",
+    "logoutFailed": "Could not reach the server, so you are still signed in. Try again before leaving this device."
+  },
+  "changePassword": {
+    "title": "Change password",
+    "description": "After the change, every other device signed in with this account will be signed out.",
+    "currentPassword": "Current password",
+    "newPassword": "New password (at least 8 characters)",
+    "confirmPassword": "Repeat new password",
+    "submit": "Save",
+    "submitting": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "success": "Password changed. Other devices will be signed out within 15 minutes.",
+    "wrongCurrent": "The current password is incorrect.",
+    "tooShort": "The new password must be at least 8 characters.",
+    "mismatch": "The two new passwords do not match.",
+    "unreachable": "Could not reach the server. Please try again."
+  },
+  "userAdmin": {
+    "loading": "Loading accounts…",
+    "error": "Could not load accounts from the server. Please try again.",
+    "forbidden": "You do not have permission to open the administration page.",
+    "create": "Create account",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "locked": "Locked"
+    },
+    "you": "(you)",
+    "actions": "Actions",
+    "changeRole": "Change role",
+    "lock": "Lock account",
+    "unlock": "Unlock account",
+    "resetPassword": "Reset password",
+    "actionFailed": "The action could not be completed. Please try again."
+  },
+  "createUser": {
+    "title": "Create account",
+    "description": "The new person can sign in right away with this email and initial password.",
+    "displayName": "Display name",
+    "email": "Email",
+    "role": "Role",
+    "password": "Initial password (at least 8 characters)",
+    "submit": "Create",
+    "submitting": "Creating…",
+    "cancel": "Cancel",
+    "emailTaken": "This email is already used by another account.",
+    "invalidEmail": "This email address is not valid.",
+    "blankName": "The display name cannot be blank.",
+    "tooShort": "The password must be at least 8 characters.",
+    "unreachable": "Could not reach the server. Please try again."
+  },
+  "lockUser": {
+    "title": "Lock this account?",
+    "description": "{name} will no longer be able to sign in. Open sessions end within 15 minutes.",
+    "confirm": "Lock",
+    "cancel": "Cancel"
+  },
+  "resetUserPassword": {
+    "title": "Reset password",
+    "description": "Set a new password for {name}. All their open sessions end within 15 minutes.",
+    "newPassword": "New password (at least 8 characters)",
+    "confirmPassword": "Repeat new password",
+    "submit": "Save",
+    "submitting": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "success": "Password reset for {name}.",
+    "tooShort": "The new password must be at least 8 characters.",
+    "mismatch": "The two new passwords do not match.",
+    "unreachable": "Could not reach the server. Please try again."
   }
 }

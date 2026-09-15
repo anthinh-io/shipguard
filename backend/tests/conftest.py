@@ -99,6 +99,28 @@ async def session(derived_data: dict[str, int]) -> AsyncIterator[AsyncSession]:
         await engine.dispose()
 
 
+# Chỉ phụ thuộc migration, không kéo bước nạp dữ liệu: test đăng nhập không đọc đơn hàng.
+# Dọn sạch mỗi test vì chỉ mục "đúng một super_admin" làm test phụ thuộc thứ tự nếu một
+# test để lại Super Admin cho test sau. order_notes phải xoá cùng lượt: ghi chú có khoá
+# ngoại tới tác giả, nên TRUNCATE users một mình bị từ chối.
+@pytest.fixture
+async def auth_session(test_database: None) -> AsyncIterator[AsyncSession]:
+    engine = create_async_engine(settings.TEST_DATABASE_URL)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as db:
+            await db.execute(
+                text(
+                    "TRUNCATE order_notes, user_claims, refresh_tokens, users "
+                    "RESTART IDENTITY"
+                )
+            )
+            await db.commit()
+            yield db
+    finally:
+        await engine.dispose()
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     async with _client_using_database(settings.TEST_DATABASE_URL) as async_client:
