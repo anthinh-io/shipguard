@@ -1,3 +1,6 @@
+import csv
+import io
+from collections.abc import AsyncIterator
 from datetime import date, datetime
 from typing import Literal
 
@@ -16,6 +19,8 @@ from app.models.raw import (
 from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 PAGE_SIZE = 50
+# Số dòng mỗi lần đọc từ con trỏ khi xuất CSV, cũng là số dòng mỗi mảnh gửi đi.
+EXPORT_BATCH = 1000
 
 OrderSort = Literal["purchased_at", "estimated_delivery_date", "delivered_at", "order_value"]
 SortDirection = Literal["asc", "desc"]
@@ -109,6 +114,47 @@ def _where(filters: OrderFilters) -> list[sa.ColumnElement[bool]]:
     return clauses
 
 
+def _list_statement(
+    filters: OrderFilters, sort: OrderSort, direction: SortDirection
+) -> sa.Select:
+    column = SORT_COLUMNS[sort]
+    ordering = column.asc() if direction == "asc" else column.desc()
+    # Ô trống luôn nằm cuối ở cả hai chiều: đơn chưa giao hay không có sản phẩm không
+    # phải là "nhỏ nhất" hay "lớn nhất". Chỉ gắn cho cột cho phép NULL — trên purchased_at,
+    # DESC NULLS LAST khiến Postgres bỏ chỉ mục và sắp cả bảng cho trang mặc định.
+    if column.nullable:
+        ordering = ordering.nulls_last()
+    return (
+        sa.select(
+            orders.c.order_id,
+            orders.c.order_status,
+            orders.c.purchased_at,
+            orders.c.estimated_delivery_date,
+            orders.c.delivered_to_customer_at,
+            orders.c.customer_state,
+            orders.c.order_value,
+            orders.c.is_late,
+            DELIVERED.label("is_delivered"),
+        )
+        .where(*_where(filters))
+        # order_id phá hoà để lật trang không trả trùng hay bỏ sót đơn.
+        .order_by(ordering, orders.c.order_id)
+    )
+
+
+def _to_item(row: sa.Row) -> OrderListItem:
+    return OrderListItem(
+        order_id=row.order_id,
+        order_status=row.order_status,
+        delivery_outcome=_delivery_outcome(row.is_delivered, row.is_late),
+        purchased_at=row.purchased_at,
+        estimated_delivery_date=row.estimated_delivery_date,
+        delivered_at=row.delivered_to_customer_at,
+        customer_state=row.customer_state,
+        order_value=row.order_value,
+    )
+
+
 async def list_orders(
     session: AsyncSession,
     filters: OrderFilters,
@@ -118,56 +164,60 @@ async def list_orders(
     page: int,
 ) -> OrderList:
     """Một trang danh sách đơn khớp mọi điều kiện trong `filters` cùng lúc."""
-    where = _where(filters)
-
-    total = await session.scalar(sa.select(sa.func.count()).select_from(orders).where(*where))
-
-    column = SORT_COLUMNS[sort]
-    ordering = column.asc() if direction == "asc" else column.desc()
-    # Ô trống luôn nằm cuối ở cả hai chiều: đơn chưa giao hay không có sản phẩm không
-    # phải là "nhỏ nhất" hay "lớn nhất". Chỉ gắn cho cột cho phép NULL — trên purchased_at,
-    # DESC NULLS LAST khiến Postgres bỏ chỉ mục và sắp cả bảng cho trang mặc định.
-    if column.nullable:
-        ordering = ordering.nulls_last()
+    total = await session.scalar(
+        sa.select(sa.func.count()).select_from(orders).where(*_where(filters))
+    )
     rows = (
         await session.execute(
-            sa.select(
-                orders.c.order_id,
-                orders.c.order_status,
-                orders.c.purchased_at,
-                orders.c.estimated_delivery_date,
-                orders.c.delivered_to_customer_at,
-                orders.c.customer_state,
-                orders.c.order_value,
-                orders.c.is_late,
-                DELIVERED.label("is_delivered"),
-            )
-            .where(*where)
-            # order_id phá hoà để lật trang không trả trùng hay bỏ sót đơn.
-            .order_by(ordering, orders.c.order_id)
+            _list_statement(filters, sort, direction)
             .limit(PAGE_SIZE)
             .offset((page - 1) * PAGE_SIZE)
         )
     ).all()
 
     return OrderList(
-        items=[
-            OrderListItem(
-                order_id=row.order_id,
-                order_status=row.order_status,
-                delivery_outcome=_delivery_outcome(row.is_delivered, row.is_late),
-                purchased_at=row.purchased_at,
-                estimated_delivery_date=row.estimated_delivery_date,
-                delivered_at=row.delivered_to_customer_at,
-                customer_state=row.customer_state,
-                order_value=row.order_value,
-            )
-            for row in rows
-        ],
+        items=[_to_item(row) for row in rows],
         total=total or 0,
         page=page,
         page_size=PAGE_SIZE,
     )
+
+
+async def export_orders_csv(
+    session: AsyncSession,
+    filters: OrderFilters,
+    *,
+    sort: OrderSort,
+    direction: SortDirection,
+) -> AsyncIterator[str]:
+    """Mọi đơn khớp `filters`, theo đúng thứ tự của list_orders, dưới dạng CSV từng lô.
+
+    Cột là tên trường của OrderListItem, nên file và một dòng /orders cùng một hợp đồng.
+    Đọc bằng con trỏ phía máy chủ theo lô, không nạp cả 99.441 dòng vào bộ nhớ một lần.
+    """
+    fields = list(OrderListItem.model_fields)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    def drain() -> str:
+        chunk = buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate()
+        return chunk
+
+    # BOM để Excel nhận ra UTF-8; thiếu nó Excel đọc theo bảng mã cục bộ và vỡ dấu.
+    writer.writerow(fields)
+    yield "﻿" + drain()
+
+    result = await session.stream(
+        _list_statement(filters, sort, direction).execution_options(yield_per=EXPORT_BATCH)
+    )
+    async for partition in result.partitions():
+        for row in partition:
+            # mode="json" cho ngày giờ dạng ISO giống hệt /orders; None thành ô trống.
+            item = _to_item(row).model_dump(mode="json")
+            writer.writerow([item[field] for field in fields])
+        yield drain()
 
 
 def _delivery_outcome(is_delivered: bool, is_late: bool | None) -> DeliveryOutcome:

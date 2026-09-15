@@ -2,6 +2,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import SessionDep, get_current_user
@@ -14,6 +15,7 @@ from app.services.orders import (
     OrderSort,
     OrderStatus,
     SortDirection,
+    export_orders_csv,
     get_order_detail,
     list_customer_states,
     list_orders,
@@ -88,6 +90,21 @@ async def orders(
 ) -> OrderList:
     return await list_orders(
         session, query.filters, sort=query.sort, direction=query.direction, page=page
+    )
+
+
+# Phải khai báo trước /orders/{order_id}, không thì "export" bị hiểu là một mã đơn và
+# nhận 404. Không có page: file gồm mọi đơn khớp bộ lọc, không chỉ trang đang xem.
+# Content-Disposition dành cho ai gọi thẳng; CORS không mở header này cho trình duyệt,
+# nên frontend tự đặt tên file.
+@router.get("/orders/export")
+async def export_orders(session: SessionDep, query: OrderQueryDep) -> StreamingResponse:
+    return StreamingResponse(
+        export_orders_csv(
+            session, query.filters, sort=query.sort, direction=query.direction
+        ),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="orders.csv"'},
     )
 
 

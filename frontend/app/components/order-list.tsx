@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
 import {
@@ -38,6 +38,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const ORDERS_PATH = "/orders";
+
+const EXPORT_FILENAME = "orders.csv";
 
 // Ô tìm đổi URL và gọi máy chủ, nên phải chờ người dùng ngừng gõ một nhịp.
 const SEARCH_DEBOUNCE_MS = 250;
@@ -79,6 +81,12 @@ type State =
   | { kind: "loading" }
   | { kind: "error"; failure: Failure }
   | { kind: "loaded"; data: OrderListData };
+
+function toFailure(error: unknown): Failure {
+  return error instanceof OrdersError
+    ? error.failure
+    : { kind: "network", detail: error instanceof Error ? error.message : String(error) };
+}
 
 async function fetchOrders(url: string): Promise<OrderListData> {
   if (!BACKEND_URL) {
@@ -132,18 +140,53 @@ export function OrderList({ params }: { params: OrderListParams }) {
         if (requested.current !== url) {
           return;
         }
-        setState({
-          kind: "error",
-          failure:
-            error instanceof OrdersError
-              ? error.failure
-              : {
-                  kind: "network",
-                  detail: error instanceof Error ? error.message : String(error),
-                },
-        });
+        setState({ kind: "error", failure: toFailure(error) });
       });
   }, [url]);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportFailure, setExportFailure] = useState<Failure | null>(null);
+
+  // Tải qua apiFetch rồi lưu blob chứ không dùng <a href> trỏ thẳng backend: thẻ <a> không
+  // mang được header Authorization, nên sẽ nhận 401. Bỏ page vì file gồm mọi trang.
+  async function handleExport() {
+    setExporting(true);
+    setExportFailure(null);
+    try {
+      if (!BACKEND_URL) {
+        throw new OrdersError({ kind: "missing_backend_url" });
+      }
+      const exportQuery = toOrderListQuery({ ...params, page: 1 });
+      const response = await apiFetch(
+        `${BACKEND_URL}/orders/export${exportQuery ? `?${exportQuery}` : ""}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new OrdersError({ kind: "http_status", status: response.status });
+      }
+      const href = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = EXPORT_FILENAME;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      // Thu hồi ngay sau click có thể cắt ngang lượt tải; đợi một nhịp cho trình duyệt nhận.
+      setTimeout(() => URL.revokeObjectURL(href), 0);
+    } catch (error) {
+      setExportFailure(toFailure(error));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function failureDetail(failure: Failure): string {
+    return failure.kind === "missing_backend_url"
+      ? t("errorDetail.missingBackendUrl")
+      : failure.kind === "http_status"
+        ? t("errorDetail.httpStatus", { status: failure.status })
+        : failure.detail;
+  }
 
   // Ô tìm giữ chữ đang gõ riêng, vì URL chỉ đổi sau nhịp chờ. Khi URL đổi từ ngoài — nút
   // Back, bấm lại mục sidebar — thì kéo ô tìm theo. Điều chỉnh ngay lúc render chứ không
@@ -187,16 +230,9 @@ export function OrderList({ params }: { params: OrderListParams }) {
       </p>
     );
   } else if (state.kind === "error") {
-    const { failure } = state;
-    const detail =
-      failure.kind === "missing_backend_url"
-        ? t("errorDetail.missingBackendUrl")
-        : failure.kind === "http_status"
-          ? t("errorDetail.httpStatus", { status: failure.status })
-          : failure.detail;
     content = (
       <p data-testid="orders-error" className="text-red-700 dark:text-red-400">
-        {t("error", { detail })}
+        {t("error", { detail: failureDetail(state.failure) })}
       </p>
     );
   } else if (state.data.total === 0) {
@@ -331,20 +367,40 @@ export function OrderList({ params }: { params: OrderListParams }) {
 
   return (
     <div data-testid="orders">
-      <InputGroup className="max-w-sm">
-        <InputGroupAddon>
-          <Search aria-hidden />
-        </InputGroupAddon>
-        <InputGroupInput
-          data-testid="orders-search"
-          aria-label={t("searchLabel")}
-          placeholder={t("searchPlaceholder")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          spellCheck={false}
-          autoComplete="off"
-        />
-      </InputGroup>
+      <div className="flex flex-wrap items-center gap-2">
+        <InputGroup className="max-w-sm">
+          <InputGroupAddon>
+            <Search aria-hidden />
+          </InputGroupAddon>
+          <InputGroupInput
+            data-testid="orders-search"
+            aria-label={t("searchLabel")}
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </InputGroup>
+        <Button
+          data-testid="orders-export"
+          variant="outline"
+          size="sm"
+          disabled={exporting}
+          onClick={handleExport}
+        >
+          <Download aria-hidden />
+          {exporting ? t("exporting") : t("export")}
+        </Button>
+      </div>
+      {exportFailure ? (
+        <p
+          data-testid="orders-export-error"
+          className="mt-2 text-sm text-red-700 dark:text-red-400"
+        >
+          {t("exportError", { detail: failureDetail(exportFailure) })}
+        </p>
+      ) : null}
       {/* push chứ không replace: mỗi lần đổi bộ lọc là một bước Back được. Đổi bộ lọc thì
           về trang 1, cùng lý do với ô tìm. */}
       <OrderFilterBar
