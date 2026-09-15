@@ -200,6 +200,7 @@
     "submitError": "Không gửi được ghi chú ({detail}). Vui lòng thử lại.",
     "blank": "Ghi chú không được để trống.",
     "tooLong": "Ghi chú dài {length, number} ký tự, tối đa 2.000.",
+    "rejected": "Máy chủ không nhận ghi chú này: nội dung phải dài 1–2.000 ký tự sau khi bỏ khoảng trắng hai đầu.",
     "byline": "{name} · {role} · {time}"
   },
   "nav": {

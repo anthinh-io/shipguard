@@ -208,7 +208,21 @@ test("ghi chú chỉ toàn khoảng trắng hoặc dài quá 2.000 ký tự thì
   expect(mock.posts).toHaveLength(0);
 });
 
-for (const status of [422, 500]) {
+// 422 là máy chủ từ chối nội dung (lọt qua kiểm ở trình duyệt, ví dụ khoảng trắng mà trim()
+// của JS không cắt nhưng strip() của Python cắt) — phải nói lý do, không chỉ mã lỗi.
+const SUBMIT_ERRORS = [
+  {
+    status: 422,
+    message:
+      "Máy chủ không nhận ghi chú này: nội dung phải dài 1–2.000 ký tự sau khi bỏ khoảng trắng hai đầu.",
+  },
+  {
+    status: 500,
+    message: "Không gửi được ghi chú (máy chủ trả về mã 500). Vui lòng thử lại.",
+  },
+];
+
+for (const { status, message } of SUBMIT_ERRORS) {
   test(`máy chủ trả ${status} thì báo không gửi được và giữ nguyên chữ đã gõ`, async ({ page }) => {
     const mock = await mockOrder(page, { postStatus: status });
     await page.goto(`/orders/${ORDER_ID}`);
@@ -216,9 +230,7 @@ for (const status of [422, 500]) {
     await page.getByTestId("order-notes-input").fill("Ghi chú bị từ chối");
     await page.getByTestId("order-notes-submit").click();
 
-    await expect(page.getByTestId("order-notes-error")).toHaveText(
-      `Không gửi được ghi chú (máy chủ trả về mã ${status}). Vui lòng thử lại.`,
-    );
+    await expect(page.getByTestId("order-notes-error")).toHaveText(message);
     await expect(page.getByTestId("order-notes-input")).toHaveValue("Ghi chú bị từ chối");
     await expect(page.getByTestId("order-note")).toHaveCount(2);
     expect(mock.posts).toHaveLength(1);
@@ -257,6 +269,31 @@ test("màn hình rộng: cuộn trang chi tiết dài thì khối ghi chú đứ
   expect(Math.abs(notesSecond.y - notesFirst.y)).toBeLessThan(2);
   expect(notesSecond.y).toBeCloseTo(16, 0);
   expect(notesSecond.x).toBeCloseTo(notesAtTop.x, 0);
+});
+
+test("màn hình rộng: ghi chú nhiều hơn một màn hình thì cột dính cuộn riêng, đọc được tới ghi chú cũ nhất", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const many = Array.from({ length: 30 }, (_, index) => ({
+    ...OLDER_NOTE,
+    id: 100 - index,
+    body: `Ghi chú số ${30 - index}: đã liên hệ hãng vận chuyển và cập nhật tình trạng cho khách.`,
+  }));
+  await mockOrder(page, { notes: many });
+  await page.goto(`/orders/${ORDER_ID}`);
+  await expect(page.getByTestId("order-note")).toHaveCount(30);
+
+  await page.evaluate(() => window.scrollTo(0, 400));
+  const column = page.getByTestId("order-notes-column");
+  const box = (await column.boundingBox())!;
+  // Cột không cao quá màn hình, nên không có ghi chú nào chỉ hiện khi cuộn tới cuối trang.
+  expect(box.y + box.height).toBeLessThanOrEqual(800);
+
+  const oldest = page.getByTestId("order-note").last();
+  await oldest.scrollIntoViewIfNeeded();
+  await expect(oldest).toBeInViewport();
+  expect(await column.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test("màn hình hẹp: khối ghi chú nằm cuối trang, dưới phần đánh giá, không cuộn ngang", async ({

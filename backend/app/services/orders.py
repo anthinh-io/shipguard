@@ -207,7 +207,7 @@ async def export_orders_csv(
 
     # BOM để Excel nhận ra UTF-8; thiếu nó Excel đọc theo bảng mã cục bộ và vỡ dấu.
     writer.writerow(fields)
-    yield "﻿" + drain()
+    yield "\ufeff" + drain()
 
     result = await session.stream(
         _list_statement(filters, sort, direction).execution_options(yield_per=EXPORT_BATCH)

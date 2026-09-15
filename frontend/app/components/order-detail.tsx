@@ -201,7 +201,12 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           <Payments data={data} />
           <Reviews data={data} />
         </div>
-        <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+        {/* Giới hạn cao bằng màn hình trừ top-4 hai đầu và cuộn riêng: không thì ghi chú
+            dài hơn một màn hình chỉ đọc được khi cuộn tới cuối trang. */}
+        <aside
+          data-testid="order-notes-column"
+          className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto"
+        >
           <OrderNotes orderId={data.order_id} />
         </aside>
       </div>
