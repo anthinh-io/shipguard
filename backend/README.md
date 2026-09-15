@@ -24,13 +24,17 @@ backend/
       deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
                    cho các endpoint
       routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
-                   /users, orders.py: /orders, /orders/export, /customer-states)
+                   /users, orders.py: /orders, /orders/export,
+                   /orders/{order_id}/notes, /customer-states)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
       users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
                    lại mật khẩu), tự đổi mật khẩu
+      order_notes.py
+                   Internal Note: đọc, thêm; không sửa, không xóa
       orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
-      queries.py   mảnh truy vấn dùng chung: vị ngữ DELIVERED, like_prefix
+      queries.py   mảnh truy vấn dùng chung: DELIVERED, like_prefix, within_days,
+                   sold_by
     scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
     alembic/       migration
   tests/
@@ -149,6 +153,14 @@ Danh sách rỗng nghĩa là đơn không có phần đó (775 đơn không có 
 không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra theo chỉ mục
 `order_id` trên ba bảng thô tương ứng (migration `0007_order_detail`).
 
+`GET /orders/{order_id}/notes` (đòi token) trả các `Internal Note` của đơn, mới nhất trên
+cùng: `{"id", "body", "created_at", "author": {"display_name", "role"}}`. `POST` cùng
+đường dẫn với `{"body": "..."}` thêm một ghi chú mang tên người đang đăng nhập và trả 201.
+Nội dung cắt khoảng trắng hai đầu, còn 1–2.000 ký tự, ngoài khoảng đó trả 422. Mã đơn
+không tồn tại trả 404 ở cả hai phương thức. Không có PATCH hay DELETE: ghi nhầm thì thêm
+ghi chú đính chính. `created_at` là mốc thật có múi giờ, không theo quy ước UTC của dữ liệu
+Olist. Tác giả `Locked User` vẫn hiện tên.
+
 ## Đăng nhập
 
 Cơ chế token theo `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`: access
@@ -223,6 +235,13 @@ tên trần là tầng dẫn xuất.
 | `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
 | `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+| `order_notes` | Internal Note — bảng nghiệp vụ, không phải bảng dẫn xuất |
+
+`order_notes.order_id` cố ý không có khoá ngoại tới `orders`. `build_derived_data`
+TRUNCATE rồi dựng lại `orders`, nên khoá ngoại sẽ chặn bước dựng, hoặc xóa lan mọi ghi chú
+nếu thêm CASCADE. Tầng dịch vụ tự kiểm đơn tồn tại khi thêm ghi chú. Dựng lại dữ liệu dẫn
+xuất không đụng tới ghi chú. Test `auth_session` TRUNCATE `order_notes` cùng `users`, vì
+ghi chú có khoá ngoại tới tác giả.
 
 Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
 mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
