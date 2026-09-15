@@ -24,7 +24,7 @@ backend/
       deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
                    cho các endpoint
       routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
-                   /users, orders.py: /orders)
+                   /users, orders.py: /orders, /orders/export, /customer-states)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
       users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
@@ -102,6 +102,15 @@ Các bộ lọc kết hợp với nhau bằng AND. Khoảng ngày xét nửa m�
 nửa đêm ngày đầu, `<` nửa đêm sau ngày cuối) để còn dùng được chỉ mục, nên đơn đặt lúc
 02:30 ngày cuối vẫn được tính. Bộ lọc `late` ra 6.534 đơn; nếu thấy 6.535 là đã tính
 nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì theo ngày.
+
+`GET /orders/export` (đòi token) nhận đúng bộ tham số lọc và sắp xếp của `GET /orders`,
+không có `page`, và stream **mọi** đơn khớp dưới dạng `text/csv` UTF-8 có BOM. Thiếu
+BOM thì Excel đọc sai dấu. Dòng đầu là tên trường của một dòng `/orders`. Ô trống là
+giá trị `null`. `order_id` đủ 32 ký tự. Hai endpoint đọc tham số qua cùng một
+dependency `order_query`, nên không bao giờ lệch nhau. Route này phải khai báo trước
+`/orders/{order_id}`, không thì `export` bị hiểu là một mã đơn. Trình duyệt tải bằng
+`fetch` kèm token rồi lưu blob, vì một thẻ `<a href>` không mang được header
+`Authorization`.
 
 `GET /customer-states` (đòi token) trả mảng mọi bang có đơn, sắp tăng dần, không áp bộ
 lọc nào — tuỳ chọn cho ô chọn bang của trang đơn hàng. Khác danh sách bang trong
