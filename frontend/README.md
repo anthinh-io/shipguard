@@ -78,7 +78,8 @@ frontend/
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI; bộ lọc
                          đọc từ và ghi lên URL; click điểm xu hướng hoặc cột
-                         bang mở /orders với đơn trễ
+                         bang mở /orders với đơn trễ, kể cả chạm hay bấm khi
+                         chưa rê chuột
       filter-bar.tsx     Client Component: thanh lọc bảng điều khiển
       date-range-picker.tsx, customer-state-select.tsx, seller-combobox.tsx
                          Client Component: ô chọn khoảng ngày, bang, người bán
@@ -144,7 +145,8 @@ frontend/
                          trình duyệt
       drill-down.spec.ts Playwright: drill-down từ biểu đồ (giả lập máy chủ) —
                          gợi ý và con trỏ, URL /orders đúng bộ lọc không kèm kỳ
-                         so sánh, Back, song ngữ
+                         so sánh, chạm hay bấm khi chưa rê chỉ thêm một mục
+                         lịch sử, Back, song ngữ
       i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
                          lại, và quy ước số/ngày của từng ngôn ngữ
       auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
