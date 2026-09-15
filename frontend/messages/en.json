@@ -205,7 +205,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "orders": "Orders",
+    "orders": "Order management",
     "admin": "Administration"
   },
   "sidebar": {
