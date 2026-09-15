@@ -42,12 +42,13 @@ frontend/
                          mới token, login, logout, changePassword
       next-path.ts       safeNextPath: chỉ nhận đường dẫn quay lại nội bộ
       search-params.ts   dùng chung khi đọc URL: first, parseDayRange (bỏ cả
-                         khoảng nếu thiếu một đầu, sai ngày hay ngược chiều)
+                         khoảng nếu thiếu một đầu, sai ngày hay ngược chiều; một
+                         ngày chỉ nhận khi bật allowSingleDay, chỉ /orders dùng)
       dashboard-filters.ts
                          đọc/ghi bộ lọc bảng điều khiển trên URL
       order-list-params.ts
                          đọc/ghi tìm kiếm, bộ lọc, sắp xếp, trang của /orders
-                         trên URL
+                         trên URL; lateOrdersQuery (URL drill-down từ biểu đồ)
       order-format.ts    BRL, utcDay, utcTimestamp, màu nhãn kết quả giao — dùng
                          chung cho danh sách và chi tiết đơn
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
@@ -76,7 +77,8 @@ frontend/
                          lại mật khẩu cho người khác
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI; bộ lọc
-                         đọc từ và ghi lên URL
+                         đọc từ và ghi lên URL; click điểm xu hướng hoặc cột
+                         bang mở /orders với đơn trễ
       filter-bar.tsx     Client Component: thanh lọc bảng điều khiển
       date-range-picker.tsx, customer-state-select.tsx, seller-combobox.tsx
                          Client Component: ô chọn khoảng ngày, bang, người bán
@@ -134,6 +136,9 @@ frontend/
       dashboard-filters.spec.ts
                          kiểm đọc/ghi bộ lọc bảng điều khiển trên URL, không mở
                          trình duyệt
+      drill-down.spec.ts Playwright: drill-down từ biểu đồ (giả lập máy chủ) —
+                         gợi ý và con trỏ, URL /orders đúng bộ lọc không kèm kỳ
+                         so sánh, Back, song ngữ
       i18n.spec.ts       Playwright: đổi ngôn ngữ, giữ lựa chọn sau khi tải
                          lại, và quy ước số/ngày của từng ngôn ngữ
       auth.spec.ts       Playwright: chặn khi chưa đăng nhập, quay lại đúng
@@ -261,6 +266,10 @@ Server Component đọc prop `searchParams`, chuẩn hoá rồi truyền xuống
 Component; client đổi URL bằng `router.push` / `router.replace` và Next dựng lại
 trang với tham số mới. Đừng dùng `useSearchParams` — nó bắt buộc bọc
 `<Suspense>`, thiếu thì `next build` hỏng.
+
+Drill-down từ bảng điều khiển chỉ là một đường liên kết `/orders?...` dựng bằng
+`lateOrdersQuery`, không truyền trạng thái nào khác. Kỳ so sánh không mang sang. Back
+quay về URL bảng điều khiển còn nguyên bộ lọc.
 
 Ngôn ngữ nằm trong cookie `NEXT_LOCALE`, không nằm trong đường dẫn, nên **không
 có thư mục `app/[locale]/` và không có `middleware.ts`** — đừng thêm vào, phần
