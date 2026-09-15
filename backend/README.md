@@ -80,6 +80,12 @@ Kiểm tra tiếp: `curl http://localhost:8000/dashboard -H 'Authorization: Bear
 định kèm khối KPI; thiếu token thì 401. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
 số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
 
+Mỗi điểm của `late_rate_trend.points` có `bucket_start` (mốc `date_trunc`, có thể trước
+ngày đầu kỳ; tuần tính từ thứ Hai), cùng `bucket_from` / `bucket_to` là khoảng thật của
+điểm đó, đã kẹp vào kỳ báo cáo và tính cả hai đầu. Drill-down chép nguyên hai giá trị
+này vào `delivered_from` / `delivered_to` của `/orders`, cộng `delivery_outcome=late`.
+`total` nhận về đúng bằng `late_orders` của điểm.
+
 `GET /orders` (cũng đòi token) trả một trang 50 đơn: `{"items", "total", "page",
 "page_size"}`. Tham số, đều không bắt buộc:
 
