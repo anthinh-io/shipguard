@@ -1,10 +1,10 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, get_current_user
 from app.services.dashboard import (
     ComparisonMode,
     DashboardFilters,
@@ -24,7 +24,9 @@ from app.services.dashboard import (
     search_sellers,
 )
 
-router = APIRouter(tags=["dashboard"])
+# Khóa ở mức router chứ không gắn vào từng handler: route số liệu không cần biết ai đang
+# gọi, chỉ cần chắc là đã đăng nhập — và route mới thêm vào đây tự được khóa theo.
+router = APIRouter(tags=["dashboard"], dependencies=[Depends(get_current_user)])
 
 
 class FilterOptions(BaseModel):
@@ -126,5 +128,8 @@ async def sellers(
     session: SessionDep,
     q: str = "",
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    # Bảng điều khiển chỉ tính đơn đã giao nên mặc định chỉ gợi ý người bán có đơn đã
+    # giao. Danh sách đơn gửi false để chọn được cả người bán chưa có đơn nào giao xong.
+    delivered_only: bool = True,
 ) -> list[SellerOption]:
-    return await search_sellers(session, q, limit)
+    return await search_sellers(session, q, limit, delivered_only=delivered_only)

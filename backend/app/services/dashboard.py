@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime, time, timedelta
 from typing import Literal
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.derived import order_sellers, orders, sellers
+from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 # Bộ Olist thực chất kết thúc tháng 8/2018: tháng 9 chỉ còn 56 đơn giao, tháng 10 chỉ
 # còn 3. Không có ngưỡng thì kỳ mặc định kéo tới tận những tháng đó, tỷ lệ dựng trên
@@ -28,15 +30,6 @@ WEEKLY_MAX_SPAN_DAYS = 183  # "dưới 6 tháng" → kỳ 182 ngày gom theo tu�
 # Small Sample theo CONTEXT.md: dưới 30 đơn sau khi lọc. Đúng 30 đơn KHÔNG bị gắn cờ.
 SMALL_SAMPLE_MAX_ORDERS = 30
 
-# Delivered Order theo CONTEXT.md: đơn đã tới tay khách và có ngày giao thực tế. Đây là
-# tập đơn duy nhất được tính vào KPI — bảng dẫn xuất cố ý giữ mọi đơn kèm cột trạng
-# thái, việc lọc thuộc về truy vấn KPI. Dựng bằng Core chứ không phải chuỗi SQL để các
-# truy vấn sau còn ghép thêm điều kiện lọc và mệnh đề gom nhóm lên trên.
-DELIVERED = sa.and_(
-    orders.c.order_status == "delivered",
-    orders.c.delivered_to_customer_at.is_not(None),
-)
-
 
 class ReportingPeriod(BaseModel):
     start_date: date
@@ -45,6 +38,11 @@ class ReportingPeriod(BaseModel):
 
 class TrendPoint(BaseModel):
     bucket_start: date
+    # Khoảng thật của nhóm, đã kẹp vào Reporting Period, tính cả hai đầu như
+    # start_date/end_date. bucket_start là mốc date_trunc nên có thể trước ngày đầu kỳ;
+    # drill-down chép nguyên hai giá trị này sang /orders thay vì tự suy từ bucket_start.
+    bucket_from: date
+    bucket_to: date
     delivered_orders: int
     late_orders: int
     # None nghĩa là nhóm rỗng — không có đơn nào giao trong khoảng đó — chứ không phải
@@ -114,14 +112,7 @@ def _where(filters: DashboardFilters) -> list[sa.ColumnElement[bool]]:
         # Đơn ghép nhiều người bán vì vậy thuộc về MỌI người bán tham gia — đúng
         # CONTEXT.md mục Multi-Seller Order, và là nguồn của sai lệch ~1,3% đã chấp
         # nhận trong #1. Đừng khử.
-        clauses.append(
-            sa.exists().where(
-                sa.and_(
-                    order_sellers.c.order_id == orders.c.order_id,
-                    order_sellers.c.seller_id == filters.seller_id,
-                )
-            )
-        )
+        clauses.append(sold_by(filters.seller_id))
     return clauses
 
 
@@ -276,15 +267,10 @@ async def compute_kpis(session: AsyncSession, filters: DashboardFilters) -> Dash
 
 
 def _delivered_within(period: ReportingPeriod) -> sa.ColumnElement[bool]:
-    # Chặn bằng dấu thời gian thay vì ép delivered_to_customer_at::date, để chỉ mục
-    # ix_orders_delivered_to_customer_at còn dùng được. Cận trên là nửa đêm đầu ngày kế
-    # tiếp, nên kết quả trùng khít với phép so ở mức ngày lịch.
-    return sa.and_(
-        orders.c.delivered_to_customer_at >= datetime.combine(
-            period.start_date, time.min
-        ),
-        orders.c.delivered_to_customer_at
-        < datetime.combine(period.end_date + timedelta(days=1), time.min),
+    # Khoảng nửa mở trên dấu thời gian để ix_orders_delivered_to_customer_at còn dùng
+    # được — xem within_days.
+    return within_days(
+        orders.c.delivered_to_customer_at, period.start_date, period.end_date
     )
 
 
@@ -332,6 +318,17 @@ def choose_granularity(period: ReportingPeriod) -> Granularity:
     if span_days < WEEKLY_MAX_SPAN_DAYS:
         return "week"
     return "month"
+
+
+def _bucket_end(bucket_start: date, granularity: Granularity) -> date:
+    # Ngày cuối của nhóm, chưa kẹp. Tuần của Postgres bắt đầu thứ Hai nên kết thúc Chủ
+    # nhật; tháng dài ngắn khác nhau nên phải hỏi lịch thay vì cộng một số ngày cố định.
+    if granularity == "day":
+        return bucket_start
+    if granularity == "week":
+        return bucket_start + timedelta(days=6)
+    _, days_in_month = calendar.monthrange(bucket_start.year, bucket_start.month)
+    return bucket_start.replace(day=days_in_month)
 
 
 async def compute_late_rate_trend(
@@ -400,6 +397,10 @@ async def compute_late_rate_trend(
     points = [
         TrendPoint(
             bucket_start=bucket_start.date(),
+            bucket_from=max(bucket_start.date(), period.start_date),
+            bucket_to=min(
+                _bucket_end(bucket_start.date(), granularity), period.end_date
+            ),
             delivered_orders=delivered,
             late_orders=late,
             late_rate=None if delivered == 0 else late / delivered,
@@ -461,16 +462,8 @@ async def list_customer_states(session: AsyncSession) -> list[str]:
     return [row.customer_state for row in rows]
 
 
-def _like_prefix(query: str) -> str:
-    # seller_city nhận chuỗi tự do người dùng gõ vào, nên "%" và "_" phải thành ký tự
-    # thường. Không thoát thì gõ đúng một dấu "%" sẽ khớp toàn bộ 3.095 người bán.
-    # Dấu chéo ngược phải thoát trước, nếu không nó sẽ thoát nhầm hai lần sau đó.
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"{escaped}%"
-
-
 async def search_sellers(
-    session: AsyncSession, query: str, limit: int
+    session: AsyncSession, query: str, limit: int, *, delivered_only: bool = True
 ) -> list[SellerOption]:
     """Gợi ý người bán cho ô gõ dần, khớp tiền tố trên mã, bang và thành phố.
 
@@ -481,13 +474,22 @@ async def search_sellers(
     tuỳ chọn cho bộ lọc nên chọn một tuỳ chọn không được làm biến mất hay thu nhỏ các
     lựa chọn còn lại. Hệ quả cần biết: một gợi ý ghi 45 đơn vẫn có thể chạm ngưỡng mẫu
     nhỏ sau khi người dùng áp thêm khoảng thời gian hay bang.
+
+    `delivered_only=False` là cho danh sách đơn, vốn gồm cả đơn chưa giao: khi đó người
+    bán chưa có đơn nào giao xong vẫn được gợi ý, với `delivered_orders` bằng 0.
     """
     # Chuỗi rỗng khớp mọi thứ, và đổ cả 3.095 dòng ra không phải là "gợi ý".
     if not query.strip():
         return []
 
-    pattern = _like_prefix(query.strip())
-    delivered_orders = sa.func.count().label("delivered_orders")
+    pattern = like_prefix(query.strip())
+    matches = sa.or_(
+        sellers.c.seller_id.ilike(pattern, escape="\\"),
+        sellers.c.seller_state.ilike(pattern, escape="\\"),
+        sellers.c.seller_city.ilike(pattern, escape="\\"),
+    )
+    # Số trên gợi ý luôn là số đơn đã giao, ở cả hai chế độ; chỉ tập người bán đổi.
+    delivered_orders = sa.func.count().filter(DELIVERED).label("delivered_orders")
     statement = (
         sa.select(
             sellers.c.seller_id,
@@ -498,16 +500,7 @@ async def search_sellers(
         .select_from(sellers)
         .join(order_sellers, order_sellers.c.seller_id == sellers.c.seller_id)
         .join(orders, orders.c.order_id == order_sellers.c.order_id)
-        .where(
-            sa.and_(
-                DELIVERED,
-                sa.or_(
-                    sellers.c.seller_id.ilike(pattern, escape="\\"),
-                    sellers.c.seller_state.ilike(pattern, escape="\\"),
-                    sellers.c.seller_city.ilike(pattern, escape="\\"),
-                ),
-            )
-        )
+        .where(sa.and_(DELIVERED, matches) if delivered_only else matches)
         .group_by(sellers.c.seller_id, sellers.c.seller_city, sellers.c.seller_state)
         # Xếp theo số đơn giảm dần là chủ ý, không phải theo độ khớp: gõ tên bang hay
         # thành phố thì người dùng muốn thấy đối tác lớn trước. Hoà thì theo mã để kết

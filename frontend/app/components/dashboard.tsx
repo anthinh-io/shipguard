@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 
-import { EMPTY_FILTERS, FilterBar, type Filters } from "./filter-bar";
+import { apiFetch } from "@/app/lib/api";
+import { toDashboardQuery, type DashboardFilters } from "@/app/lib/dashboard-filters";
+import { lateOrdersQuery } from "@/app/lib/order-list-params";
+import { FilterBar } from "./filter-bar";
 import { KpiDelta } from "./kpi-delta";
 import { KpiTile } from "./kpi-tile";
 import { LateRateByStateChart } from "./late-rate-by-state";
@@ -12,24 +16,11 @@ import { LateRateTrendChart } from "./late-rate-trend";
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-function buildDashboardUrl(filters: Filters): string {
-  const params = new URLSearchParams();
-  // null nghĩa là không gắn tham số đó — backend tự giải kỳ mặc định hoặc không lọc
-  // bang, đúng hành vi "chưa chọn gì" chứ không phải một nhánh riêng.
-  if (filters.range) {
-    params.set("start_date", filters.range.from);
-    params.set("end_date", filters.range.to);
-  }
-  if (filters.customerState) {
-    params.set("customer_state", filters.customerState);
-  }
-  if (filters.seller) {
-    params.set("seller_id", filters.seller.seller_id);
-  }
-  if (filters.comparison) {
-    params.set("comparison", filters.comparison);
-  }
-  const query = params.toString();
+const DASHBOARD_PATH = "/";
+const ORDERS_PATH = "/orders";
+
+function buildDashboardUrl(filters: DashboardFilters): string {
+  const query = toDashboardQuery(filters);
   return `${BACKEND_URL}/dashboard${query ? `?${query}` : ""}`;
 }
 
@@ -57,6 +48,8 @@ type Granularity = "day" | "week" | "month";
 
 type TrendPoint = {
   bucket_start: string;
+  bucket_from: string;
+  bucket_to: string;
   delivered_orders: number;
   late_orders: number;
   late_rate: number | null;
@@ -115,7 +108,7 @@ async function fetchDashboard(url: string): Promise<DashboardData> {
   if (!BACKEND_URL) {
     throw new DashboardError({ kind: "missing_backend_url" });
   }
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await apiFetch(url, { cache: "no-store" });
   // Phản hồi lỗi của FastAPI vẫn là JSON hợp lệ — 422 khi ngày sai định dạng chẳng
   // hạn — nên phải chặn theo mã trạng thái, không thể chỉ dựa vào json() ném hay không.
   if (!response.ok) {
@@ -124,12 +117,24 @@ async function fetchDashboard(url: string): Promise<DashboardData> {
   return (await response.json()) as DashboardData;
 }
 
-export default function Dashboard() {
+export default function Dashboard({ filters }: { filters: DashboardFilters }) {
   const t = useTranslations("dashboard");
   const format = useFormatter();
+  const router = useRouter();
   const [state, setState] = useState<State>({ kind: "loading" });
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const url = buildDashboardUrl(filters);
+
+  // URL là nguồn sự thật duy nhất của bộ lọc (#24): không giữ bản sao trong state, bản
+  // sao là thứ lệch đi khi người dùng bấm Back. Mỗi lần đổi là một mục lịch sử để Back
+  // về đúng bộ lọc ngay trước; không còn bộ lọc nào thì về đường dẫn trần, không để lại
+  // "?" trơ trọi trông như vẫn mang bộ lọc.
+  function handleFiltersChange(next: DashboardFilters) {
+    const nextQuery = toDashboardQuery(next);
+    if (nextQuery === toDashboardQuery(filters)) {
+      return;
+    }
+    router.push(nextQuery ? `${DASHBOARD_PATH}?${nextQuery}` : DASHBOARD_PATH);
+  }
   // Strict Mode gọi effect mount hai lần ở chế độ phát triển và không có lớp nào gộp
   // fetch trần, nên không chặn thì mỗi lần mở trang sinh hai lần gọi máy chủ.
   // AbortController không thay thế được chốt này: request đã huỷ vẫn là một request.
@@ -323,14 +328,41 @@ export default function Dashboard() {
         >
           {t("onTimeDefinition")}
         </p>
+        {/* Drill-down (#25): mở đúng các đơn trễ tạo nên con số vừa click, mang theo
+            bang và người bán đang lọc. Kỳ so sánh cố ý không mang sang. router.push để
+            Back về nguyên URL bảng điều khiển. */}
         <div className="mt-6">
           <LateRateTrendChart
             trend={state.data.late_rate_trend}
             comparison={state.data.comparison_late_rate_trend}
+            onPointClick={(point) =>
+              router.push(
+                `${ORDERS_PATH}?${lateOrdersQuery(
+                  { from: point.bucket_from, to: point.bucket_to },
+                  filters.customerState,
+                  filters.sellerId,
+                )}`,
+              )
+            }
           />
         </div>
         <div className="mt-6">
-          <LateRateByStateChart byState={state.data.late_rate_by_state} />
+          <LateRateByStateChart
+            byState={state.data.late_rate_by_state}
+            // Kỳ lấy từ phản hồi, không từ filters.range: kỳ mặc định không nằm trên URL.
+            onStateClick={
+              reporting_period
+                ? (customerState) =>
+                    router.push(
+                      `${ORDERS_PATH}?${lateOrdersQuery(
+                        { from: reporting_period.start_date, to: reporting_period.end_date },
+                        customerState,
+                        filters.sellerId,
+                      )}`,
+                    )
+                : undefined
+            }
+          />
         </div>
       </>
     );
@@ -345,7 +377,7 @@ export default function Dashboard() {
         customerStates={
           state.kind === "loaded" ? state.data.filter_options.customer_states : []
         }
-        onChange={setFilters}
+        onChange={handleFiltersChange}
       />
       {content}
     </>

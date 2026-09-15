@@ -8,13 +8,21 @@ orders = sa.Table(
     sa.Column("order_id", sa.Text, primary_key=True),
     sa.Column("order_status", sa.Text, nullable=False),
     sa.Column("customer_state", sa.Text, nullable=False, index=True),
-    sa.Column("purchased_at", sa.DateTime, nullable=False),
+    # Địa chỉ giao cho trang chi tiết đơn. Mã bưu chính là chuỗi 5 chữ số chứ không phải
+    # số: cột thô là số nguyên nên đã mất số 0 đầu — xem build_derived_data.py.
+    sa.Column("customer_city", sa.Text),
+    sa.Column("customer_zip_code_prefix", sa.Text),
+    sa.Column("purchased_at", sa.DateTime, nullable=False, index=True),
     sa.Column("payment_approved_at", sa.DateTime),
     sa.Column("handed_to_carrier_at", sa.DateTime),
     sa.Column("delivered_to_customer_at", sa.DateTime, index=True),
     sa.Column("estimated_delivery_date", sa.Date, nullable=False),
     # Điểm thấp nhất trong các đánh giá của đơn — xem build_derived_data.py.
     sa.Column("worst_review_score", sa.SmallInteger),
+    # Order Value theo CONTEXT.md: tổng price + freight_value của các sản phẩm, NULL khi
+    # đơn không có sản phẩm nào. Không phải số tiền đã thanh toán — 303 đơn lệch tổng
+    # thanh toán hơn 1 xu, và như vậy là đúng.
+    sa.Column("order_value", sa.Numeric(12, 2)),
     sa.Column(
         "payment_approval",
         sa.Interval,
@@ -45,6 +53,16 @@ orders = sa.Table(
             "delivered_to_customer_at::date > estimated_delivery_date", persisted=True
         ),
     ),
+)
+
+# Tìm mã đơn khớp tiền tố không phân biệt hoa thường. Khoá chính không dùng được: CSDL
+# chạy collation en_US.utf8, mà btree theo collation đó không phục vụ LIKE 'abc%';
+# text_pattern_ops thì có. ILIKE không đi qua chỉ mục nào kiểu này, nên truy vấn phải
+# viết đúng dạng lower(order_id) LIKE ... để khớp biểu thức.
+sa.Index(
+    "ix_orders_order_id_prefix",
+    sa.func.lower(orders.c.order_id).label("order_id_lower"),
+    postgresql_ops={"order_id_lower": "text_pattern_ops"},
 )
 
 order_sellers = sa.Table(

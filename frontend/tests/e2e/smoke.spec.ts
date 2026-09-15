@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { signInForReal } from "./session";
+
 // Trình duyệt gọi thẳng backend (ADR-0002), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
@@ -12,6 +14,7 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "vi", url: "http://localhost:3000" },
   ]);
+  await signInForReal(context);
 });
 
 // Không khẳng định vào giá trị KPI cụ thể: dữ liệu nạp lại được và kỳ mặc định tính
@@ -89,4 +92,61 @@ test("số liệu chưa về thì hiện trạng thái đang tải", async ({ pa
   await expect(page.getByTestId("dashboard-loading")).toBeVisible();
   await expectKpiTiles(page);
   await expect(page.getByTestId("dashboard-loading")).toHaveCount(0);
+});
+
+// Khác ô KPI ở trên, các con số này không đổi theo kỳ mặc định: tổng số đơn, đơn giá trị
+// lớn nhất và mã "e481f5" là bất biến của bộ CSV — chính là bộ số vàng của #19.
+test("trang Đơn hàng chạy thật: tổng số đơn, tìm theo mã và sắp theo giá trị", async ({
+  page,
+}) => {
+  await page.goto("/orders");
+
+  await expect(page.getByTestId("orders-total")).toHaveText("99.441 đơn");
+  await expect(page.getByTestId("order-row")).toHaveCount(50);
+
+  await page.getByTestId("orders-search").fill("E481F5");
+  await expect(page.getByTestId("orders-total")).toHaveText("1 đơn");
+  await expect(page.getByTestId("order-row")).toHaveCount(1);
+
+  await page.goto("/orders?sort=order_value");
+  await expect(
+    page.getByTestId("order-row").first().getByRole("cell").last(),
+  ).toHaveText("R$ 13.664,08");
+});
+
+// Bộ số vàng của #20, cũng là bất biến của bộ CSV. 6.534 chứ không phải 6.535 (tính cả đơn
+// đã hủy có ngày giao) hay 7.826 (so theo giờ thay vì theo ngày).
+test("thanh lọc đơn hàng chạy thật: trạng thái, kết quả giao và trọn khoảng ngày đặt", async ({
+  page,
+}) => {
+  await page.goto("/orders?order_status=shipped");
+  await expect(page.getByTestId("orders-total")).toHaveText("1.107 đơn");
+
+  await page.goto("/orders?delivery_outcome=late");
+  await expect(page.getByTestId("orders-total")).toHaveText("6.534 đơn");
+
+  await page.goto("/orders?purchased_from=2016-09-04&purchased_to=2018-10-17");
+  await expect(page.getByTestId("orders-total")).toHaveText("99.441 đơn");
+
+  await page.getByTestId("filter-clear-all").click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(page.getByTestId("orders-total")).toHaveText("99.441 đơn");
+});
+
+test("trang chi tiết đơn chạy thật: mở từ danh sách, đủ các phần, Back về đúng danh sách", async ({
+  page,
+}) => {
+  await page.goto("/orders?order_id=e481f5");
+  await expect(page.getByTestId("orders-total")).toHaveText("1 đơn");
+
+  await page.getByTestId("order-id").click();
+
+  await expect(page.getByTestId("order-detail-id")).toHaveText("e481f51cbdc54678b7cc49136f2d6af7");
+  await expect(page.getByTestId("timeline-purchased-at")).toHaveText("10:56 02/10/2017");
+  await expect(page.getByTestId("order-item")).toHaveCount(1);
+  await expect(page.getByTestId("order-payment").first()).toBeVisible();
+  await expect(page.getByTestId("order-address")).toContainText("sao paulo");
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/orders\?order_id=e481f5$/);
 });

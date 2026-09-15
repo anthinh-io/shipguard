@@ -23,6 +23,7 @@
     "lateRate": "Tỷ lệ trễ",
     "trendCurrentSeries": "Kỳ đang xem",
     "trendComparisonSeries": "Kỳ đối chiếu",
+    "drillDownHint": "Xem đơn trễ",
     "deltaPercentagePoints": "{value} điểm phần trăm",
     "deltaDays": "{value} ngày",
     "deltaFlat": "Không đổi so với kỳ đối chiếu",
@@ -45,6 +46,7 @@
       "sellerPlaceholder": "Gõ mã, bang hoặc thành phố…",
       "sellerNoResults": "Không tìm thấy người bán nào",
       "sellerHint": "{state} · {city} · {count, number} đơn",
+      "sellerHintDelivered": "{state} · {city} · {count, number} đơn đã giao",
       "comparison": "Chế độ so sánh",
       "comparisonNone": "Không so sánh",
       "comparisonPrevious": "Kỳ liền trước",
@@ -54,5 +56,247 @@
   "language": {
     "switchTo": "English",
     "switchLabel": "Chuyển sang tiếng Anh"
+  },
+  "auth": {
+    "checking": "Đang kiểm tra phiên đăng nhập…"
+  },
+  "login": {
+    "title": "Đăng nhập",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "submit": "Đăng nhập",
+    "submitting": "Đang đăng nhập…",
+    "invalidCredentials": "Email hoặc mật khẩu không đúng.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "orders": {
+    "loading": "Đang tải danh sách đơn…",
+    "error": "Không lấy được danh sách đơn từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "searchLabel": "Tìm theo mã đơn",
+    "searchPlaceholder": "Gõ vài ký tự đầu của mã đơn…",
+    "export": "Xuất CSV",
+    "exporting": "Đang xuất…",
+    "exportError": "Không xuất được file ({detail}). Vui lòng thử lại.",
+    "total": "{count, number} đơn",
+    "columns": {
+      "orderId": "Mã đơn",
+      "status": "Trạng thái",
+      "outcome": "Kết quả giao",
+      "purchasedAt": "Ngày đặt",
+      "estimatedDeliveryDate": "Ngày cam kết",
+      "deliveredAt": "Ngày giao",
+      "customerState": "Bang",
+      "orderValue": "Giá trị"
+    },
+    "status": {
+      "created": "Mới tạo",
+      "approved": "Đã duyệt",
+      "invoiced": "Đã xuất hóa đơn",
+      "processing": "Đang xử lý",
+      "shipped": "Đang vận chuyển",
+      "delivered": "Đã giao",
+      "canceled": "Đã hủy",
+      "unavailable": "Không có hàng"
+    },
+    "outcome": {
+      "on_time": "Đúng hạn",
+      "late": "Trễ",
+      "no_outcome": "Chưa có kết quả"
+    },
+    "noMatch": "Không có đơn nào có mã bắt đầu bằng “{orderId}”.",
+    "noMatchFilters": "Không có đơn nào khớp các bộ lọc đang chọn.",
+    "filters": {
+      "orderStatus": "Trạng thái đơn",
+      "allStatuses": "Mọi trạng thái",
+      "deliveryOutcome": "Kết quả giao",
+      "allOutcomes": "Mọi kết quả giao",
+      "purchasedRange": "Khoảng ngày đặt",
+      "purchasedPlaceholder": "Ngày đặt",
+      "deliveredRange": "Khoảng ngày giao",
+      "deliveredPlaceholder": "Ngày giao",
+      "clearAll": "Xoá hết bộ lọc"
+    },
+    "pageEmpty": "Trang này không có đơn nào.",
+    "backToFirst": "Về trang 1",
+    "pagination": "Phân trang",
+    "previous": "Trang trước",
+    "next": "Trang sau",
+    "page": "Trang",
+    "pageCount": "/ {count, number}"
+  },
+  "orderDetail": {
+    "loading": "Đang tải chi tiết đơn…",
+    "error": "Không lấy được chi tiết đơn từ máy chủ ({detail}). Vui lòng thử lại.",
+    "notFound": "Không tìm thấy đơn “{orderId}”.",
+    "notAvailable": "Chưa có",
+    "orderValue": "Giá trị đơn",
+    "timeline": {
+      "title": "Dòng thời gian",
+      "purchasedAt": "Đặt hàng",
+      "paymentApprovedAt": "Duyệt thanh toán",
+      "handedToCarrierAt": "Bàn giao vận chuyển",
+      "deliveredAt": "Giao hàng",
+      "estimatedDeliveryDate": "Ngày cam kết"
+    },
+    "stages": {
+      "title": "Thời gian từng chặng",
+      "paymentApproval": "Chặng duyệt thanh toán",
+      "sellerHandling": "Chặng người bán xử lý",
+      "carrierTransit": "Chặng vận chuyển",
+      "days": "{value} ngày"
+    },
+    "items": {
+      "title": "Sản phẩm",
+      "category": "Danh mục",
+      "price": "Giá",
+      "freight": "Phí vận chuyển",
+      "seller": "Người bán",
+      "empty": "Đơn này không có sản phẩm nào."
+    },
+    "sellers": {
+      "title": "Người bán",
+      "empty": "Đơn này chưa có người bán nào."
+    },
+    "address": {
+      "title": "Địa chỉ giao",
+      "city": "Thành phố",
+      "state": "Bang",
+      "zip": "Mã bưu chính"
+    },
+    "payments": {
+      "title": "Thanh toán",
+      "type": "Hình thức",
+      "installments": "Số kỳ trả góp",
+      "value": "Giá trị",
+      "empty": "Đơn này chưa có thanh toán nào.",
+      "types": {
+        "credit_card": "Thẻ tín dụng",
+        "boleto": "Boleto",
+        "voucher": "Phiếu mua hàng",
+        "debit_card": "Thẻ ghi nợ",
+        "not_defined": "Không xác định"
+      }
+    },
+    "reviews": {
+      "title": "Đánh giá của khách",
+      "score": "{score}/5 sao",
+      "noComment": "Khách không để lại bình luận.",
+      "empty": "Đơn này chưa có đánh giá."
+    }
+  },
+  "orderNotes": {
+    "title": "Ghi chú nội bộ",
+    "placeholder": "Ghi lại cách đơn này đã được xử lý…",
+    "submit": "Gửi ghi chú",
+    "submitting": "Đang gửi…",
+    "appendOnlyHint": "Ghi chú không sửa hay xóa được. Ghi nhầm thì thêm một ghi chú đính chính.",
+    "empty": "Chưa có ghi chú nào.",
+    "loading": "Đang tải ghi chú…",
+    "loadError": "Không lấy được ghi chú ({detail}).",
+    "submitError": "Không gửi được ghi chú ({detail}). Vui lòng thử lại.",
+    "blank": "Ghi chú không được để trống.",
+    "tooLong": "Ghi chú dài {length, number} ký tự, tối đa 2.000.",
+    "rejected": "Máy chủ không nhận ghi chú này: nội dung phải dài 1–2.000 ký tự sau khi bỏ khoảng trắng hai đầu.",
+    "byline": "{name} · {role} · {time}"
+  },
+  "nav": {
+    "dashboard": "Bảng điều khiển",
+    "orders": "Quản lý đơn hàng",
+    "admin": "Quản trị"
+  },
+  "sidebar": {
+    "toggle": "Đóng/mở thanh bên",
+    "mobileTitle": "Thanh điều hướng",
+    "mobileDescription": "Các trang của ShipGuard"
+  },
+  "roles": {
+    "operations_staff": "Nhân viên vận hành",
+    "logistics_manager": "Quản lý hậu cần",
+    "super_admin": "Super Admin"
+  },
+  "userMenu": {
+    "changePassword": "Đổi mật khẩu",
+    "logout": "Đăng xuất",
+    "signingOut": "Đang đăng xuất…",
+    "logoutFailed": "Chưa đăng xuất được vì không kết nối được máy chủ — bạn vẫn đang đăng nhập. Hãy thử lại trước khi rời máy."
+  },
+  "changePassword": {
+    "title": "Đổi mật khẩu",
+    "description": "Sau khi đổi, mọi thiết bị khác đang đăng nhập bằng tài khoản này sẽ bị đăng xuất.",
+    "currentPassword": "Mật khẩu hiện tại",
+    "newPassword": "Mật khẩu mới (tối thiểu 8 ký tự)",
+    "confirmPassword": "Nhập lại mật khẩu mới",
+    "submit": "Lưu",
+    "submitting": "Đang lưu…",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "success": "Đã đổi mật khẩu. Các thiết bị khác sẽ bị đăng xuất trong vòng 15 phút.",
+    "wrongCurrent": "Mật khẩu hiện tại không đúng.",
+    "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự.",
+    "mismatch": "Hai lần nhập mật khẩu mới không khớp.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "userAdmin": {
+    "loading": "Đang tải danh sách tài khoản…",
+    "error": "Không lấy được danh sách tài khoản từ máy chủ. Vui lòng thử lại.",
+    "forbidden": "Bạn không có quyền truy cập trang quản trị.",
+    "create": "Tạo tài khoản",
+    "columns": {
+      "name": "Tên",
+      "email": "Email",
+      "role": "Vai trò",
+      "status": "Trạng thái"
+    },
+    "status": {
+      "active": "Đang hoạt động",
+      "locked": "Đã khóa"
+    },
+    "you": "(bạn)",
+    "actions": "Thao tác",
+    "changeRole": "Đổi vai trò",
+    "lock": "Khóa tài khoản",
+    "unlock": "Mở khóa",
+    "resetPassword": "Đặt lại mật khẩu",
+    "actionFailed": "Không thực hiện được thao tác. Vui lòng thử lại."
+  },
+  "createUser": {
+    "title": "Tạo tài khoản",
+    "description": "Người mới đăng nhập được ngay bằng email và mật khẩu ban đầu này.",
+    "displayName": "Tên hiển thị",
+    "email": "Email",
+    "role": "Vai trò",
+    "password": "Mật khẩu ban đầu (tối thiểu 8 ký tự)",
+    "submit": "Tạo",
+    "submitting": "Đang tạo…",
+    "cancel": "Hủy",
+    "emailTaken": "Email này đã được dùng cho một tài khoản khác.",
+    "invalidEmail": "Email không hợp lệ.",
+    "blankName": "Tên hiển thị không được để trống.",
+    "tooShort": "Mật khẩu phải có ít nhất 8 ký tự.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+  },
+  "lockUser": {
+    "title": "Khóa tài khoản?",
+    "description": "{name} sẽ không đăng nhập được nữa. Các phiên đang mở bị đăng xuất chậm nhất sau 15 phút.",
+    "confirm": "Khóa",
+    "cancel": "Hủy"
+  },
+  "resetUserPassword": {
+    "title": "Đặt lại mật khẩu",
+    "description": "Đặt mật khẩu mới cho {name}. Mọi phiên đang mở của họ bị đăng xuất chậm nhất sau 15 phút.",
+    "newPassword": "Mật khẩu mới (tối thiểu 8 ký tự)",
+    "confirmPassword": "Nhập lại mật khẩu mới",
+    "submit": "Lưu",
+    "submitting": "Đang lưu…",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "success": "Đã đặt lại mật khẩu cho {name}.",
+    "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự.",
+    "mismatch": "Hai lần nhập mật khẩu mới không khớp.",
+    "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
   }
 }

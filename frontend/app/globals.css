@@ -11,10 +11,13 @@ html {
   height: 100%;
 }
 
+/* clip chứ không hidden: hidden kéo overflow-y thành auto theo quy tắc lan truyền của CSS,
+   biến body thành khung cuộn riêng nên position: sticky (cột ghi chú trang chi tiết đơn)
+   mất mốc. clip chặn cuộn ngang y như vậy mà không lan. */
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {

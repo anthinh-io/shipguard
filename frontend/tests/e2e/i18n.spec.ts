@@ -1,9 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { signInForReal, switchLanguage } from "./session";
+
 // Trình duyệt gọi thẳng backend (ADR-0002), nên mẫu chặn phải bám địa chỉ backend chứ
 // không phải địa chỉ của trang.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const DASHBOARD_API = `${BACKEND_URL}/dashboard**`;
+
+// Không ghim NEXT_LOCALE ở đây: một bài trong tệp này kiểm chính ngôn ngữ mặc định. Đăng
+// nhập chỉ thêm cookie refresh token, không đụng tới cookie ngôn ngữ.
+test.beforeEach(async ({ context }) => {
+  await signInForReal(context);
+});
 
 // Dữ liệu thật nạp lại được nên con số đổi mà hành vi vẫn đúng, không khẳng định vào
 // được. Bộ số cố định dưới đây mở ra một việc khác: kiểm quy ước định dạng của từng
@@ -51,7 +59,7 @@ test("đổi ngôn ngữ thì mọi nhãn trên bảng điều khiển đổi th
   await expect(page.getByTestId("kpi-late-orders")).toContainText("Đơn giao trễ");
   await expect(page.getByTestId("reporting-period")).toContainText("Kỳ báo cáo:");
 
-  await page.getByTestId("language-toggle").click();
+  await switchLanguage(page);
 
   await expect(page.getByTestId("kpi-on-time-rate")).toContainText("On-time rate");
   await expect(page.getByTestId("kpi-late-orders")).toContainText("Late orders");
@@ -60,7 +68,7 @@ test("đổi ngôn ngữ thì mọi nhãn trên bảng điều khiển đổi th
 
 test("tải lại trang vẫn giữ ngôn ngữ đã chọn", async ({ page }) => {
   await page.goto("/");
-  await page.getByTestId("language-toggle").click();
+  await switchLanguage(page);
   await expect(page.getByTestId("kpi-late-orders")).toContainText("Late orders");
 
   await page.reload();
@@ -81,7 +89,7 @@ test("mặc định là tiếng Việt khi chưa chọn gì", async ({ page }) =
 test("đổi ngôn ngữ không thêm tiền tố nào vào đường dẫn", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByTestId("language-toggle").click();
+  await switchLanguage(page);
   await expect(page.getByTestId("kpi-late-orders")).toContainText("Late orders");
 
   expect(new URL(page.url()).pathname).toBe("/");
@@ -100,7 +108,7 @@ test("số và ngày hiển thị đúng quy ước của từng ngôn ngữ", a
     "01/09/2017 – 31/08/2018",
   );
 
-  await page.getByTestId("language-toggle").click();
+  await switchLanguage(page);
 
   // Tiếng Anh: dấu chấm thập phân, dấu phẩy phân nhóm, và thứ tự tháng/ngày/năm.
   await expect(page.getByTestId("kpi-on-time-rate")).toContainText(/93\.23\s*%/);

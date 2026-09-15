@@ -15,14 +15,27 @@ trường ảo duy nhất ở gốc, `backend/` là một thành viên.
 ```
 backend/
   app/
-    main.py        khởi tạo FastAPI, gắn router
-    core/          cấu hình và kết nối cơ sở dữ liệu
+    main.py        khởi tạo FastAPI, gắn router, tạo Super Admin lúc khởi động
+    core/          cấu hình, kết nối cơ sở dữ liệu, bảo mật
       config.py    đọc .env ở gốc repo
       db.py        engine, session, lớp Base của model
+      security.py  băm mật khẩu, ký và xác minh access token
     api/
-      deps.py      SessionDep — phụ thuộc session dùng chung cho mọi endpoint
-      routes/      mỗi tệp một nhóm endpoint
-    services/      tính KPI từ bảng dẫn xuất; route chỉ đọc tham số và gọi vào đây
+      deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
+                   cho các endpoint
+      routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
+                   /users, orders.py: /orders, /orders/export,
+                   /orders/{order_id}/notes, /customer-states)
+    services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
+      auth.py      đăng nhập, cấp và xoay vòng refresh token
+      users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
+                   lại mật khẩu), tự đổi mật khẩu
+      order_notes.py
+                   Internal Note: đọc, thêm; không sửa, không xóa
+      orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
+      queries.py   mảnh truy vấn dùng chung: DELIVERED, like_prefix, within_days,
+                   sold_by
+    scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
     alembic/       migration
   tests/
   alembic.ini
@@ -33,7 +46,8 @@ Bố cục theo `fastapi/full-stack-fastapi-template`.
 
 ## Khởi động
 
-Chép tệp môi trường rồi điền `POSTGRES_USER` và `POSTGRES_PASSWORD` của bạn:
+Chép tệp môi trường rồi điền `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
+và ba biến `SUPER_ADMIN_*` của bạn:
 
 ```bash
 cp .env.example .env
@@ -65,9 +79,151 @@ Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
 endpoint trả mã 503 kèm `{"status":"degraded","database":"disconnected"}`.
 
-Kiểm tra tiếp: `curl http://localhost:8000/dashboard` trả về kỳ báo cáo mặc định
-kèm khối KPI. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
+Kiểm tra tiếp: `curl http://localhost:8000/dashboard -H 'Authorization: Bearer
+<access_token>'` (lấy token ở mục [Đăng nhập](#đăng-nhập)) trả về kỳ báo cáo mặc
+định kèm khối KPI; thiếu token thì 401. Truyền `?start_date=...&end_date=...` để chọn kỳ khác — hai tham
 số phải đi cùng nhau, thiếu một bên thì endpoint trả mã 422.
+
+Mỗi điểm của `late_rate_trend.points` có `bucket_start` (mốc `date_trunc`, có thể trước
+ngày đầu kỳ; tuần tính từ thứ Hai), cùng `bucket_from` / `bucket_to` là khoảng thật của
+điểm đó, đã kẹp vào kỳ báo cáo và tính cả hai đầu. Drill-down chép nguyên hai giá trị
+này vào `delivered_from` / `delivered_to` của `/orders`, cộng `delivery_outcome=late`.
+`total` nhận về đúng bằng `late_orders` của điểm.
+
+`GET /orders` (cũng đòi token) trả một trang 50 đơn: `{"items", "total", "page",
+"page_size"}`. Tham số, đều không bắt buộc:
+
+| Tham số | Giá trị | Mặc định |
+| --- | --- | --- |
+| `order_id` | Tiền tố mã đơn, không phân biệt hoa thường; `%` và `_` là ký tự thường | không lọc |
+| `order_status` | Một trong tám `Order Status`: `created`, `approved`, `invoiced`, `processing`, `shipped`, `delivered`, `canceled`, `unavailable` | không lọc |
+| `delivery_outcome` | `on_time`, `late`, `no_outcome` — cùng định nghĩa với cột `delivery_outcome` của từng dòng | không lọc |
+| `purchased_from`, `purchased_to` | Khoảng ngày đặt `YYYY-MM-DD`, tính cả hai đầu; phải đi cùng nhau | không lọc |
+| `delivered_from`, `delivered_to` | Khoảng ngày giao thực tế, cùng luật; độc lập với khoảng ngày đặt | không lọc |
+| `customer_state` | Bang của khách nhận hàng (`Region`), không phải bang người bán | không lọc |
+| `seller_id` | Mã người bán; `Multi-Seller Order` thuộc về mọi người bán tham gia, vẫn một dòng mỗi đơn | không lọc |
+| `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
+| `direction` | `asc`, `desc` | `desc` |
+| `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên (chỉ số lớn tới mức tràn `OFFSET` bigint mới nhận 422) | `1` |
+
+Giá trị ngoài danh sách nhận 422, và chỉ một đầu của một khoảng ngày cũng nhận 422
+kèm lý do trong `detail` — cùng luật với `start_date` / `end_date` của `/dashboard`.
+Các bộ lọc kết hợp với nhau bằng AND. Khoảng ngày xét nửa mở trên dấu thời gian (`>=`
+nửa đêm ngày đầu, `<` nửa đêm sau ngày cuối) để còn dùng được chỉ mục, nên đơn đặt lúc
+02:30 ngày cuối vẫn được tính. Bộ lọc `late` ra 6.534 đơn; nếu thấy 6.535 là đã tính
+nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì theo ngày.
+
+`GET /orders/export` (đòi token) nhận đúng bộ tham số lọc và sắp xếp của `GET /orders`,
+không có `page`, và stream **mọi** đơn khớp dưới dạng `text/csv` UTF-8 có BOM. Thiếu
+BOM thì Excel đọc sai dấu. Dòng đầu là tên trường của một dòng `/orders`. Ô trống là
+giá trị `null`. `order_id` đủ 32 ký tự. Hai endpoint đọc tham số qua cùng một
+dependency `order_query`, nên không bao giờ lệch nhau. Route này phải khai báo trước
+`/orders/{order_id}`, không thì `export` bị hiểu là một mã đơn. Trình duyệt tải bằng
+`fetch` kèm token rồi lưu blob, vì một thẻ `<a href>` không mang được header
+`Authorization`.
+
+`GET /customer-states` (đòi token) trả mảng mọi bang có đơn, sắp tăng dần, không áp bộ
+lọc nào — tuỳ chọn cho ô chọn bang của trang đơn hàng. Khác danh sách bang trong
+`/dashboard`, vốn chỉ tính đơn đã giao. Cùng lý do, ô gợi ý người bán của trang đơn
+hàng gọi `GET /sellers?q=...&delivered_only=false`: mặc định `/sellers` chỉ gợi ý người
+bán có đơn đã giao (đúng cho bảng điều khiển), còn `false` gợi ý cả 125 người bán chưa
+giao xong đơn nào. Số `delivered_orders` trên gợi ý vẫn luôn là số đơn đã giao.
+
+Ô trống (`delivered_at` của đơn chưa giao,
+`order_value` của đơn không có sản phẩm) luôn nằm cuối, cả khi sắp tăng lẫn giảm.
+Đơn trùng giá trị sắp xếp được xếp tiếp theo `order_id`, nên lật trang không trả
+trùng hay bỏ sót đơn. Mỗi dòng mang `delivery_outcome`: `on_time` / `late` chỉ với
+`Delivered Order`, mọi đơn khác là `no_outcome` — kể cả đơn đã hủy lỡ có ngày giao.
+`order_value` là số thực, không phải chuỗi thập phân.
+
+`GET /orders/{order_id}` (đòi token) trả mọi thứ về một đơn cho trang chi tiết; mã
+không tồn tại nhận 404 `{"detail": "Order not found"}`.
+
+| Khối | Nội dung |
+| --- | --- |
+| `order_id`, `order_status`, `delivery_outcome`, `order_value` | Như một dòng của `GET /orders` |
+| `timeline` | Bốn mốc `purchased_at`, `payment_approved_at`, `handed_to_carrier_at`, `delivered_at` kèm `estimated_delivery_date`, và ba chặng `payment_approval_days`, `seller_handling_days`, `carrier_transit_days` (số ngày, đọc từ cột sinh). Mốc hay chặng chưa có là `null`; chặng có thể âm vì dữ liệu gốc có đơn bàn giao vận chuyển trước lúc duyệt |
+| `address` | `customer_city`, `customer_state`, `customer_zip_code_prefix` (chuỗi đủ 5 chữ số) |
+| `items` | Từng sản phẩm theo `order_item_id`: `product_id`, `category` (tên tiếng Anh; chưa có bản dịch thì tên gốc; không có danh mục thì `null`), `price`, `freight_value`, `seller_id` |
+| `sellers` | Người bán tham gia: `seller_id`, `seller_city`, `seller_state` (bang gửi đi) |
+| `payments` | Theo `payment_sequential`: `payment_type`, `payment_installments`, `payment_value` |
+| `reviews` | `review_score`, `comment_title`, `comment_message`, `created_at` |
+
+Danh sách rỗng nghĩa là đơn không có phần đó (775 đơn không có sản phẩm, nhiều đơn
+không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra theo chỉ mục
+`order_id` trên ba bảng thô tương ứng (migration `0007_order_detail`).
+
+`GET /orders/{order_id}/notes` (đòi token) trả các `Internal Note` của đơn, mới nhất trên
+cùng: `{"id", "body", "created_at", "author": {"display_name", "role"}}`. `POST` cùng
+đường dẫn với `{"body": "..."}` thêm một ghi chú mang tên người đang đăng nhập và trả 201.
+Nội dung cắt khoảng trắng hai đầu, còn 1–2.000 ký tự, ngoài khoảng đó trả 422. Mã đơn
+không tồn tại trả 404 ở cả hai phương thức. Không có PATCH hay DELETE: ghi nhầm thì thêm
+ghi chú đính chính. `created_at` là mốc thật có múi giờ, không theo quy ước UTC của dữ liệu
+Olist. Tác giả `Locked User` vẫn hiện tên.
+
+## Đăng nhập
+
+Cơ chế token theo `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`: access
+token JWT sống 15 phút gửi qua header `Authorization: Bearer`, refresh token sống
+7 ngày trong cookie `httpOnly` chỉ đi kèm `/auth/*`.
+
+Lần khởi động đầu tiên tạo `Super Admin` từ `SUPER_ADMIN_EMAIL`,
+`SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME`. Từ đó các biến này bị bỏ qua — đổi
+chúng rồi khởi động lại không tạo thêm hay sửa tài khoản nào. Backend **không
+khởi động** nếu chưa chạy migration, hoặc nếu `SUPER_ADMIN_EMAIL` trùng một
+`User` thường đã có; thông báo lỗi nêu rõ lý do.
+
+```bash
+curl -i -X POST http://localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"..."}'
+curl http://localhost:8000/me -H 'Authorization: Bearer <access_token>'
+```
+
+| Endpoint | Việc |
+| --- | --- |
+| `POST /auth/login` | Trả access token, đặt cookie refresh token. Sai mật khẩu, email không tồn tại và tài khoản bị khóa đều nhận cùng một 401 |
+| `POST /auth/refresh` | Đổi cookie hiện có lấy access token và cookie mới; cookie cũ bị thu hồi, dùng lại nhận 401 |
+| `POST /auth/logout` | Thu hồi cookie hiện có và xóa nó khỏi trình duyệt |
+| `POST /auth/password` | Tự đổi mật khẩu, cần access token; body `{"current_password", "new_password"}`. Thu hồi mọi refresh token của người đó rồi trả access token và cookie mới cho phiên đang dùng — mọi phiên khác bị đăng xuất. Sai mật khẩu cũ nhận 400, mật khẩu mới dưới 8 ký tự nhận 422 (không phải 401: frontend hiểu 401 là phiên hết hạn) |
+| `GET /me` | Người đang đăng nhập: email, tên, vai trò, claim. Thiếu token hợp lệ thì 401 |
+
+Mọi route khác đều đòi access token hợp lệ, thiếu thì 401 — trừ `/health` và
+`/auth/*` (`/auth/logout` chỉ cần cookie; `/auth/password` là ngoại lệ, vẫn đòi
+access token).
+
+Cookie refresh token chưa đặt cờ `Secure` vì môi trường phát triển chạy http.
+Triển khai qua HTTPS thì phải bật lại.
+
+### Quản trị User
+
+Bốn endpoint dưới đây chỉ dành cho `logistics_manager` và `super_admin`; vai trò
+khác nhận 403, thiếu token nhận 401. Vai trò người gọi đọc từ access token, nên
+người vừa bị hạ vai trò vẫn gọi được tối đa 15 phút.
+
+| Endpoint | Việc |
+| --- | --- |
+| `GET /users` | Mọi `User`, theo thứ tự tạo: `id`, `email`, `display_name`, `role`, `is_locked` |
+| `POST /users` | Tạo `User`; body `{"display_name", "email", "role", "password"}`, trả 201 kèm dòng vừa tạo. Email trùng (không phân biệt hoa thường) nhận 409; tên trống, email sai định dạng, mật khẩu dưới 8 ký tự hay `role` ngoài `operations_staff` / `logistics_manager` nhận 422 |
+| `PATCH /users/{id}` | Đổi vai trò hoặc khóa / mở khóa; body `{"role"?, "is_locked"?}`, trả dòng sau khi đổi. Đổi vai trò và khóa thu hồi mọi refresh token của người đó |
+| `POST /users/{id}/password` | Đặt lại mật khẩu; body `{"new_password"}`, trả 204. Thu hồi mọi refresh token của người đó |
+
+Quy tắc bảo vệ kiểm ở backend: thao tác lên `Super Admin` hay lên chính người gọi
+nhận 403 (tự đổi mật khẩu dùng `POST /auth/password`), id không tồn tại nhận 404,
+và không có endpoint xóa `User`. Email kiểm bằng `EmailStr`, vốn từ chối tên miền
+dành riêng như `.local`, `.test`, `.localhost` — tài khoản tạo qua API phải dùng
+tên miền thật.
+
+### Đặt lại mật khẩu Super Admin
+
+Không có luồng quên mật khẩu qua email. Người có quyền vào máy chủ chạy:
+
+```bash
+uv run python -m app.scripts.reset_super_admin_password
+```
+
+Lệnh hỏi mật khẩu mới hai lần (tối thiểu 8 ký tự, không hiện khi gõ). Đặt lại
+xong, mọi phiên cũ của Super Admin bị đăng xuất.
 
 ## Hai tầng bảng
 
@@ -77,8 +233,21 @@ tên trần là tầng dẫn xuất.
 | Bảng | Nội dung |
 | --- | --- |
 | `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
-| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang khách hàng, điểm đánh giá thấp nhất, trạng thái đơn |
+| `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+| `order_notes` | Internal Note — bảng nghiệp vụ, không phải bảng dẫn xuất |
+
+`order_notes.order_id` cố ý không có khoá ngoại tới `orders`. `build_derived_data`
+TRUNCATE rồi dựng lại `orders`, nên khoá ngoại sẽ chặn bước dựng, hoặc xóa lan mọi ghi chú
+nếu thêm CASCADE. Tầng dịch vụ tự kiểm đơn tồn tại khi thêm ghi chú. Dựng lại dữ liệu dẫn
+xuất không đụng tới ghi chú. Test `auth_session` TRUNCATE `order_notes` cùng `users`, vì
+ghi chú có khoá ngoại tới tác giả.
+
+Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
+mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
+chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
+chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
+cột thô là số nguyên nên `01310` đã nạp thành `1310`.
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
 của truy vấn KPI, không phải của bước dựng bảng.
@@ -99,6 +268,18 @@ migration sẽ hỏng.
 Lưu ý khi viết truy vấn: `is_late` là `NULL` chứ không phải `false` với đơn chưa
 giao, nên cả `WHERE is_late` lẫn `WHERE NOT is_late` đều loại các đơn đó ra. Dùng
 `IS TRUE` / `IS NOT TRUE` nếu cần nói rõ ý định.
+
+`order_value` là tổng `price + freight_value` của các dòng sản phẩm, tính sẵn lúc
+dựng bảng; 775 đơn không có sản phẩm nào để `NULL`. Đây không phải số tiền khách
+thanh toán: 303 đơn lệch tổng thanh toán hơn 1 xu, và như vậy là đúng (so bằng
+tuyệt đối ra 576, vì trả góp làm tròn từng kỳ). Bộ số vàng tính thẳng từ CSV nằm
+ở `tests/test_order_value_golden.py`.
+
+Tìm mã đơn dùng chỉ mục biểu thức `lower(order_id) text_pattern_ops`. Cơ sở dữ
+liệu chạy collation `en_US.utf8`, mà btree thường theo collation đó — kể cả khoá
+chính — không phục vụ được `LIKE 'abc%'`; `ILIKE` thì không đi qua chỉ mục kiểu
+này. Truy vấn tiền tố mã đơn vì thế phải viết đúng dạng
+`lower(order_id) LIKE '...%'`.
 
 ## Tập đơn biên dùng cho test
 
@@ -181,7 +362,9 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose dựng container |
 | `DATABASE_URL` | Ứng dụng và Alembic |
 | `TEST_DATABASE_URL` | Chỉ bộ test |
-| `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md` |
+| `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md` |
+| `JWT_SECRET_KEY` | Khóa ký access token. Đổi khóa thì mọi access token đang có hết hiệu lực ngay |
+| `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME` | Chỉ đọc ở lần khởi động đầu, khi chưa có Super Admin — xem [Đăng nhập](#đăng-nhập) |
 
 Ghi lược đồ `postgresql://` thuần — mã tự thêm trình điều khiển `+asyncpg`.
 

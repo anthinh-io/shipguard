@@ -1,7 +1,16 @@
 "use client";
 
+import { useRef } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  CartesianGrid,
+  Dot,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  type MouseHandlerDataParam,
+} from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
@@ -17,6 +26,9 @@ type Granularity = "day" | "week" | "month";
 
 type TrendPoint = {
   bucket_start: string;
+  // Khoảng thật của nhóm, backend đã kẹp vào kỳ báo cáo — drill-down chép nguyên.
+  bucket_from: string;
+  bucket_to: string;
   delivered_orders: number;
   late_orders: number;
   late_rate: number | null;
@@ -30,12 +42,40 @@ type LateRateTrend = {
 export function LateRateTrendChart({
   trend,
   comparison,
+  onPointClick,
 }: {
   trend: LateRateTrend;
   comparison?: LateRateTrend | null;
+  // Luôn nhận điểm của kỳ đang xem, kể cả khi bấm lên đường kỳ đối chiếu: kỳ so sánh
+  // không mang sang danh sách đơn.
+  onPointClick?: (point: TrendPoint) => void;
 }) {
   const t = useTranslations("dashboard");
   const format = useFormatter();
+
+  // Gắn vào cả biểu đồ chứ không vào từng chấm: vùng click trùng vùng hiện tooltip có
+  // gợi ý, nên không có chỗ nào gợi ý hiện ra mà bấm lại không đi đâu. activeIndex của
+  // recharts 3 là chuỗi, và rỗng khi bấm ngoài vùng vẽ.
+  //
+  // Chạm, hay bấm khi chưa rê, thì recharts chưa có activeIndex. Chấm cũng không tự bắt
+  // click được: nhấn chuột xuống chấm thường làm recharts vẽ chấm active đè lên trước lúc
+  // nhả, nên click rơi vào <svg> chung. Vì vậy chấm chỉ ghi lại điểm bị nhấn (mousedown
+  // chạy trước click), và chỉ handler này push — mỗi cú bấm đúng một lần.
+  const pressedIndex = useRef<number | null>(null);
+
+  function handleChartClick({ activeIndex }: MouseHandlerDataParam) {
+    const index = pressedIndex.current ?? (activeIndex == null ? null : Number(activeIndex));
+    pressedIndex.current = null;
+    const point = index == null ? undefined : trend.points[index];
+    if (point && onPointClick) {
+      onPointClick(point);
+    }
+  }
+
+  function handleDotPress(dot: object) {
+    // Kiểu của recharts khai DotProps không có index, nhưng lúc chạy Dots có truyền kèm.
+    pressedIndex.current = (dot as { index?: number }).index ?? null;
+  }
 
   // Dựng trong component chứ không phải ở tầng module: ChartLegendContent chỉ đọc
   // `label` của chartConfig và không nhận formatter nào, nên nhãn phải được dịch ngay
@@ -86,7 +126,19 @@ export function LateRateTrendChart({
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>
-          <LineChart data={data} margin={{ left: 4, right: 12 }}>
+          {/* Con trỏ đặt qua style chứ không qua class trên ChartContainer: recharts
+              ghi cứng cursor: default lên .recharts-wrapper bằng style nội tuyến. */}
+          <LineChart
+            data={data}
+            margin={{ left: 4, right: 12 }}
+            onClick={onPointClick ? handleChartClick : undefined}
+            // Nhấn xuống chấm rồi kéo ra ngoài mới nhả thì không có click nào; bỏ điểm đã
+            // ghi để lần bấm sau không đi nhầm tới nó.
+            onMouseLeave={() => {
+              pressedIndex.current = null;
+            }}
+            style={onPointClick ? { cursor: "pointer" } : undefined}
+          >
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
@@ -117,12 +169,22 @@ export function LateRateTrendChart({
                     );
                     // Hai nhóm úp lên nhau theo chỉ số nhưng là hai ngày khác nhau;
                     // không nói ra thì người đọc tưởng cả hai đường cùng một mốc.
-                    return row.comparison_bucket_start
+                    const label = row.comparison_bucket_start
                       ? `${current} ↔ ${format.dateTime(
                           new Date(row.comparison_bucket_start),
                           "fullDate",
                         )}`
                       : current;
+                    return onPointClick ? (
+                      <>
+                        {label}
+                        <div className="font-normal text-muted-foreground">
+                          {t("drillDownHint")}
+                        </div>
+                      </>
+                    ) : (
+                      label
+                    );
                   }}
                   formatter={(value, name) => [
                     value === null || value === undefined
@@ -145,7 +207,25 @@ export function LateRateTrendChart({
               dataKey="late_rate"
               stroke="var(--color-late_rate)"
               strokeWidth={2}
-              dot={{ r: 3, fill: "var(--color-late_rate)", strokeWidth: 0 }}
+              dot={
+                onPointClick
+                  ? {
+                      r: 3,
+                      fill: "var(--color-late_rate)",
+                      // Viền trong suốt nới vùng chạm quanh chấm 3px mà không đổi hình.
+                      stroke: "transparent",
+                      strokeWidth: 12,
+                      onMouseDown: handleDotPress,
+                    }
+                  : { r: 3, fill: "var(--color-late_rate)", strokeWidth: 0 }
+              }
+              // Khi con trỏ đã ở trên điểm, cú nhấn rơi vào chấm active đè lên chấm thường;
+              // dạng hàm để nhận được index, hình giữ mặc định.
+              activeDot={
+                onPointClick
+                  ? (props) => <Dot {...props} onMouseDown={handleDotPress} />
+                  : true
+              }
             />
             {comparison ? (
               <Line
@@ -157,6 +237,8 @@ export function LateRateTrendChart({
                   r: 3,
                   fill: "var(--color-comparison_late_rate)",
                   strokeWidth: 0,
+                  // Cùng chỉ số với điểm kỳ đang xem — xem onPointClick.
+                  onMouseDown: onPointClick ? handleDotPress : undefined,
                 }}
               />
             ) : null}

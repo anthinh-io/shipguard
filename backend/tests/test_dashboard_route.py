@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security import create_access_token
 
 EDGE_CASE_FILTERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_filters.json").read_text("utf-8")
@@ -16,6 +17,14 @@ EDGE_CASE_FILTERS = json.loads(
 # Fixture client của conftest chỉ phụ thuộc DSN, không kéo theo bước nạp dữ liệu. Thiếu
 # ràng buộc này thì tệp chạy riêng sẽ đọc một bảng rỗng và xanh sai.
 pytestmark = pytest.mark.usefixtures("derived_data")
+
+
+# Mọi test ở đây gọi với tư cách một người đã đăng nhập. Token ký thật và đi qua bước xác
+# minh thật; không cần tạo User vì route số liệu không tra người gọi trong cơ sở dữ liệu.
+@pytest.fixture(autouse=True)
+def signed_in(client: AsyncClient) -> None:
+    token = create_access_token(1, "operations_staff", [])
+    client.headers["Authorization"] = f"Bearer {token}"
 
 # Một kỳ nằm gọn trong dải dữ liệu, đủ dài để số đơn theo ngày giao và số đơn theo ngày
 # đặt lệch hẳn nhau.
@@ -65,6 +74,8 @@ async def test_response_shape(client: AsyncClient) -> None:
     if body["late_rate_trend"]["points"]:
         assert set(body["late_rate_trend"]["points"][0]) == {
             "bucket_start",
+            "bucket_from",
+            "bucket_to",
             "delivered_orders",
             "late_orders",
             "late_rate",
@@ -376,6 +387,27 @@ async def test_unknown_comparison_mode_is_rejected(client: AsyncClient) -> None:
     response = await client.get("/dashboard", params={"comparison": "last_quarter"})
 
     assert response.status_code == 422
+
+
+# Các kiểu token hỏng khác (hết hạn, sai chữ ký) đã phủ ở test_me_requires_a_valid_session
+# — cùng một dependency. Ở đây chỉ cần chắc hai route số liệu thật sự gắn dependency đó.
+@pytest.mark.parametrize("authorization", [None, "Bearer not-a-jwt"])
+@pytest.mark.parametrize(
+    ("path", "params"), [("/dashboard", {}), ("/sellers", {"q": "a"})]
+)
+async def test_dashboard_and_sellers_require_a_session(
+    client: AsyncClient,
+    path: str,
+    params: dict[str, str],
+    authorization: str | None,
+) -> None:
+    del client.headers["Authorization"]
+    headers = {} if authorization is None else {"Authorization": authorization}
+
+    response = await client.get(path, params=params, headers=headers)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 async def test_cors_header_present_for_an_allowed_origin(

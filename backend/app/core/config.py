@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     DATABASE_URL: AsyncPostgresDsn
     TEST_DATABASE_URL: AsyncPostgresDsn
     CORS_ALLOWED_ORIGINS: OriginList
+    JWT_SECRET_KEY: str
+    # Chỉ đọc khi chưa có Super Admin nào — xem ensure_super_admin.
+    SUPER_ADMIN_EMAIL: str
+    SUPER_ADMIN_PASSWORD: str
+    SUPER_ADMIN_NAME: str
 
 
 settings = Settings()
