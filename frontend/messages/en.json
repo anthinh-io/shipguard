@@ -188,6 +188,20 @@
       "empty": "No review for this order yet."
     }
   },
+  "orderNotes": {
+    "title": "Internal notes",
+    "placeholder": "Record how this order was handled…",
+    "submit": "Add note",
+    "submitting": "Adding…",
+    "appendOnlyHint": "Notes cannot be edited or deleted. To correct one, add a new note.",
+    "empty": "No notes yet.",
+    "loading": "Loading notes…",
+    "loadError": "Could not load notes ({detail}).",
+    "submitError": "Could not add the note ({detail}). Please try again.",
+    "blank": "The note cannot be empty.",
+    "tooLong": "The note is {length, number} characters long; the limit is 2,000.",
+    "byline": "{name} · {role} · {time}"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "orders": "Orders",

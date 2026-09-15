@@ -188,6 +188,20 @@
       "empty": "Đơn này chưa có đánh giá."
     }
   },
+  "orderNotes": {
+    "title": "Ghi chú nội bộ",
+    "placeholder": "Ghi lại cách đơn này đã được xử lý…",
+    "submit": "Gửi ghi chú",
+    "submitting": "Đang gửi…",
+    "appendOnlyHint": "Ghi chú không sửa hay xóa được. Ghi nhầm thì thêm một ghi chú đính chính.",
+    "empty": "Chưa có ghi chú nào.",
+    "loading": "Đang tải ghi chú…",
+    "loadError": "Không lấy được ghi chú ({detail}).",
+    "submitError": "Không gửi được ghi chú ({detail}). Vui lòng thử lại.",
+    "blank": "Ghi chú không được để trống.",
+    "tooLong": "Ghi chú dài {length, number} ký tự, tối đa 2.000.",
+    "byline": "{name} · {role} · {time}"
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "orders": "Đơn hàng",
