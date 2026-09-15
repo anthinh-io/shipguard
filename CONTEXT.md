@@ -27,8 +27,12 @@ _Avoid_: Delayed Order, Overdue Order
 _Avoid_: Split Order, Composite Order
 
 **Order Status**:
-Trạng thái vòng đời của đơn do sàn ghi nhận, là một trong tám giá trị: created, approved, invoiced, processing, shipped, delivered, canceled, unavailable. Khác với `Delivery Outcome`.
+Trạng thái vòng đời của đơn do sàn ghi nhận, là một trong tám giá trị: created, approved, invoiced, processing, shipped, delivered, canceled, unavailable. Khác với `Delivery Outcome`. Đơn tạo trong Ship Guard chỉ đi qua created → approved → shipped → delivered, hoặc dừng ở canceled; trạng thái của nó suy ra từ `Order Milestone` mới nhất.
 _Avoid_: Order State, Lifecycle Stage
+
+**Order Milestone**:
+Một trong ba mốc sau lúc đặt hàng: thanh toán được duyệt, hàng được bàn giao cho đơn vị vận chuyển, khách nhận hàng. Với đơn tạo trong Ship Guard, nhân viên ghi nhận từng mốc theo đúng thứ tự, không mốc nào ở tương lai. Chỉ mốc mới nhất sửa được, và chỉ khi đơn chưa giao.
+_Avoid_: Event, Step, Checkpoint
 
 **Delivery Outcome**:
 Kết cục giao hàng của một đơn: đúng hạn, trễ, hoặc chưa có kết quả. Chỉ `Delivered Order` mới có đúng hạn hay trễ; mọi đơn khác — đang trên đường, đã hủy, không có hàng, kể cả khi đã quá ngày cam kết — đều là chưa có kết quả.
@@ -107,6 +111,44 @@ _Avoid_: Baseline, Reference Period
 **Internal Note**:
 Ghi chú nội bộ mà một `User` để lại trên một đơn. Chỉ thêm được, không sửa hay xóa — muốn đính chính thì thêm ghi chú mới.
 _Avoid_: Comment, Remark, Annotation
+
+## Dự đoán rủi ro
+
+**Risk Assessment**:
+Một lần hệ thống đánh giá khả năng giao trễ của một đơn tại một `Prediction Checkpoint`, gồm `Late Probability`, mức rủi ro, `Risk Cause` và trạng thái xử lý. Mỗi mốc mới sinh thêm một lần đánh giá, các lần cũ giữ nguyên làm lịch sử. Đơn Olist lịch sử không bao giờ có. Chỉ đơn đã có ít nhất một lần đánh giá mới được ghi nhận mốc hay hủy.
+_Avoid_: Prediction, Forecast, Risk Score
+
+**Prediction Checkpoint**:
+Thời điểm trong vòng đời đơn mà một `Risk Assessment` được tạo: lúc đặt hàng, lúc thanh toán được duyệt, lúc bàn giao cho đơn vị vận chuyển. Càng về sau càng nhiều chặng đã xảy ra thật, nên đánh giá càng đáng tin.
+_Avoid_: Stage, Milestone
+
+**Late Probability**:
+Khả năng đơn giao sau `Estimated Delivery Date`, tính từ thời gian dự kiến của các chặng chưa xảy ra cộng thời gian thật của các chặng đã xong.
+_Avoid_: Risk Score, Confidence
+
+**Risk Threshold**:
+Mức `Late Probability` mà từ đó một đơn là `High Risk`. Một con số chung cho mọi mốc, chọn từ kết quả đánh giá mô hình chứ không đặt theo cảm tính.
+_Avoid_: Cutoff
+
+**High Risk**:
+Mức rủi ro của một `Risk Assessment` có `Late Probability` đạt `Risk Threshold` tại lúc đánh giá; ngược lại là Low Risk. Mức này chốt lúc đánh giá — đổi ngưỡng về sau không xếp lại các lần cũ.
+_Avoid_: Critical, Dangerous Order
+
+**Risk Cause**:
+Trong các chặng chưa xảy ra, chặng mà thời gian dự kiến vượt mức thường của chính chặng đó nhiều ngày nhất: `Payment Approval`, `Seller Handling` hoặc `Carrier Transit`. Với `Multi-Seller Order`, chặng người bán tính theo người bán chậm nhất, và nguyên nhân nêu tên người bán đó. Chỉ hiển thị với `High Risk`.
+_Avoid_: Root Cause, Fault, Blame
+
+**Intervention**:
+Biện pháp nhân viên đã thực hiện cho một `Risk Assessment` là `High Risk`, chọn từ danh sách cố định — nhắc người bán, đổi đơn vị vận chuyển, liên hệ về thanh toán, thông báo khách, khác — kèm ghi chú tùy chọn. Ship Guard chỉ ghi nhận, không tự thực thi.
+_Avoid_: Action, Fix
+
+**Handled**:
+Trạng thái của một `Risk Assessment` là `High Risk` sau khi đã ghi nhận `Intervention`. Chỉ lần đánh giá mới nhất của một đơn còn là việc cần xử lý — lần cũ chưa xử lý bị lần mới thay thế. Đơn đã hủy không còn việc cần xử lý.
+_Avoid_: Resolved, Closed, Done
+
+**Reconciliation**:
+Việc đối chiếu mọi `Risk Assessment` của một đơn với `Delivery Outcome` thật khi đơn được ghi nhận đã giao. Đánh giá là đúng khi `High Risk` mà đơn trễ, hoặc Low Risk mà đơn đúng hạn.
+_Avoid_: Validation, Verification
 
 ## Người dùng
 
