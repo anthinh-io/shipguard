@@ -71,7 +71,7 @@ test("mở từ sidebar thấy tổng số đơn và trang đầu 50 đơn đủ
   await page.getByTestId("nav-orders").click();
 
   await expect(page).toHaveURL(/\/orders$/);
-  await expect(page.getByRole("heading", { name: "Đơn hàng" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quản lý đơn hàng", exact: true })).toBeVisible();
   await expect(page.getByTestId("orders-total")).toContainText("99.441");
   await expect(page.getByTestId("order-row")).toHaveCount(50);
 
