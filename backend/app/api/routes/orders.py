@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.api.deps import SessionDep, get_current_user
+from app.api.deps import CurrentUserDep, SessionDep, get_current_user
+from app.services.order_notes import (
+    NewOrderNote,
+    OrderNote,
+    add_order_note,
+    list_order_notes,
+)
 from app.services.orders import (
     PAGE_SIZE,
     DeliveryOutcome,
@@ -114,6 +120,29 @@ async def order_detail(session: SessionDep, order_id: str) -> OrderDetail:
     if detail is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return detail
+
+
+# Internal Note chỉ thêm được: không có PATCH hay DELETE, ghi nhầm thì thêm ghi chú đính
+# chính. Mọi vai trò đã đăng nhập đều đọc và thêm được.
+@router.get("/orders/{order_id}/notes", response_model=list[OrderNote])
+async def order_notes(session: SessionDep, order_id: str) -> list[OrderNote]:
+    notes = await list_order_notes(session, order_id)
+    if notes is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return notes
+
+
+@router.post("/orders/{order_id}/notes", response_model=OrderNote, status_code=201)
+async def add_note(
+    session: SessionDep,
+    order_id: str,
+    payload: NewOrderNote,
+    current_user: CurrentUserDep,
+) -> OrderNote:
+    note = await add_order_note(session, order_id, current_user.user_id, payload.body)
+    if note is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return note
 
 
 # Tuỳ chọn cho ô chọn bang của trang đơn hàng. Tách khỏi /orders vì danh sách này không
