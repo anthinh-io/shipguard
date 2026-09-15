@@ -2,6 +2,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.api.deps import SessionDep, get_current_user
 from app.services.orders import (
@@ -37,10 +38,16 @@ def _day_range(
     return None if start is None or end is None else (start, end)
 
 
+class OrderQuery(BaseModel):
+    filters: OrderFilters
+    sort: OrderSort
+    direction: SortDirection
+
+
+# Bộ tham số lọc và sắp xếp của mọi endpoint đọc danh sách đơn. Khai một chỗ để các
+# endpoint đó không bao giờ lệch nhau về tên, giá trị mặc định hay luật khoảng ngày.
 # Mặc định đơn mới đặt nhất lên đầu: Purchase Date là mốc mọi đơn đều có.
-@router.get("/orders", response_model=OrderList)
-async def orders(
-    session: SessionDep,
+def order_query(
     order_id: str = "",
     order_status: OrderStatus | None = None,
     delivery_outcome: DeliveryOutcome | None = None,
@@ -54,19 +61,33 @@ async def orders(
     seller_id: str | None = None,
     sort: OrderSort = "purchased_at",
     direction: SortDirection = "desc",
+) -> OrderQuery:
+    return OrderQuery(
+        filters=OrderFilters(
+            order_id_prefix=order_id,
+            order_status=order_status,
+            delivery_outcome=delivery_outcome,
+            purchased=_day_range("purchased", purchased_from, purchased_to),
+            delivered=_day_range("delivered", delivered_from, delivered_to),
+            customer_state=customer_state,
+            seller_id=seller_id,
+        ),
+        sort=sort,
+        direction=direction,
+    )
+
+
+OrderQueryDep = Annotated[OrderQuery, Depends(order_query)]
+
+
+@router.get("/orders", response_model=OrderList)
+async def orders(
+    session: SessionDep,
+    query: OrderQueryDep,
     page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
 ) -> OrderList:
-    filters = OrderFilters(
-        order_id_prefix=order_id,
-        order_status=order_status,
-        delivery_outcome=delivery_outcome,
-        purchased=_day_range("purchased", purchased_from, purchased_to),
-        delivered=_day_range("delivered", delivered_from, delivered_to),
-        customer_state=customer_state,
-        seller_id=seller_id,
-    )
     return await list_orders(
-        session, filters, sort=sort, direction=direction, page=page
+        session, query.filters, sort=query.sort, direction=query.direction, page=page
     )
 
 
