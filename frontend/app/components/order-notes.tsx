@@ -48,6 +48,9 @@ type State =
 type Problem =
   | { kind: "blank" }
   | { kind: "tooLong"; length: number }
+  // Máy chủ trả 422: nội dung lọt qua kiểm ở trình duyệt (trim() của JS và strip() của
+  // Python không cắt cùng một tập ký tự) nhưng vẫn ngoài 1–2.000 ký tự.
+  | { kind: "rejected" }
   | { kind: "submit"; failure: Failure };
 
 async function requestNotes(url: string, init?: RequestInit): Promise<Response> {
@@ -129,7 +132,12 @@ export function OrderNotes({ orderId }: { orderId: string }) {
       );
       setBody("");
     } catch (error) {
-      setProblem({ kind: "submit", failure: toFailure(error) });
+      const failure = toFailure(error);
+      setProblem(
+        failure.kind === "http_status" && failure.status === 422
+          ? { kind: "rejected" }
+          : { kind: "submit", failure },
+      );
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +150,9 @@ export function OrderNotes({ orderId }: { orderId: string }) {
         ? t("blank")
         : problem.kind === "tooLong"
           ? t("tooLong", { length: problem.length })
-          : t("submitError", { detail: failureDetail(problem.failure) });
+          : problem.kind === "rejected"
+            ? t("rejected")
+            : t("submitError", { detail: failureDetail(problem.failure) });
 
   return (
     <Card data-testid="order-notes">

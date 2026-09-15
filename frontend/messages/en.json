@@ -200,6 +200,7 @@
     "submitError": "Could not add the note ({detail}). Please try again.",
     "blank": "The note cannot be empty.",
     "tooLong": "The note is {length, number} characters long; the limit is 2,000.",
+    "rejected": "The server did not accept this note: it must be 1–2,000 characters long after trimming leading and trailing spaces.",
     "byline": "{name} · {role} · {time}"
   },
   "nav": {
