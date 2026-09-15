@@ -83,7 +83,8 @@ frontend/
                          dùng chung cho cả hai thanh lọc
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
                          bảng 8 cột sắp được, phân trang nhảy trang; bấm một
-                         dòng mở /orders/[orderId]
+                         dòng mở /orders/[orderId]; nút Xuất CSV (fetch kèm
+                         token, lưu blob)
       order-detail.tsx   Client Component: gọi GET /orders/{order_id} — đầu
                          trang, dòng thời gian và ba chặng, sản phẩm, người bán,
                          địa chỉ giao, thanh toán, đánh giá; 404 thì báo không
@@ -114,6 +115,9 @@ frontend/
                          Đơn hàng với dữ liệu thật
       orders.spec.ts     Playwright: trang Đơn hàng (giả lập máy chủ) — tìm,
                          sắp xếp, nhảy trang, đường liên kết chia sẻ
+      orders-export.spec.ts
+                         Playwright: nút Xuất CSV (giả lập máy chủ) — đúng
+                         query không kèm trang, token, tên file, lỗi máy chủ
       order-detail.spec.ts
                          Playwright: trang chi tiết đơn (giả lập máy chủ) — mở
                          từ danh sách, phần thiếu, 404, Back về đúng danh sách,
