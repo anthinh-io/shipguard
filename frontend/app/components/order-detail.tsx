@@ -11,6 +11,7 @@ import {
   utcTimestamp,
   type DeliveryOutcome,
 } from "@/app/lib/order-format";
+import { OrderNotes } from "./order-notes";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -188,8 +189,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
         </div>
       </header>
 
-      {/* Ba cột ở màn rộng: nội dung chiếm hai, cột thứ ba dành cho ghi chú nội bộ ở
-          ticket sau. Màn hẹp thì một cột. */}
+      {/* Ba cột ở màn rộng: nội dung chiếm hai, cột thứ ba là ghi chú nội bộ, dính khi
+          cuộn. Màn hẹp thì một cột, và vì ghi chú đứng sau nội dung trong DOM nên nằm cuối
+          trang. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <Timeline data={data} />
@@ -199,6 +201,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           <Payments data={data} />
           <Reviews data={data} />
         </div>
+        <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+          <OrderNotes orderId={data.order_id} />
+        </aside>
       </div>
     </div>
   );

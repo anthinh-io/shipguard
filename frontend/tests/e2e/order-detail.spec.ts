@@ -123,7 +123,11 @@ async function mockOrders(page: Page): Promise<URL[]> {
   const listCalls: URL[] = [];
   await page.route(ORDERS_API, (route) => {
     const url = new URL(route.request().url());
-    const detailId = url.pathname.match(/^\/orders\/(.+)$/)?.[1];
+    // Ghi chú nội bộ có spec riêng (order-notes.spec.ts); ở đây chỉ cần cột ghi chú không báo lỗi.
+    if (/^\/orders\/[^/]+\/notes$/.test(url.pathname)) {
+      return route.fulfill({ json: [] });
+    }
+    const detailId = url.pathname.match(/^\/orders\/([^/]+)$/)?.[1];
     if (detailId !== undefined) {
       const body = { [LATE_ID]: LATE_ORDER, [BARE_ID]: BARE_ORDER }[decodeURIComponent(detailId)];
       return body
