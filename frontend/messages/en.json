@@ -77,6 +77,9 @@
     },
     "searchLabel": "Search by order ID",
     "searchPlaceholder": "Type the first few characters of an order ID…",
+    "export": "Export CSV",
+    "exporting": "Exporting…",
+    "exportError": "Could not export the file ({detail}). Please try again.",
     "total": "{count, plural, one {# order} other {# orders}}",
     "columns": {
       "orderId": "Order ID",
