@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import { mockSession } from "./session";
 
@@ -129,10 +129,9 @@ function queryOf(page: Page): Record<string, string> {
   return Object.fromEntries(new URL(page.url()).searchParams);
 }
 
-// Rê tới, đợi gợi ý hiện, rồi mới nhấn chuột tại chỗ — như người dùng thật. recharts chỉ
-// biết điểm nào đang được trỏ qua mousemove (gộp theo khung hình); với locator.click(),
-// cú bấm tới tay recharts khi chưa có điểm nào đang trỏ và không đi đâu cả. Gợi ý hiện ra
-// là dấu hiệu recharts đã nhận điểm.
+// Rê tới, đợi gợi ý hiện, rồi mới nhấn chuột tại chỗ — như người dùng thật. Gợi ý hiện ra
+// là dấu hiệu recharts đã nhận điểm đang trỏ (activeIndex); bấm thẳng khi chưa rê thì đi
+// đường khác, xem bài "chưa rê chuột" bên dưới.
 async function pointAndClick(page: Page, target: Locator, chartTestId: string) {
   await target.hover();
   await expect(tooltipOf(page, chartTestId)).toContainText("Xem đơn trễ");
@@ -222,6 +221,59 @@ test("click cột bang mở đơn trễ của bang đó trong kỳ đang xem, k�
     delivered_to: "2018-08-31",
     customer_state: "MA",
     seller_id: SELLER_ID,
+  });
+  // Rê rồi bấm lên cột: cột ghi lại bang bị nhấn và biểu đồ cũng có activeIndex, vẫn chỉ
+  // một lần push; Back một lần phải về bảng điều khiển.
+  await page.goBack();
+  await expect(page).toHaveURL(`/?seller_id=${SELLER_ID}`);
+});
+
+// Chạm, hay bấm khi chưa rê: không có mousemove nào trước đó nên recharts chưa biết điểm
+// nào đang được trỏ. Mỗi cú bấm chạy trên một tab mới để lịch sử không còn mục phía
+// trước, rồi khẳng định cú bấm thêm đúng một mục lịch sử và Back một lần là về bảng điều
+// khiển.
+async function expectSingleDrillDown(
+  context: BrowserContext,
+  press: (page: Page) => Promise<void>,
+  expected: Record<string, string>,
+) {
+  const page = await context.newPage();
+  await mockBackend(page, FILTERED_BODY);
+  await page.goto(`/${DASHBOARD_QUERY}`);
+  const historyLength = await page.evaluate(() => history.length);
+
+  await press(page);
+
+  await page.waitForURL(/\/orders\?/);
+  expect(queryOf(page)).toEqual(expected);
+  expect(await page.evaluate(() => history.length)).toBe(historyLength + 1);
+  await page.goBack();
+  await expect(page).toHaveURL(`/${DASHBOARD_QUERY}`);
+  await page.close();
+}
+
+const FIRST_POINT_QUERY = {
+  delivery_outcome: "late",
+  delivered_from: "2018-01-03",
+  delivered_to: "2018-01-07",
+  customer_state: "SP",
+  seller_id: SELLER_ID,
+};
+const SP_BAR_QUERY = { ...FIRST_POINT_QUERY, delivered_to: "2018-01-15" };
+
+test("bấm thẳng lên chấm hay cột mà chưa rê chuột vẫn mở danh sách, đúng một lần", async ({
+  context,
+}) => {
+  await expectSingleDrillDown(context, (p) => trendDot(p, 0).click(), FIRST_POINT_QUERY);
+  await expectSingleDrillDown(context, (p) => stateBar(p, 0).click(), SP_BAR_QUERY);
+});
+
+test.describe("màn hình cảm ứng", () => {
+  test.use({ hasTouch: true });
+
+  test("chạm vào chấm hay cột mở danh sách, đúng một lần", async ({ context }) => {
+    await expectSingleDrillDown(context, (p) => trendDot(p, 0).tap(), FIRST_POINT_QUERY);
+    await expectSingleDrillDown(context, (p) => stateBar(p, 0).tap(), SP_BAR_QUERY);
   });
 });
 

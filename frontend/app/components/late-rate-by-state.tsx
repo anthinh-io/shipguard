@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Bar,
@@ -44,8 +45,15 @@ export function LateRateByStateChart({
 
   // Gắn vào cả biểu đồ chứ không vào <Bar>: tooltip có gợi ý hiện khi rê lên cả dải
   // ngang của bang, và bang tỷ lệ thấp có cột rất ngắn. Cùng cách với late-rate-trend.tsx.
+  //
+  // Chạm, hay bấm khi chưa rê, thì chưa có activeIndex: cột ghi lại bang bị nhấn lúc
+  // mousedown, và chỉ handler này push — mỗi cú bấm đúng một lần.
+  const pressedIndex = useRef<number | null>(null);
+
   function handleChartClick({ activeIndex }: MouseHandlerDataParam) {
-    const row = activeIndex == null ? undefined : byState[Number(activeIndex)];
+    const index = pressedIndex.current ?? (activeIndex == null ? null : Number(activeIndex));
+    pressedIndex.current = null;
+    const row = index == null ? undefined : byState[index];
     if (row && onStateClick) {
       onStateClick(row.customer_state);
     }
@@ -69,6 +77,10 @@ export function LateRateByStateChart({
             layout="vertical"
             margin={{ left: 8, right: 16 }}
             onClick={onStateClick ? handleChartClick : undefined}
+            // Nhấn xuống cột rồi kéo ra ngoài mới nhả thì không có click nào.
+            onMouseLeave={() => {
+              pressedIndex.current = null;
+            }}
             style={onStateClick ? { cursor: "pointer" } : undefined}
           >
             <CartesianGrid horizontal={false} />
@@ -108,7 +120,14 @@ export function LateRateByStateChart({
                 />
               }
             />
-            <Bar dataKey="late_rate" fill="var(--color-late_rate)" radius={4} />
+            <Bar
+              dataKey="late_rate"
+              fill="var(--color-late_rate)"
+              radius={4}
+              onMouseDown={(_, index) => {
+                pressedIndex.current = index;
+              }}
+            />
           </BarChart>
         </ChartContainer>
       </CardContent>
