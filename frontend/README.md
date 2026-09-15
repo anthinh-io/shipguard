@@ -90,7 +90,9 @@ frontend/
       order-detail.tsx   Client Component: gọi GET /orders/{order_id} — đầu
                          trang, dòng thời gian và ba chặng, sản phẩm, người bán,
                          địa chỉ giao, thanh toán, đánh giá; 404 thì báo không
-                         tìm thấy
+                         tìm thấy; cột phải dính <OrderNotes />
+      order-notes.tsx    Client Component: ghi chú nội bộ — đọc và thêm, kiểm độ
+                         dài, thời điểm theo múi giờ trình duyệt
       order-filter-bar.tsx
                          Client Component: thanh lọc /orders — trạng thái, kết
                          quả giao, ngày đặt, ngày giao, bang (GET /customer-states),
@@ -124,6 +126,10 @@ frontend/
                          Playwright: trang chi tiết đơn (giả lập máy chủ) — mở
                          từ danh sách, phần thiếu, 404, Back về đúng danh sách,
                          màn hẹp
+      order-notes.spec.ts
+                         Playwright: ghi chú nội bộ (giả lập máy chủ) — danh
+                         sách, gửi, kiểm độ dài, lỗi máy chủ, hai múi giờ, cột
+                         dính khi cuộn, màn hẹp, song ngữ
       order-filters.spec.ts
                          Playwright: thanh lọc /orders (giả lập máy chủ) — từng
                          bộ lọc, nửa khoảng ngày chưa lọc, kết hợp, xoá hết, tải lại
@@ -257,6 +263,9 @@ ngôn ngữ, nên bộ định dạng `BRL` trong `app/lib/order-format.ts` cố
 theo giờ máy. Chỉ cần ngày thì dùng `utcDay` với `fullDate`; cần cả giờ thì dùng
 `utcTimestamp` với `fullDateTime`. Cả hai cặp đều theo UTC, nên màn hình hiện đúng
 ngày giờ trong dữ liệu ở mọi múi giờ.
+
+Mốc thời gian thật (như thời điểm ghi chú) dùng format `localDateTime` cộng `timeZone` của
+trình duyệt. Đừng dùng `fullDateTime`: format đó ghim UTC cho dữ liệu Olist.
 
 ## Trạng thái trang trên URL
 
