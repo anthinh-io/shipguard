@@ -1,1 +1,1 @@
-../../.venv/Lib/site-packages/fastapi/.agents/skills/fastapi
+./../../.venv/Lib/site-packages/fastapi/.agents/skills/fastapi
