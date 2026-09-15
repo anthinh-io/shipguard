@@ -194,6 +194,17 @@ test("click điểm xu hướng mở đơn trễ trong đúng khoảng của đi
   const singleDay = { ...expected, delivered_from: "2018-01-15", delivered_to: "2018-01-15" };
   expect(queryOf(page)).toEqual(singleDay);
   await expect.poll(() => orderCalls.at(-1)).toBe(`?${new URLSearchParams(singleDay)}`);
+
+  // Bỏ bộ lọc "trễ" thì vẫn cùng khoảng ngày giao, bang và người bán: thấy cả đơn đúng
+  // hạn để so sánh.
+  await expect(page.getByTestId("filter-delivered-range")).toContainText(
+    "15/01/2018 – 15/01/2018",
+  );
+  await page.getByTestId("filter-delivery-outcome").click();
+  await page.getByRole("option", { name: "Mọi kết quả giao", exact: true }).click();
+  const withoutLate = new URLSearchParams(singleDay);
+  withoutLate.delete("delivery_outcome");
+  await expect.poll(() => orderCalls.at(-1)).toBe(`?${withoutLate}`);
 });
 
 test("click cột bang mở đơn trễ của bang đó trong kỳ đang xem, kể cả kỳ mặc định", async ({
