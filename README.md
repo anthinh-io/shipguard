@@ -39,6 +39,25 @@ Người dùng nhập thông tin đơn hàng và nhận dự đoán rủi ro gia
 - [ ] **Giai đoạn 3** — Xây giao diện ứng dụng
 - [ ] **Giai đoạn 4** — Kiểm thử & hoàn thiện
 
-## 5. Giấy phép
+## 5. Cài đặt
+
+Thứ tự bắt buộc, chạy từ gốc repo — mỗi bước cần bước trước đã xong:
+
+```bash
+cp .env.example .env                                  # rồi điền các giá trị của bạn
+docker compose up -d --wait postgres
+uv sync
+uv run alembic -c backend/alembic.ini upgrade head    # dựng lược đồ
+uv run python -m app.scripts.load_raw_data            # nạp thô
+uv run python -m app.scripts.build_derived_data       # dựng dẫn xuất
+uv run python -m app.scripts.train_risk_model         # huấn luyện mô hình rủi ro
+uv run fastapi dev backend/app/main.py                # chạy backend
+```
+
+Lệnh huấn luyện đọc thẳng tệp CSV trong `datasets/raw/` nên không phụ thuộc ba bước trước nó và chạy được cả khi Postgres đang tắt; xếp ở đây vì backend cần tệp mô hình thì mới dự đoán được. Nó in ra một "Ngưỡng đề xuất" — chép con số đó vào `RISK_THRESHOLD` trong `.env`.
+
+Chi tiết cấu hình, biến môi trường và cách đọc báo cáo đánh giá: [backend/README.md](backend/README.md).
+
+## 6. Giấy phép
 
 Dự án được thực hiện cho mục đích giáo dục, không sử dụng cho mục đích thương mại.

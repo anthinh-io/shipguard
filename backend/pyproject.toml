@@ -10,6 +10,17 @@ dependencies = [
     "pydantic-settings>=2.7",
     "pyjwt>=2.14.0",
     "pwdlib[argon2]>=0.3.1",
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "scikit-learn>=1.6",
+    # Khai báo tường minh dù Scikit-learn đã kéo theo: candidates.py gọi thẳng
+    # scipy.stats.norm cho phân vị của mô hình AFT. Dựa vào phụ thuộc bắc cầu thì một
+    # bản Scikit-learn sau này bỏ scipy đi là hỏng huấn luyện mà không ai đoán được vì sao.
+    "scipy>=1.14",
+    # Từ 2.0 trở lên mới nhận quantile_alpha dạng danh sách, tức một mô hình cho nhiều
+    # phân vị cùng lúc. Bản cũ hơn phải huấn luyện riêng từng phân vị.
+    "xgboost>=2.1",
+    "joblib>=1.4",
 ]
 
 [build-system]

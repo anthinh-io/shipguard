@@ -72,6 +72,6 @@ C rụng vì bỏ xác suất mà nghiệp vụ cần. Giữa A và B, A có th�
 
 ## Việc cần làm
 
-1. [ ] Script huấn luyện ba bộ ứng viên và báo cáo đánh giá
-2. [ ] Mô-đun dự đoán: phân phối, `Late Probability`, `Risk Cause`
-3. [ ] `Risk Threshold` trong cấu hình
+1. [x] Script huấn luyện ba bộ ứng viên và báo cáo đánh giá
+2. [x] Mô-đun dự đoán: phân phối, `Late Probability`, `Risk Cause`
+3. [x] `Risk Threshold` trong cấu hình

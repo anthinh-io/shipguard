@@ -1,8 +1,11 @@
 # ADR-0007: Lớp dẫn xuất là nơi lưu dữ liệu vận hành, bảng thô chỉ để huấn luyện
 
-**Trạng thái:** Đã chấp nhận
+**Trạng thái:** Bị thay thế
+**Thay bởi:** ADR-0010
 **Ngày:** 2026-09-15
 **Người quyết định:** Chủ dự án
+
+> ADR-0010 chỉ lật quyết định 1 — bảng `raw_*` không còn là dữ liệu huấn luyện, và sẽ bị xoá. Các quyết định 2, 3, 4 vẫn còn hiệu lực và được ADR-0010 giữ nguyên tường minh. Bảng `raw_*` và lệnh `load_raw_data` **vẫn đang tồn tại** cho tới khi việc cần làm 2–4 của ADR-0010 hoàn thành.
 
 ## Bối cảnh
 
