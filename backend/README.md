@@ -72,7 +72,7 @@ Lệnh `load_raw_data` nạp 9 tệp CSV Olist trong `datasets/raw/` vào các b
 xoá sạch (`TRUNCATE`) rồi nạp lại trong cùng một transaction trước khi nạp,
 nên không bao giờ bị nhân đôi dữ liệu.
 
-Lệnh `build_derived_data` dựng hai bảng dẫn xuất từ các bảng thô, cũng chạy lại
+Lệnh `build_derived_data` dựng bảy bảng dẫn xuất từ các bảng thô, cũng chạy lại
 an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bên dưới.
 
 Kiểm tra: `curl http://localhost:8000/health` trả về
@@ -147,11 +147,16 @@ không tồn tại nhận 404 `{"detail": "Order not found"}`.
 | `items` | Từng sản phẩm theo `order_item_id`: `product_id`, `category` (tên tiếng Anh; chưa có bản dịch thì tên gốc; không có danh mục thì `null`), `price`, `freight_value`, `seller_id` |
 | `sellers` | Người bán tham gia: `seller_id`, `seller_city`, `seller_state` (bang gửi đi) |
 | `payments` | Theo `payment_sequential`: `payment_type`, `payment_installments`, `payment_value` |
-| `reviews` | `review_score`, `comment_title`, `comment_message`, `created_at` |
+| `reviews` | Theo `review_sequential`, cũ nhất trước: `review_score`, `comment_title`, `comment_message`, `created_at` |
 
 Danh sách rỗng nghĩa là đơn không có phần đó (775 đơn không có sản phẩm, nhiều đơn
-không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra theo chỉ mục
-`order_id` trên ba bảng thô tương ứng (migration `0007_order_detail`).
+không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra trên ba bảng
+dẫn xuất tương ứng, qua khoá chính ghép mở đầu bằng `order_id` (migration
+`0009_derived_order_lines`); không bảng thô nào còn nằm trên đường đọc này.
+
+Thứ tự đánh giá đọc theo `review_sequential` chứ không theo thời điểm tạo: 547 đơn Olist
+có nhiều hơn một đánh giá, và 157 cặp (đơn, thời điểm tạo) trùng nhau, nên sắp theo riêng
+thời điểm tạo cho thứ tự bất định giữa các lần chạy.
 
 `GET /orders/{order_id}/notes` (đòi token) trả các `Internal Note` của đơn, mới nhất trên
 cùng: `{"id", "body", "created_at", "author": {"display_name", "role"}}`. `POST` cùng
@@ -235,9 +240,25 @@ tên trần là tầng dẫn xuất.
 | `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
 | `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+| `order_items` | Dòng sản phẩm: thứ tự dòng, mã sản phẩm, tên danh mục gốc, cân nặng, giá, phí vận chuyển, người bán |
+| `order_payments` | Dòng thanh toán: thứ tự, hình thức, số kỳ trả góp, số tiền |
+| `order_reviews` | Đánh giá của khách: thứ tự trong đơn, số sao, tiêu đề, nội dung, thời điểm tạo |
+| `product_categories` | Bảng tra danh mục: tên danh mục gốc và nhãn tiếng Anh tương ứng |
 | `order_notes` | Internal Note — bảng nghiệp vụ, không phải bảng dẫn xuất |
 
-`order_notes.order_id` cố ý không có khoá ngoại tới `orders`. `build_derived_data`
+Ba bảng dòng sản phẩm, dòng thanh toán và đánh giá **có** khoá ngoại tới `orders`: chúng được
+TRUNCATE rồi dựng lại cùng một lượt với `orders`, đúng như `order_sellers`, nên khoá ngoại
+không chặn bước dựng mà còn bắt được dòng mồ côi. `product_categories` không gắn với đơn nên
+không có khoá ngoại nào. Bất kỳ thao tác nào xoá dòng khỏi `orders` phải xoá bốn bảng con
+trước — `build_derived_data` gộp cả bảy vào một câu `TRUNCATE`, còn test nào thu nhỏ `orders`
+thì xoá theo thứ tự con trước cha.
+
+`order_items.product_category_name` lưu tên danh mục **gốc**, không phải nhãn tiếng Anh đã tra
+sẵn: nhãn nằm ở `product_categories` và được `LEFT JOIN` lúc đọc. Nhờ vậy sửa bản dịch không
+phải dựng lại 112.650 dòng, và hai danh mục chưa có bản dịch (`pc_gamer`,
+`portateis_cozinha_e_preparadores_de_alimentos`) vẫn hiện tên gốc thay vì để trống.
+
+`order_notes.order_id` thì ngược lại, cố ý không có khoá ngoại tới `orders`. `build_derived_data`
 TRUNCATE rồi dựng lại `orders`, nên khoá ngoại sẽ chặn bước dựng, hoặc xóa lan mọi ghi chú
 nếu thêm CASCADE. Tầng dịch vụ tự kiểm đơn tồn tại khi thêm ghi chú. Dựng lại dữ liệu dẫn
 xuất không đụng tới ghi chú. Test `auth_session` TRUNCATE `order_notes` cùng `users`, vì
@@ -248,6 +269,10 @@ mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_deri
 chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
 chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
 cột thô là số nguyên nên `01310` đã nạp thành `1310`.
+
+Cùng luật đó áp cho migration thêm **bảng** dẫn xuất: sau `0009_derived_order_lines` phải chạy
+lại `build_derived_data`, nếu không bốn bảng mới rỗng và trang chi tiết hiện mọi đơn như không
+có sản phẩm, thanh toán hay đánh giá.
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
 của truy vấn KPI, không phải của bước dựng bảng.
@@ -334,6 +359,70 @@ SELECT date_trunc('month', delivered_to_customer_at) AS month, count(*)
   FROM orders WHERE order_status = 'delivered'
    AND delivered_to_customer_at IS NOT NULL
  GROUP BY 1 ORDER BY 1 LIMIT 3;
+```
+
+## Ảnh chụp chi tiết đơn dùng cho test
+
+`tests/fixtures/order_detail_snapshot.json` giữ phản hồi đầy đủ của `GET /orders/{order_id}`
+cho cả 312 đơn trong `edge_case_orders.json`, một đơn một dòng. Nó được chụp **trước** khi
+trang chi tiết chuyển từ bảng thô sang lớp dẫn xuất (migration `0009_derived_order_lines`), và
+`test_order_detail_snapshot.py` khẳng định phản hồi sau khi chuyển giống hệt từng byte.
+
+Kiểu lỗi mà nó sinh ra để bắt là sai lệch âm thầm: đổi nhầm một phép nối hay một tên cột thì
+trang vẫn mở bình thường, chỉ khác vài trường ở vài đơn, và không bài test nào khác đỏ. Ảnh
+chụp đi qua endpoint chứ không qua hàm dịch vụ, nên nó bắt được cả sai lệch ở tầng Pydantic —
+số thập phân dựng thành chuỗi, định dạng dấu thời gian.
+
+**Không chụp lại tệp này để làm một bài test đỏ thành xanh.** Đỏ nghĩa là phản hồi đã đổi, và
+việc phải làm là tìm ra vì sao. Chỉ dựng lại khi phản hồi được cố ý đổi, và khi đó ảnh chụp mới
+phải nằm trong cùng commit với thay đổi gây ra nó.
+
+Dựng lại bằng kịch bản sau, chạy từ gốc repo sau khi `uv run pytest` đã tạo và nạp cơ sở dữ
+liệu test:
+
+```python
+import asyncio, json
+from pathlib import Path
+
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.api.deps import get_db
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.main import app
+
+FIXTURES = Path("backend/tests/fixtures")
+
+
+async def main() -> None:
+    edge = json.loads((FIXTURES / "edge_case_orders.json").read_text("utf-8"))
+    engine = create_async_engine(settings.TEST_DATABASE_URL)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_get_db():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    snapshot = {}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.headers["Authorization"] = f"Bearer {create_access_token(1, 'operations_staff', [])}"
+        for order_id in sorted({o for g in edge.values() for o in g}):
+            response = await client.get(f"/orders/{order_id}")
+            assert response.status_code == 200, response.text
+            snapshot[order_id] = response.json()
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+    body = ",\n".join(
+        f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False, sort_keys=True)}"
+        for k, v in snapshot.items()
+    )
+    (FIXTURES / "order_detail_snapshot.json").write_text("{\n" + body + "\n}\n", "utf-8")
+
+
+asyncio.run(main())
 ```
 
 ## Kiểm thử
