@@ -83,7 +83,7 @@ Bảng tạm được chọn thay vì viết lại bước dựng bằng pandas 
 1. [x] Lệnh huấn luyện và notebook đọc thẳng CSV
 2. [x] Xoá 9 bảng `raw_*`, gộp `load_raw_data` vào `build_derived_data` bằng bảng tạm
 3. [x] Sáu tệp test chuyển sang lấy CSV làm nguồn đối chiếu
-4. [ ] `build_derived_data` dừng khi đã có `Risk Assessment` (chuyển từ ADR-0007)
+4. [x] `build_derived_data` dừng khi đã có `Risk Assessment` (chuyển từ ADR-0007)
 
 Ghi chú khi làm việc 2: bảng tạm được đặt **đúng tên chín bảng thô cũ** chứ không đổi
 thành `tmp_*` như câu chữ quyết định 3 gợi ý. Postgres tra `pg_temp` trước cho tên bảng

@@ -103,4 +103,4 @@ A rụng vì làm bẩn tập huấn luyện. D rụng vì cái giá sửa mọi
 
 1. [x] Bảng dẫn xuất dòng sản phẩm, dòng thanh toán và đánh giá, đổ dữ liệu từ `build_derived_data`
 2. [x] Trang chi tiết đơn đọc sản phẩm, thanh toán và đánh giá từ lớp dẫn xuất
-3. [ ] `build_derived_data` dừng khi đã có `Risk Assessment`
+3. [x] `build_derived_data` dừng khi đã có `Risk Assessment`

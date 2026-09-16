@@ -83,6 +83,10 @@ sellers = sa.Table(
     sa.Column("seller_id", sa.Text, primary_key=True),
     sa.Column("seller_city", sa.Text, nullable=False),
     sa.Column("seller_state", sa.Text, nullable=False),
+    # Mã bưu chính 5 chữ số như customer_zip_code_prefix, không phải số nguyên — mô hình dự
+    # đoán cần nó để tính khoảng cách người bán -> khách. Có thể NULL: cột thêm sau khi bảng
+    # đã có dữ liệu, và chỉ build_derived_data điền lại được.
+    sa.Column("seller_zip_code_prefix", sa.Text),
 )
 
 # Dòng sản phẩm của một đơn. Khoá ngoại tới orders an toàn vì bảng này được truncate và dựng

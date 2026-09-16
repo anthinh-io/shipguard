@@ -171,6 +171,43 @@ không tồn tại trả 404 ở cả hai phương thức. Không có PATCH hay 
 ghi chú đính chính. `created_at` là mốc thật có múi giờ, không theo quy ước UTC của dữ liệu
 Olist. Tác giả `Locked User` vẫn hiện tên.
 
+### Tạo đơn và Risk Assessment
+
+`POST /orders` (đòi token) ghi một đơn thật cùng lần `Risk Assessment` đầu tiên **trong
+một giao dịch** (ADR-0009) — đơn không bao giờ được tồn tại mà thiếu đánh giá
+(CONTEXT.md, mục `Risk Assessment`). Thân yêu cầu:
+
+| Trường | Ghi chú |
+| --- | --- |
+| `purchased_at` | ISO 8601 kèm offset, không ở tương lai |
+| `estimated_delivery_date` | Ngày (`YYYY-MM-DD`), không sớm hơn ngày của `purchased_at` |
+| `customer_state`, `customer_city`, `customer_zip_code_prefix` | Địa chỉ giao; `customer_state` phải là một trong các bang đã có đơn |
+| `items[]` | `seller_id` (phải tồn tại), `product_category_name` (phải tồn tại), `product_weight_g` (tuỳ chọn), `price`, `freight_value` — tối thiểu một dòng |
+| `payments[]` | `payment_type` (`credit_card` / `boleto` / `voucher` / `debit_card`), `payment_installments`, `payment_value` — tối thiểu một dòng; chỉ `credit_card` mới nhận số kỳ trả góp lớn hơn 1 |
+
+Trả 201 kèm `{"order_id", "risk_assessment"}`; `risk_assessment` gồm `id`, `checkpoint`
+(luôn `order_placed` ở đây), `late_probability`, `is_high_risk`, `threshold_used`,
+`model_version` và `risk_cause: {stage, seller_id, median_days, historical_median_days,
+excess_days}` — chặng gây rủi ro nhất trong các chặng chưa xảy ra, kèm tên người bán nếu
+nguyên nhân là khâu người bán.
+
+Dữ liệu sai một trường (thiếu dòng sản phẩm/thanh toán, người bán hay danh mục không tồn
+tại, bang ngoài danh sách, trả góp nhiều kỳ mà không phải thẻ tín dụng, thời điểm ở tương
+lai, ngày cam kết trước ngày đặt, số âm) trả 422 kèm `detail` dạng danh sách
+`[{"type", "loc", "msg"}]` chỉ đúng trường sai — cùng hình dạng lỗi Pydantic tự sinh, kể
+cả với các lỗi cần tra cơ sở dữ liệu (người bán, danh mục, bang) mà Pydantic không tự
+kiểm được. Không có gì được lưu khi có lỗi. Chưa có tệp mô hình thì trả 503 và không tạo
+đơn nào.
+
+`GET /orders/{order_id}/risk-assessments` (đòi token) trả lịch sử đánh giá của một đơn,
+mới nhất trên cùng. Đơn Olist lịch sử không bao giờ có đánh giá nên trả mảng rỗng; mã đơn
+không tồn tại trả 404.
+
+`GET /product-categories` (đòi token, **cấp gốc**) trả danh mục sản phẩm kèm nhãn hiển
+thị — `[{"name", "label"}]` — cho ô chọn danh mục của biểu mẫu tạo đơn. Cùng lý do với
+`/customer-states`: mẫu chặn `${BACKEND_URL}/orders**` của Playwright vượt cả dấu gạch
+chéo, nên đường dẫn không nằm dưới `/orders`.
+
 ## Đăng nhập
 
 Cơ chế token theo `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`: access
@@ -250,7 +287,9 @@ giao dịch của nó (ADR-0010).
 | `order_payments` | Dòng thanh toán: thứ tự, hình thức, số kỳ trả góp, số tiền |
 | `order_reviews` | Đánh giá của khách: thứ tự trong đơn, số sao, tiêu đề, nội dung, thời điểm tạo |
 | `product_categories` | Bảng tra danh mục: tên danh mục gốc và nhãn tiếng Anh tương ứng |
+| `sellers` | Người bán: `seller_id`, `seller_city`, `seller_state`, `seller_zip_code_prefix` (mã bưu chính, mô hình dự đoán dùng để tính khoảng cách người bán → khách) |
 | `order_notes` | Internal Note — bảng nghiệp vụ, không phải bảng dẫn xuất |
+| `risk_assessments` | `Risk Assessment` — bảng nghiệp vụ, không phải bảng dẫn xuất |
 
 Ba bảng dòng sản phẩm, dòng thanh toán và đánh giá **có** khoá ngoại tới `orders`: chúng được
 TRUNCATE rồi dựng lại cùng một lượt với `orders`, đúng như `order_sellers`, nên khoá ngoại
@@ -270,11 +309,27 @@ nếu thêm CASCADE. Tầng dịch vụ tự kiểm đơn tồn tại khi thêm 
 xuất không đụng tới ghi chú. Test `auth_session` TRUNCATE `order_notes` cùng `users`, vì
 ghi chú có khoá ngoại tới tác giả.
 
+`risk_assessments.order_id` cũng cố ý không có khoá ngoại tới `orders`, vì lý do mạnh hơn
+`order_notes`: chính bảng này là thứ chặn `build_derived_data` (xem đoạn dưới). Có khoá
+ngoại tới `users` cho `created_by` và `handled_by` — `User` không bao giờ bị xóa nên khoá
+ngoại này không chặn gì. Dựng đủ ba phần (đánh giá, xử lý, đối chiếu) ngay từ migration
+`0011_risk_assessments`; cột xử lý và đối chiếu để trống cho tới các ticket dùng tới chúng.
+
+**`build_derived_data` tự dừng nếu đã có bất kỳ `Risk Assessment` nào** (ADR-0007, ADR-0010):
+sự tồn tại của một dòng ở đó là dấu hiệu duy nhất có đơn tạo trong Ship Guard, và `TRUNCATE`
+sẽ xoá mất đơn đó không hoàn tác được. Thông báo lỗi nêu rõ lý do, không đổi gì. Bộ test tự
+dựng lại dữ liệu dẫn xuất ở vài chỗ giữa phiên (kiểm tính lặp lại, kiểm ghi chú sống sót);
+những chỗ đó gọi `build_all(..., allow_existing_assessments=True)` qua hàm bọc
+`rebuild_derived_data` trong `tests/conftest.py` — cờ này không tồn tại trong `main()`, nên
+người vận hành không có đường nào bỏ qua chốt chặn.
+
 Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
-mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
-chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
-chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
-bảng tạm nhận CSV giữ cột này ở kiểu số nguyên nên `01310` vào thành `1310`.
+mã bưu chính, hay `0011_risk_assessments` thêm `sellers.seller_zip_code_prefix`) thì sau
+`alembic upgrade head` phải chạy lại `build_derived_data`. Chưa chạy thì cột mới để trống:
+trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu chính hiện là chưa có, còn
+`POST /orders` trả 503 vì thiếu mã bưu chính người bán để tính khoảng cách.
+`customer_zip_code_prefix` và `seller_zip_code_prefix` đều là chuỗi được đệm lại đủ 5 chữ
+số: bảng tạm nhận CSV giữ các cột này ở kiểu số nguyên nên `01310` vào thành `1310`.
 
 Cùng luật đó áp cho migration thêm **bảng** dẫn xuất: sau `0009_derived_order_lines` phải chạy
 lại `build_derived_data`, nếu không bốn bảng mới rỗng và trang chi tiết hiện mọi đơn như không

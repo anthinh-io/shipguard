@@ -79,13 +79,22 @@ def test_database() -> None:
     command.upgrade(config, "head")
 
 
+# Bọc build_all với allow_existing_assessments=True: bộ test gọi lệnh dựng ở ba chỗ, hai
+# chỗ (đây và test_build_is_idempotent) chạy giữa phiên sau khi bài test tạo đơn khác đã để
+# lại Risk Assessment. Test tự dọn risk_assessments trước khi gọi thì kết quả phụ thuộc thứ
+# tự chạy của các tệp — đúng loại lỗi mà auth_session và clear_predictor_cache đã phải đi
+# vòng để tránh. Đường test có chủ đích đi qua cờ này; main() không bao giờ truyền nó.
+async def rebuild_derived_data(dsn: str) -> dict[str, int]:
+    return await build_all(dsn, CSV_DIR, allow_existing_assessments=True)
+
+
 # Dựng bảng dẫn xuất một lần cho cả phiên. Bước dựng tự nạp CSV vào bảng tạm nên không
 # còn bước nạp thô nào đứng trước nó. Khai báo phụ thuộc qua tham số là ràng buộc cứng
 # trong đồ thị fixture, nên thứ tự luôn là migration -> dựng dẫn xuất, không phụ thuộc
 # vào thứ tự chạy của các test.
 @pytest.fixture(scope="session")
 def derived_data(test_database: None) -> dict[str, int]:
-    return asyncio.run(build_all(settings.TEST_DATABASE_URL, CSV_DIR))
+    return asyncio.run(rebuild_derived_data(settings.TEST_DATABASE_URL))
 
 
 # Phụ thuộc derived_data là bắt buộc, không phải trang trí: engine trần không kéo theo
@@ -103,8 +112,9 @@ async def session(derived_data: dict[str, int]) -> AsyncIterator[AsyncSession]:
 
 # Chỉ phụ thuộc migration, không kéo bước nạp dữ liệu: test đăng nhập không đọc đơn hàng.
 # Dọn sạch mỗi test vì chỉ mục "đúng một super_admin" làm test phụ thuộc thứ tự nếu một
-# test để lại Super Admin cho test sau. order_notes phải xoá cùng lượt: ghi chú có khoá
-# ngoại tới tác giả, nên TRUNCATE users một mình bị từ chối.
+# test để lại Super Admin cho test sau. order_notes và risk_assessments phải xoá cùng lượt:
+# cả hai có khoá ngoại tới người dùng (risk_assessments có tới hai, created_by và
+# handled_by), nên TRUNCATE users một mình bị từ chối bất kể hai bảng đó có dòng nào không.
 @pytest.fixture
 async def auth_session(test_database: None) -> AsyncIterator[AsyncSession]:
     engine = create_async_engine(settings.TEST_DATABASE_URL)
@@ -113,8 +123,8 @@ async def auth_session(test_database: None) -> AsyncIterator[AsyncSession]:
         async with session_factory() as db:
             await db.execute(
                 text(
-                    "TRUNCATE order_notes, user_claims, refresh_tokens, users "
-                    "RESTART IDENTITY"
+                    "TRUNCATE risk_assessments, order_notes, user_claims, refresh_tokens, "
+                    "users RESTART IDENTITY"
                 )
             )
             await db.commit()
