@@ -1,16 +1,15 @@
-import csv
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from olist_csv import read_rows
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
-from app.scripts.load_raw_data import CSV_DIR
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EDGE_CASE_ORDERS = json.loads((FIXTURES / "edge_case_orders.json").read_text("utf-8"))
@@ -53,9 +52,22 @@ async def get_orders(client: AsyncClient, **params: Any) -> dict[str, Any]:
     return response.json()
 
 
-def _csv_orders() -> list[dict[str, str]]:
-    with open(CSV_DIR / "olist_orders_dataset.csv", encoding="utf-8-sig", newline="") as f:
-        return list(csv.DictReader(f))
+def _csv_orders() -> tuple[dict[str, str], ...]:
+    return read_rows("olist_orders_dataset.csv")
+
+
+def _customer_states() -> dict[str, str]:
+    return {
+        row["customer_id"]: row["customer_state"]
+        for row in read_rows("olist_customers_dataset.csv")
+    }
+
+
+def _sellers_by_order() -> dict[str, set[str]]:
+    sellers: dict[str, set[str]] = defaultdict(set)
+    for row in read_rows("olist_order_items_dataset.csv"):
+        sellers[row["order_id"]].add(row["seller_id"])
+    return sellers
 
 
 def test_golden_numbers_from_csv() -> None:
@@ -141,14 +153,11 @@ async def test_the_whole_purchase_range_includes_every_order(client: AsyncClient
     assert body["total"] == TOTAL_ORDERS
 
 
-async def test_purchase_range_excludes_days_outside_it(
-    client: AsyncClient, session: AsyncSession
-) -> None:
-    expected = await session.scalar(
-        text(
-            "SELECT count(*) FROM raw_orders "
-            "WHERE order_purchase_timestamp::date BETWEEN '2017-11-24' AND '2017-11-25'"
-        )
+async def test_purchase_range_excludes_days_outside_it(client: AsyncClient) -> None:
+    expected = sum(
+        1
+        for row in _csv_orders()
+        if "2017-11-24" <= row["order_purchase_timestamp"][:10] <= "2017-11-25"
     )
 
     body = await get_orders(
@@ -161,22 +170,15 @@ async def test_purchase_range_excludes_days_outside_it(
     )
 
 
-async def test_delivery_range_includes_both_end_days(
-    client: AsyncClient, session: AsyncSession
-) -> None:
-    # Viết độc lập với within_days: ép ::date trên bảng thô thay vì khoảng nửa mở.
-    expected = await session.scalar(
-        text(
-            "SELECT count(*) FROM raw_orders "
-            "WHERE order_delivered_customer_date::date BETWEEN '2018-01-01' AND '2018-01-31'"
-        )
-    )
-    last_day = await session.scalar(
-        text(
-            "SELECT count(*) FROM raw_orders "
-            "WHERE order_delivered_customer_date::date = '2018-01-31'"
-        )
-    )
+async def test_delivery_range_includes_both_end_days(client: AsyncClient) -> None:
+    # Viết độc lập với within_days: cắt mười ký tự ngày trên tệp CSV thay vì khoảng nửa mở.
+    delivered_days = [
+        row["order_delivered_customer_date"][:10]
+        for row in _csv_orders()
+        if row["order_delivered_customer_date"]
+    ]
+    expected = sum(1 for day in delivered_days if "2018-01-01" <= day <= "2018-01-31")
+    last_day = sum(1 for day in delivered_days if day == "2018-01-31")
     assert last_day > 0
 
     whole = await get_orders(client, delivered_from="2018-01-01", delivered_to="2018-01-31")
@@ -188,15 +190,10 @@ async def test_delivery_range_includes_both_end_days(
     assert whole["total"] - without_last_day["total"] == last_day
 
 
-async def test_state_filter_keeps_only_that_state(
-    client: AsyncClient, session: AsyncSession
-) -> None:
-    expected = await session.scalar(
-        text(
-            "SELECT count(*) FROM raw_orders o "
-            "JOIN raw_customers c ON c.customer_id = o.customer_id "
-            "WHERE c.customer_state = 'RR'"
-        )
+async def test_state_filter_keeps_only_that_state(client: AsyncClient) -> None:
+    states = _customer_states()
+    expected = sum(
+        1 for row in _csv_orders() if states.get(row["customer_id"]) == "RR"
     )
 
     body = await get_orders(client, customer_state="RR")
@@ -206,14 +203,11 @@ async def test_state_filter_keeps_only_that_state(
 
 
 async def test_seller_filter_counts_every_order_with_that_sellers_items(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient,
 ) -> None:
     seller_id = EDGE_CASE_FILTERS["busiest_seller"]
-    expected = await session.scalar(
-        text(
-            "SELECT count(DISTINCT order_id) FROM raw_order_items WHERE seller_id = :seller"
-        ),
-        {"seller": seller_id},
+    expected = sum(
+        1 for sellers in _sellers_by_order().values() if seller_id in sellers
     )
 
     body = await get_orders(client, seller_id=seller_id)
@@ -222,17 +216,10 @@ async def test_seller_filter_counts_every_order_with_that_sellers_items(
 
 
 async def test_multi_seller_order_belongs_to_every_participating_seller(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient,
 ) -> None:
     order_id = EDGE_CASE_ORDERS["multi_seller"][0]
-    seller_ids = (
-        await session.scalars(
-            text(
-                "SELECT DISTINCT seller_id FROM raw_order_items WHERE order_id = :order"
-            ),
-            {"order": order_id},
-        )
-    ).all()
+    seller_ids = sorted(_sellers_by_order()[order_id])
     assert len(seller_ids) > 1
 
     for seller_id in seller_ids:
@@ -241,22 +228,20 @@ async def test_multi_seller_order_belongs_to_every_participating_seller(
         assert [item["order_id"] for item in body["items"]] == [order_id]
 
 
-async def test_filters_combine(client: AsyncClient, session: AsyncSession) -> None:
+async def test_filters_combine(client: AsyncClient) -> None:
     seller_id = EDGE_CASE_FILTERS["busiest_seller"]
-    expected = await session.scalar(
-        text(
-            "SELECT count(*) FROM raw_orders o "
-            "JOIN raw_customers c ON c.customer_id = o.customer_id "
-            "WHERE c.customer_state = 'SP' "
-            "AND o.order_status = 'delivered' "
-            "AND o.order_delivered_customer_date IS NOT NULL "
-            "AND o.order_delivered_customer_date::date "
-            "    > o.order_estimated_delivery_date::date "
-            "AND o.order_purchase_timestamp::date BETWEEN '2017-01-01' AND '2018-06-30' "
-            "AND EXISTS (SELECT 1 FROM raw_order_items i "
-            "            WHERE i.order_id = o.order_id AND i.seller_id = :seller)"
-        ),
-        {"seller": seller_id},
+    states = _customer_states()
+    sellers_by_order = _sellers_by_order()
+    expected = sum(
+        1
+        for row in _csv_orders()
+        if states.get(row["customer_id"]) == "SP"
+        and row["order_status"] == "delivered"
+        and row["order_delivered_customer_date"]
+        and row["order_delivered_customer_date"][:10]
+        > row["order_estimated_delivery_date"][:10]
+        and "2017-01-01" <= row["order_purchase_timestamp"][:10] <= "2018-06-30"
+        and seller_id in sellers_by_order.get(row["order_id"], set())
     )
     assert expected > 0
 

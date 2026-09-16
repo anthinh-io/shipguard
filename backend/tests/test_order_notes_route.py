@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.notes import order_notes
-from app.scripts.build_derived_data import build_all
+from app.scripts.build_derived_data import CSV_DIR, build_all
 from app.services.users import create_user, update_user
 
 pytestmark = pytest.mark.usefixtures("derived_data")
@@ -227,7 +227,7 @@ async def test_rebuilding_derived_data_keeps_every_note_unchanged(
     headers = await bearer(client, STAFF)
     before = (await client.get(f"/orders/{ORDER_ID}/notes", headers=headers)).json()
 
-    await build_all(settings.TEST_DATABASE_URL)
+    await build_all(settings.TEST_DATABASE_URL, CSV_DIR)
 
     after = await client.get(f"/orders/{ORDER_ID}/notes", headers=headers)
     assert after.status_code == 200

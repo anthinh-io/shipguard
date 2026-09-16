@@ -1,14 +1,89 @@
 import asyncio
+from pathlib import Path
 
 import asyncpg
 
-from app.core.config import settings
+from app.core.config import REPO_ROOT, settings
+
+CSV_DIR = REPO_ROOT / "datasets" / "raw"
+
+# Bảng tạm mang đúng tên chín bảng thô đã bị xoá, không phải tmp_*: nhờ thế bảy câu SQL
+# dựng bên dưới không đổi một ký tự nào khi lớp thô rời khỏi lược đồ. Chúng là chỗ đã
+# từng sai hai lần — đánh số thứ tự đánh giá và phép gộp Order Value — nên viết lại chúng
+# là mở lại hai lỗi đã đóng. Postgres tra pg_temp trước cho tên bảng không kèm schema, nên
+# cả COPY lẫn bảy câu SQL đều trúng bảng tạm.
+#
+# ON COMMIT DROP chứ không DROP tay ở cuối: giao dịch hỏng giữa chừng cũng không để lại
+# bảng nào, và hai lần chạy chồng nhau trên hai kết nối không thấy bảng của nhau.
+#
+# Kiểu cột chép nguyên từ lớp thô cũ, không xê dịch: numeric(12,2) cho tiền — kiểu số thực
+# sẽ trôi xu và làm lệch Order Value; integer cho customer_zip_code_prefix — chính vì nó
+# mất số 0 đầu mà ORDERS_SQL phải lpad lại; timestamp cho các mốc thời gian, vì
+# ORDER BY review_creation_date và phép ép ::date đều dựa vào đó.
+RAW_TEMP_TABLES_SQL = """
+    CREATE TEMP TABLE raw_customers (
+        customer_id text, customer_unique_id text,
+        customer_zip_code_prefix integer, customer_city text, customer_state text
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_geolocation (
+        geolocation_zip_code_prefix integer,
+        geolocation_lat double precision, geolocation_lng double precision,
+        geolocation_city text, geolocation_state text
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_order_items (
+        order_id text, order_item_id integer, product_id text, seller_id text,
+        shipping_limit_date timestamp, price numeric(12, 2), freight_value numeric(12, 2)
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_order_payments (
+        order_id text, payment_sequential integer, payment_type text,
+        payment_installments integer, payment_value numeric(12, 2)
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_order_reviews (
+        review_id text, order_id text, review_score integer,
+        review_comment_title text, review_comment_message text,
+        review_creation_date timestamp, review_answer_timestamp timestamp
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_orders (
+        order_id text, customer_id text, order_status text,
+        order_purchase_timestamp timestamp, order_approved_at timestamp,
+        order_delivered_carrier_date timestamp, order_delivered_customer_date timestamp,
+        order_estimated_delivery_date timestamp
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_products (
+        product_id text, product_category_name text,
+        product_name_lenght integer, product_description_lenght integer,
+        product_photos_qty integer, product_weight_g integer,
+        product_length_cm integer, product_height_cm integer, product_width_cm integer
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_sellers (
+        seller_id text, seller_zip_code_prefix integer,
+        seller_city text, seller_state text
+    ) ON COMMIT DROP;
+    CREATE TEMP TABLE raw_product_category_name_translation (
+        product_category_name text, product_category_name_english text
+    ) ON COMMIT DROP;
+"""
+
+# raw_geolocation không câu SQL dựng nào đọc tới, nhưng vẫn nạp: danh sách này là ánh xạ
+# trọn bộ chín tệp Olist, và bỏ một dòng ra sẽ thành câu hỏi "tệp kia đâu rồi" cho người
+# đọc sau. Mô-đun huấn luyện đọc tệp toạ độ thẳng từ đĩa, không qua đây (ADR-0010).
+CSV_TO_TABLE = {
+    "olist_customers_dataset.csv": "raw_customers",
+    "olist_geolocation_dataset.csv": "raw_geolocation",
+    "olist_order_items_dataset.csv": "raw_order_items",
+    "olist_order_payments_dataset.csv": "raw_order_payments",
+    "olist_order_reviews_dataset.csv": "raw_order_reviews",
+    "olist_orders_dataset.csv": "raw_orders",
+    "olist_products_dataset.csv": "raw_products",
+    "olist_sellers_dataset.csv": "raw_sellers",
+    "product_category_name_translation.csv": "raw_product_category_name_translation",
+}
 
 # worst_review_score lấy min chứ không phải điểm mới nhất: một đơn có thể có nhiều
 # dòng đánh giá với điểm khác nhau, và Low Review nghĩa là đã từng bị chấm 1–2 sao.
 #
-# customer_zip_code_prefix đệm lại cho đủ 5 chữ số: tệp CSV ghi "01310" nhưng cột thô là
-# số nguyên nên đã nạp thành 1310.
+# customer_zip_code_prefix đệm lại cho đủ 5 chữ số: tệp CSV ghi "01310" nhưng cột trong
+# bảng tạm là số nguyên nên đã nạp thành 1310.
 ORDERS_SQL = """
     INSERT INTO orders (
         order_id,
@@ -156,11 +231,22 @@ DERIVED_TABLES = (
 )
 
 
-async def build_all(dsn: str) -> dict[str, int]:
+async def build_all(dsn: str, csv_dir: Path) -> dict[str, int]:
     asyncpg_dsn = dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
     conn = await asyncpg.connect(asyncpg_dsn)
     try:
         async with conn.transaction():
+            await conn.execute(RAW_TEMP_TABLES_SQL)
+            for filename, table in CSV_TO_TABLE.items():
+                with open(csv_dir / filename, "rb") as source:
+                    await conn.copy_to_table(table, source=source, format="csv", header=True)
+
+            # Autovacuum không bao giờ đụng bảng tạm, nên thiếu câu này trình lập kế hoạch
+            # ước mỗi bảng ~1000 dòng và chọn nested loop trên 112.650 dòng hàng — bước
+            # dựng chậm đi hàng chục lần mà không có gì đỏ lên. Lớp thô cũ là bảng thường
+            # nên đã được autovacuum phân tích sẵn; bảng tạm phải tự làm lấy.
+            await conn.execute(f"ANALYZE {', '.join(CSV_TO_TABLE.values())}")
+
             # Khoá ngoại buộc xoá mọi bảng con trong cùng một câu lệnh; xoá riêng bảng
             # cha sẽ bị từ chối. Không dùng CASCADE — nó sẽ lan sang bảng khác nếu sau
             # này có bảng trỏ tới.
@@ -187,7 +273,7 @@ async def build_all(dsn: str) -> dict[str, int]:
 
 
 def main() -> None:
-    counts = asyncio.run(build_all(settings.DATABASE_URL))
+    counts = asyncio.run(build_all(settings.DATABASE_URL, CSV_DIR))
     for table, count in counts.items():
         print(f"{table}: {count} rows")
 

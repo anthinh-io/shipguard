@@ -117,8 +117,8 @@ def test_missing_coordinates_give_nan_distance_not_zero(data: TrainingData) -> N
 
 
 def test_zip_codes_keep_their_leading_zero(data: TrainingData) -> None:
-    # Cột mã bưu chính ở tầng bảng thô là INTEGER nên 01310 đã thành 1310; đọc thẳng
-    # CSV thì không. Nếu ai đó bỏ dtype=str, phép nối bảng toạ độ lệch câm.
+    # Cột mã bưu chính trong bảng tạm của bước dựng là INTEGER nên 01310 đã thành 1310;
+    # đọc thẳng CSV thì không. Nếu ai đó bỏ dtype=str, phép nối bảng toạ độ lệch câm.
     assert data.orders["customer_zip"].str.startswith("0").any()
     assert data.zip_coords.index.str.startswith("0").any()
     assert data.orders["customer_zip"].str.len().eq(5).all()

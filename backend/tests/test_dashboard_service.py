@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
+from olist_csv import read_rows
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -241,17 +242,24 @@ async def test_daily_bucket_is_its_own_day(session: AsyncSession) -> None:
 async def test_state_distribution_uses_customer_state_not_seller_state(
     session: AsyncSession,
 ) -> None:
-    # Đếm độc lập theo bang NGƯỜI BÁN, qua order_sellers -> raw_sellers. Hai tập phải
-    # khác nhau, nếu không bài test này không phân biệt được gì cả — đây chính là cái
-    # bẫy nêu trong CONTEXT.md mục Region.
-    seller_state_sp_orders = await session.scalar(
+    # Đếm độc lập theo bang NGƯỜI BÁN. Bang lấy từ tệp CSV chứ không từ bảng sellers:
+    # bảng ấy do chính bước dựng sinh ra, nên một lỗi chép nhầm cột bang sẽ nằm ở cả hai
+    # vế và phép so vẫn xanh. Hai tập phải khác nhau, nếu không bài test này không phân
+    # biệt được gì cả — đây chính là cái bẫy nêu trong CONTEXT.md mục Region.
+    sp_sellers = {
+        row["seller_id"]
+        for row in read_rows("olist_sellers_dataset.csv")
+        if row["seller_state"] == "SP"
+    }
+    delivered_by_seller = await session.execute(
         text(
-            "SELECT count(*) FROM order_sellers os "
+            "SELECT os.seller_id FROM order_sellers os "
             "JOIN orders o ON o.order_id = os.order_id "
-            "JOIN raw_sellers s ON s.seller_id = os.seller_id "
-            "WHERE o.order_status = 'delivered' AND o.delivered_to_customer_at IS NOT NULL "
-            "AND s.seller_state = 'SP'"
+            "WHERE o.order_status = 'delivered' AND o.delivered_to_customer_at IS NOT NULL"
         )
+    )
+    seller_state_sp_orders = sum(
+        1 for row in delivered_by_seller if row.seller_id in sp_sellers
     )
 
     by_state = {
