@@ -1,35 +1,28 @@
-import csv
 from collections import defaultdict
 from decimal import Decimal
 
+from olist_csv import read_rows
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.scripts.load_raw_data import CSV_DIR
-
-# Bộ số vàng của Order Value tính thẳng từ CSV, không đi qua bảng thô hay câu SQL dựng
-# bảng dẫn xuất — cùng một lỗi cộng sai ở hai nơi thì so với nhau vẫn xanh.
-
-
-def _read(filename: str) -> list[dict[str, str]]:
-    with open(CSV_DIR / filename, encoding="utf-8-sig", newline="") as f:
-        return list(csv.DictReader(f))
+# Bộ số vàng của Order Value tính thẳng từ CSV, không đi qua câu SQL dựng bảng dẫn xuất —
+# cùng một lỗi cộng sai ở hai nơi thì so với nhau vẫn xanh.
 
 
 def _order_ids() -> list[str]:
-    return [row["order_id"] for row in _read("olist_orders_dataset.csv")]
+    return [row["order_id"] for row in read_rows("olist_orders_dataset.csv")]
 
 
 def _order_values() -> dict[str, Decimal]:
     values: dict[str, Decimal] = defaultdict(Decimal)
-    for row in _read("olist_order_items_dataset.csv"):
+    for row in read_rows("olist_order_items_dataset.csv"):
         values[row["order_id"]] += Decimal(row["price"]) + Decimal(row["freight_value"])
     return values
 
 
 def _payment_totals() -> dict[str, Decimal]:
     totals: dict[str, Decimal] = defaultdict(Decimal)
-    for row in _read("olist_order_payments_dataset.csv"):
+    for row in read_rows("olist_order_payments_dataset.csv"):
         totals[row["order_id"]] += Decimal(row["payment_value"])
     return totals
 

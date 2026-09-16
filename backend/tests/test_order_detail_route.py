@@ -1,18 +1,46 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from olist_csv import read_rows
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
 from app.services.orders import get_order_detail
 
-EDGE_CASE_ORDERS = json.loads(
-    (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
-)
+FIXTURES = Path(__file__).parent / "fixtures"
+EDGE_CASE_ORDERS = json.loads((FIXTURES / "edge_case_orders.json").read_text("utf-8"))
+# Đơn mẫu ghim sẵn thay cho truy vấn quét bảng thô để tìm chúng. Chỉ ghim MÃ ĐƠN, không
+# ghim giá trị kỳ vọng: giá trị kỳ vọng luôn đọc từ CSV, nếu không nó lại được sinh ra từ
+# chính lớp dẫn xuất đang bị kiểm. Công thức dựng lại nằm trong backend/README.md.
+EDGE_CASE_FILTERS = json.loads((FIXTURES / "edge_case_filters.json").read_text("utf-8"))
+
+
+def _csv_categories(order_id: str) -> set[str | None]:
+    """Nhãn danh mục mà trang chi tiết phải hiện cho một đơn, tính thẳng từ CSV.
+
+    Nhãn tiếng Anh khi có bản dịch, tên gốc khi chưa dịch, rỗng khi sản phẩm không
+    thuộc danh mục nào — đúng ba nhánh của phép coalesce ở đường đọc.
+    """
+    original = {
+        row["product_id"]: row["product_category_name"]
+        for row in read_rows("olist_products_dataset.csv")
+    }
+    english = {
+        row["product_category_name"]: row["product_category_name_english"]
+        for row in read_rows("product_category_name_translation.csv")
+    }
+    labels: set[str | None] = set()
+    for row in read_rows("olist_order_items_dataset.csv"):
+        if row["order_id"] != order_id:
+            continue
+        name = original.get(row["product_id"]) or None
+        labels.add(english.get(name, name) if name else None)
+    return labels
 
 pytestmark = pytest.mark.usefixtures("derived_data")
 
@@ -70,19 +98,28 @@ async def test_a_late_multi_seller_order_shows_every_part_of_the_order(
     }
     assert body["timeline"]["delivered_at"][:10] > body["timeline"]["estimated_delivery_date"]
 
-    raw_items = (
-        await session.execute(
-            text(
-                "SELECT order_item_id, seller_id, price, freight_value FROM raw_order_items "
-                "WHERE order_id = :order ORDER BY order_item_id"
-            ),
-            {"order": order_id},
-        )
-    ).all()
+    # Đi qua Decimal rồi mới sang float, không ép thẳng chuỗi CSV: Order Value cộng dồn
+    # bằng số thực đã từng trôi xu một lần rồi.
+    csv_items = sorted(
+        (
+            row
+            for row in read_rows("olist_order_items_dataset.csv")
+            if row["order_id"] == order_id
+        ),
+        key=lambda row: int(row["order_item_id"]),
+    )
     assert [
         (item["order_item_id"], item["seller_id"], item["price"], item["freight_value"])
         for item in body["items"]
-    ] == [(r.order_item_id, r.seller_id, float(r.price), float(r.freight_value)) for r in raw_items]
+    ] == [
+        (
+            int(row["order_item_id"]),
+            row["seller_id"],
+            float(Decimal(row["price"])),
+            float(Decimal(row["freight_value"])),
+        )
+        for row in csv_items
+    ]
     assert set(body["items"][0]) == {
         "order_item_id",
         "product_id",
@@ -122,46 +159,20 @@ async def test_stage_durations_are_read_from_the_generated_columns(
 
 
 async def test_categories_are_english_with_the_original_name_as_fallback(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient,
 ) -> None:
-    translated = (
-        await session.execute(
-            text(
-                "SELECT i.order_id, t.product_category_name_english AS category "
-                "FROM raw_order_items i "
-                "JOIN raw_products p ON p.product_id = i.product_id "
-                "JOIN raw_product_category_name_translation t "
-                "  ON t.product_category_name = p.product_category_name "
-                "ORDER BY i.order_id LIMIT 1"
-            )
-        )
-    ).one()
-    untranslated = (
-        await session.execute(
-            text(
-                "SELECT i.order_id, p.product_category_name AS category "
-                "FROM raw_order_items i "
-                "JOIN raw_products p ON p.product_id = i.product_id "
-                "WHERE p.product_category_name IS NOT NULL AND NOT EXISTS ("
-                "  SELECT 1 FROM raw_product_category_name_translation t "
-                "  WHERE t.product_category_name = p.product_category_name) "
-                "ORDER BY i.order_id LIMIT 1"
-            )
-        )
-    ).one()
-    uncategorized = await session.scalar(
-        text(
-            "SELECT i.order_id FROM raw_order_items i "
-            "JOIN raw_products p ON p.product_id = i.product_id "
-            "WHERE p.product_category_name IS NULL ORDER BY i.order_id LIMIT 1"
-        )
-    )
-
-    for order_id, category in [translated, untranslated]:
+    # Ba đơn mẫu ghim sẵn, mỗi đơn một trường hợp: có bản dịch, có danh mục nhưng chưa
+    # dịch, và không danh mục nào. So trọn bộ nhãn chứ không chỉ đòi có mặt một nhãn —
+    # trang hiện thừa một danh mục lạ thì phép so lỏng vẫn xanh.
+    for key in (
+        "translated_category_order",
+        "untranslated_category_order",
+        "uncategorized_order",
+    ):
+        order_id = EDGE_CASE_FILTERS[key]
         items = (await get_detail(client, order_id))["items"]
-        assert category in {item["category"] for item in items}
-    items = (await get_detail(client, uncategorized))["items"]
-    assert None in {item["category"] for item in items}
+
+        assert {item["category"] for item in items} == _csv_categories(order_id)
 
 
 async def test_missing_milestones_are_null_and_the_rest_is_intact(
@@ -207,23 +218,21 @@ async def test_an_order_without_a_review_has_an_empty_review_list(
     assert body["reviews"] == []
 
 
-async def test_reviews_carry_the_score_and_comment(
-    client: AsyncClient, session: AsyncSession
-) -> None:
-    row = (
-        await session.execute(
-            text(
-                "SELECT order_id, review_score, review_comment_message FROM raw_order_reviews "
-                "WHERE review_comment_message IS NOT NULL ORDER BY order_id LIMIT 1"
-            )
-        )
-    ).one()
+async def test_reviews_carry_the_score_and_comment(client: AsyncClient) -> None:
+    # Mã đơn ghim sẵn, nhưng điểm và nội dung kỳ vọng đọc từ CSV: đó là phép đối chiếu
+    # thật, không phải chuyện chọn đơn mẫu.
+    order_id = EDGE_CASE_FILTERS["commented_review_order"]
+    row = next(
+        r
+        for r in read_rows("olist_order_reviews_dataset.csv")
+        if r["order_id"] == order_id and r["review_comment_message"]
+    )
 
-    reviews = (await get_detail(client, row.order_id))["reviews"]
+    reviews = (await get_detail(client, order_id))["reviews"]
 
     assert {
-        "review_score": row.review_score,
-        "comment_message": row.review_comment_message,
+        "review_score": int(row["review_score"]),
+        "comment_message": row["review_comment_message"],
     }.items() <= reviews[0].items()
     assert set(reviews[0]) == {"review_score", "comment_title", "comment_message", "created_at"}
 
@@ -261,14 +270,9 @@ async def test_an_order_without_items_has_no_items_sellers_or_value(
 
 
 async def test_payments_are_listed_in_sequence_with_installments(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient,
 ) -> None:
-    order_id = await session.scalar(
-        text(
-            "SELECT order_id FROM raw_order_payments GROUP BY order_id "
-            "HAVING count(*) > 1 ORDER BY order_id LIMIT 1"
-        )
-    )
+    order_id = EDGE_CASE_FILTERS["multi_payment_order"]
 
     payments = (await get_detail(client, order_id))["payments"]
 
@@ -285,25 +289,29 @@ async def test_payments_are_listed_in_sequence_with_installments(
 
 
 async def test_the_shipping_address_has_city_state_and_a_five_digit_zip_prefix(
-    client: AsyncClient, session: AsyncSession
+    client: AsyncClient,
 ) -> None:
-    row = (
-        await session.execute(
-            text(
-                "SELECT o.order_id, c.customer_city, c.customer_state, "
-                "c.customer_zip_code_prefix FROM raw_orders o "
-                "JOIN raw_customers c ON c.customer_id = o.customer_id "
-                "WHERE c.customer_zip_code_prefix < 10000 ORDER BY o.order_id LIMIT 1"
-            )
-        )
-    ).one()
+    # Đơn có mã bưu chính bắt đầu bằng số 0 — chỗ duy nhất phép đệm lại 5 chữ số nói lên
+    # điều gì. So thẳng chuỗi trong CSV chứ không định dạng lại: đúng thứ tệp gốc ghi là
+    # đúng thứ trang phải hiện.
+    order_id = EDGE_CASE_FILTERS["leading_zero_zip_order"]
+    customers = {
+        row["customer_id"]: row for row in read_rows("olist_customers_dataset.csv")
+    }
+    order = next(
+        row
+        for row in read_rows("olist_orders_dataset.csv")
+        if row["order_id"] == order_id
+    )
+    customer = customers[order["customer_id"]]
+    assert customer["customer_zip_code_prefix"].startswith("0")
 
-    address = (await get_detail(client, row.order_id))["address"]
+    address = (await get_detail(client, order_id))["address"]
 
     assert address == {
-        "customer_city": row.customer_city,
-        "customer_state": row.customer_state,
-        "customer_zip_code_prefix": f"{row.customer_zip_code_prefix:05d}",
+        "customer_city": customer["customer_city"],
+        "customer_state": customer["customer_state"],
+        "customer_zip_code_prefix": customer["customer_zip_code_prefix"],
     }
 
 

@@ -59,7 +59,6 @@ Dựng cơ sở dữ liệu, cài phụ thuộc, chạy migration, khởi độn
 docker compose up -d --wait postgres
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
-uv run python -m app.scripts.load_raw_data
 uv run python -m app.scripts.build_derived_data
 uv run python -m app.scripts.train_risk_model
 uv run fastapi dev backend/app/main.py
@@ -68,17 +67,16 @@ uv run fastapi dev backend/app/main.py
 `--wait` chặn cho tới khi Postgres nhận kết nối. Thiếu nó thì lệnh migration
 ngay sau đó có thể chạy trong lúc cơ sở dữ liệu còn đang khởi tạo và bị từ chối.
 
-Lệnh `load_raw_data` nạp 9 tệp CSV Olist trong `datasets/raw/` vào các bảng
-`raw_*`, nguyên trạng không lọc hay biến đổi. Chạy lại an toàn: mỗi bảng được
-xoá sạch (`TRUNCATE`) rồi nạp lại trong cùng một transaction trước khi nạp,
-nên không bao giờ bị nhân đôi dữ liệu.
-
-Lệnh `build_derived_data` dựng bảy bảng dẫn xuất từ các bảng thô, cũng chạy lại
-an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bên dưới.
+Lệnh `build_derived_data` làm trọn một lượt trong **một giao dịch duy nhất**: nạp 9 tệp
+CSV Olist trong `datasets/raw/` vào 9 bảng TẠM nguyên trạng, chạy bảy câu `INSERT ...
+SELECT` dựng bảy bảng dẫn xuất từ chúng, rồi kết thúc giao dịch — bảng tạm tự biến mất
+(`ON COMMIT DROP`). Chạy lại an toàn: bảy bảng dẫn xuất được xoá sạch (`TRUNCATE`) rồi
+dựng lại trong cùng giao dịch ấy, nên không bao giờ bị nhân đôi dữ liệu, và giao dịch
+hỏng giữa chừng không để lại bảng tạm nào. Xem mục [Lớp dẫn xuất](#lớp-dẫn-xuất) bên dưới.
 
 Lệnh `train_risk_model` huấn luyện bộ mô hình dự đoán rủi ro. Nó **không đụng cơ sở
 dữ liệu** — đọc thẳng tệp CSV trong `datasets/raw/` (ADR-0010) — nên không phụ thuộc
-ba lệnh trên và chạy được cả khi Postgres đang tắt. Xếp ở vị trí này vì backend cần
+hai lệnh trên và chạy được cả khi Postgres đang tắt. Xếp ở vị trí này vì backend cần
 tệp mô hình thì mới dự đoán được. Xem
 [Huấn luyện mô hình rủi ro](#huấn-luyện-mô-hình-rủi-ro) bên dưới.
 
@@ -237,14 +235,15 @@ uv run python -m app.scripts.reset_super_admin_password
 Lệnh hỏi mật khẩu mới hai lần (tối thiểu 8 ký tự, không hiện khi gõ). Đặt lại
 xong, mọi phiên cũ của Super Admin bị đăng xuất.
 
-## Hai tầng bảng
+## Lớp dẫn xuất
 
-Tiền tố phân biệt hai tầng: `raw_*` là tầng thô phản chiếu nguyên trạng tệp CSV,
-tên trần là tầng dẫn xuất.
+Dữ liệu Olist chỉ tồn tại ở hai nơi: tệp CSV trên đĩa và lớp dẫn xuất trong cơ sở dữ
+liệu. Không còn bảng thô nào nằm lại trong lược đồ — chín bảng `raw_*` cũ đã bị xoá ở
+migration `0010_drop_raw_tables`, và bước dựng tự nạp CSV vào bảng tạm cùng tên trong
+giao dịch của nó (ADR-0010).
 
 | Bảng | Nội dung |
 | --- | --- |
-| `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
 | `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
 | `order_items` | Dòng sản phẩm: thứ tự dòng, mã sản phẩm, tên danh mục gốc, cân nặng, giá, phí vận chuyển, người bán |
@@ -275,7 +274,7 @@ Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` th
 mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
 chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
 chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
-cột thô là số nguyên nên `01310` đã nạp thành `1310`.
+bảng tạm nhận CSV giữ cột này ở kiểu số nguyên nên `01310` vào thành `1310`.
 
 Cùng luật đó áp cho migration thêm **bảng** dẫn xuất: sau `0009_derived_order_lines` phải chạy
 lại `build_derived_data`, nếu không bốn bảng mới rỗng và trang chi tiết hiện mọi đơn như không
@@ -323,30 +322,42 @@ dữ liệu chỉ có 15 đơn như vậy trong 99.441 đơn.
 Dựng lại tệp này bằng các truy vấn sau — `ORDER BY order_id LIMIT n` cho kết quả
 cố định qua mọi lần chạy:
 
+Chạy sau `build_derived_data` — cả bốn đọc lớp dẫn xuất, vì đó là nơi duy nhất còn dữ
+liệu trong cơ sở dữ liệu:
+
 ```sql
 -- delivered_on_estimated_date
-SELECT order_id FROM raw_orders
- WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
-   AND order_delivered_customer_date::date = order_estimated_delivery_date::date
+SELECT order_id FROM orders
+ WHERE order_status = 'delivered' AND delivered_to_customer_at IS NOT NULL
+   AND delivered_to_customer_at::date = estimated_delivery_date
  ORDER BY order_id LIMIT 100;
 -- missing_intermediate_milestone (lấy hết, tổng thể chỉ có 15 đơn)
-SELECT order_id FROM raw_orders
- WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
-   AND (order_approved_at IS NULL OR order_delivered_carrier_date IS NULL)
+SELECT order_id FROM orders
+ WHERE order_status = 'delivered' AND delivered_to_customer_at IS NOT NULL
+   AND (payment_approved_at IS NULL OR handed_to_carrier_at IS NULL)
  ORDER BY order_id;
--- multi_seller
-SELECT order_id FROM raw_order_items GROUP BY order_id
- HAVING count(DISTINCT seller_id) > 1 ORDER BY order_id LIMIT 100;
--- no_review
-SELECT o.order_id FROM raw_orders o
- WHERE NOT EXISTS (SELECT 1 FROM raw_order_reviews r WHERE r.order_id = o.order_id)
+-- multi_seller — order_sellers đã DISTINCT sẵn, nên count(*) ở đây chính là số người
+-- bán phân biệt của đơn.
+SELECT order_id FROM order_sellers GROUP BY order_id
+ HAVING count(*) > 1 ORDER BY order_id LIMIT 100;
+-- no_review — hỏi bảng đánh giá chứ không hỏi worst_review_score IS NULL: cột ấy rỗng
+-- cả khi đơn có đánh giá mà thiếu điểm.
+SELECT o.order_id FROM orders o
+ WHERE NOT EXISTS (SELECT 1 FROM order_reviews r WHERE r.order_id = o.order_id)
  ORDER BY o.order_id LIMIT 100;
 ```
 
-`tests/fixtures/edge_case_filters.json` là tệp anh em, ghim những thứ *không phải* mã
-đơn: người bán dưới ngưỡng mẫu nhỏ, người bán nhiều đơn nhất, và một kỳ báo cáo mà cả
-hai kỳ đối chiếu đều rỗng. Để riêng vì `edge_case_orders.json` được đọc theo kiểu
-"mọi nhóm đều là danh sách mã đơn", trộn vào sẽ làm hỏng cách đọc đó.
+`tests/fixtures/edge_case_filters.json` là tệp anh em, ghim những thứ *không phải* danh
+sách mã đơn: người bán dưới ngưỡng mẫu nhỏ, người bán nhiều đơn nhất, một kỳ báo cáo mà
+cả hai kỳ đối chiếu đều rỗng, và sáu đơn mẫu mà test chi tiết đơn cần tới. Để riêng vì
+`edge_case_orders.json` được đọc theo kiểu "mọi nhóm đều là danh sách mã đơn", trộn vào
+sẽ làm hỏng cách đọc đó.
+
+Sáu đơn mẫu được ghim thay vì tìm bằng truy vấn lúc chạy test: trước đây các truy vấn ấy
+quét bảng thô, mà bảng thô thì không còn. Chúng ghim **mã đơn và chỉ mã đơn** — giá trị
+kỳ vọng thì test luôn đọc từ CSV. Ghim cả nhãn danh mục hay điểm đánh giá vào đây là lấy
+lại kết quả của chính bước dựng làm thước đo cho bước dựng, đúng cái vòng mà việc chuyển
+sang CSV sinh ra để cắt.
 
 ```sql
 -- small_sample_sellers (2.343 người bán như vậy; lấy 20 mã đầu cho cố định)
@@ -366,6 +377,28 @@ SELECT date_trunc('month', delivered_to_customer_at) AS month, count(*)
   FROM orders WHERE order_status = 'delivered'
    AND delivered_to_customer_at IS NOT NULL
  GROUP BY 1 ORDER BY 1 LIMIT 3;
+-- translated_category_order: đơn đầu tiên có dòng hàng thuộc danh mục đã dịch
+SELECT i.order_id FROM order_items i
+  JOIN product_categories c ON c.product_category_name = i.product_category_name
+ ORDER BY i.order_id LIMIT 1;
+-- untranslated_category_order: đơn đầu tiên có danh mục nhưng chưa có bản dịch
+SELECT i.order_id FROM order_items i
+ WHERE i.product_category_name IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM product_categories c
+                    WHERE c.product_category_name = i.product_category_name)
+ ORDER BY i.order_id LIMIT 1;
+-- uncategorized_order: đơn đầu tiên có dòng hàng không thuộc danh mục nào
+SELECT order_id FROM order_items WHERE product_category_name IS NULL
+ ORDER BY order_id LIMIT 1;
+-- multi_payment_order: đơn đầu tiên trả làm nhiều kỳ
+SELECT order_id FROM order_payments GROUP BY order_id
+ HAVING count(*) > 1 ORDER BY order_id LIMIT 1;
+-- commented_review_order: đơn đầu tiên có đánh giá kèm nội dung
+SELECT order_id FROM order_reviews WHERE comment_message IS NOT NULL
+ ORDER BY order_id LIMIT 1;
+-- leading_zero_zip_order: đơn đầu tiên có mã bưu chính bắt đầu bằng số 0
+SELECT order_id FROM orders WHERE customer_zip_code_prefix LIKE '0%'
+ ORDER BY order_id LIMIT 1;
 ```
 
 ## Ảnh chụp chi tiết đơn dùng cho test

@@ -48,13 +48,12 @@ cp .env.example .env                                  # rồi điền các giá 
 docker compose up -d --wait postgres
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head    # dựng lược đồ
-uv run python -m app.scripts.load_raw_data            # nạp thô
-uv run python -m app.scripts.build_derived_data       # dựng dẫn xuất
+uv run python -m app.scripts.build_derived_data       # nạp CSV và dựng dẫn xuất
 uv run python -m app.scripts.train_risk_model         # huấn luyện mô hình rủi ro
 uv run fastapi dev backend/app/main.py                # chạy backend
 ```
 
-Lệnh huấn luyện đọc thẳng tệp CSV trong `datasets/raw/` nên không phụ thuộc ba bước trước nó và chạy được cả khi Postgres đang tắt; xếp ở đây vì backend cần tệp mô hình thì mới dự đoán được. Nó in ra một "Ngưỡng đề xuất" — chép con số đó vào `RISK_THRESHOLD` trong `.env`.
+Lệnh huấn luyện đọc thẳng tệp CSV trong `datasets/raw/` nên không phụ thuộc hai bước trước nó và chạy được cả khi Postgres đang tắt; xếp ở đây vì backend cần tệp mô hình thì mới dự đoán được. Nó in ra một "Ngưỡng đề xuất" — chép con số đó vào `RISK_THRESHOLD` trong `.env`.
 
 Chi tiết cấu hình, biến môi trường và cách đọc báo cáo đánh giá: [backend/README.md](backend/README.md).
 

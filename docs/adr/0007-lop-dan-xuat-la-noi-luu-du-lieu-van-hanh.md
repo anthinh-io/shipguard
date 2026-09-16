@@ -5,7 +5,7 @@
 **Ngày:** 2026-09-15
 **Người quyết định:** Chủ dự án
 
-> ADR-0010 chỉ lật quyết định 1 — bảng `raw_*` không còn là dữ liệu huấn luyện, và sẽ bị xoá. Các quyết định 2, 3, 4 vẫn còn hiệu lực và được ADR-0010 giữ nguyên tường minh. Bảng `raw_*` và lệnh `load_raw_data` **vẫn đang tồn tại** cho tới khi việc cần làm 2–4 của ADR-0010 hoàn thành.
+> ADR-0010 chỉ lật quyết định 1 — bảng `raw_*` không còn là dữ liệu huấn luyện. Các quyết định 2, 3, 4 vẫn còn hiệu lực và được ADR-0010 giữ nguyên tường minh. Chín bảng `raw_*` và lệnh `load_raw_data` **đã bị xoá** ở migration `0010_drop_raw_tables`; bước dựng tự nạp CSV vào bảng tạm. Còn lại đúng việc cần làm 4 của ADR-0010 chưa xong.
 
 ## Bối cảnh
 

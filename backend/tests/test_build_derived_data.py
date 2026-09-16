@@ -4,11 +4,12 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from olist_csv import read_rows, row_count
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from app.core.config import settings
-from app.scripts.build_derived_data import DERIVED_TABLES, build_all
+from app.scripts.build_derived_data import CSV_DIR, DERIVED_TABLES, build_all
 
 EDGE_CASE_ORDERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
@@ -60,8 +61,8 @@ async def test_order_value_is_stored_as_an_exact_numeric(db: AsyncConnection) ->
 
 
 async def test_every_order_is_present_with_its_status(db: AsyncConnection) -> None:
-    assert await scalar(db, "SELECT count(*) FROM orders") == await scalar(
-        db, "SELECT count(*) FROM raw_orders"
+    assert await scalar(db, "SELECT count(*) FROM orders") == row_count(
+        "olist_orders_dataset.csv"
     )
     assert await scalar(db, "SELECT count(DISTINCT order_status) FROM orders") == 8
     assert await scalar(db, f"SELECT count(*) FROM orders WHERE NOT {DELIVERED}") > 0
@@ -118,8 +119,9 @@ async def test_distinct_customer_states(db: AsyncConnection) -> None:
 async def test_every_order_has_a_shipping_city_and_a_five_digit_zip_prefix(
     db: AsyncConnection,
 ) -> None:
-    # Cột thô là số nguyên nên mất số 0 đầu: 01310 nạp vào thành 1310. Bảng dẫn xuất phải
-    # trả lại đủ 5 chữ số, nếu không mã bưu chính của cả vùng São Paulo hiện sai.
+    # Cột trong bảng tạm là số nguyên nên mất số 0 đầu: 01310 nạp vào thành 1310. Bảng
+    # dẫn xuất phải trả lại đủ 5 chữ số, nếu không mã bưu chính của cả vùng São Paulo
+    # hiện sai.
     assert await scalar(db, "SELECT count(*) FROM orders WHERE customer_city IS NULL") == 0
     assert (
         await scalar(
@@ -137,17 +139,21 @@ async def test_every_order_has_a_shipping_city_and_a_five_digit_zip_prefix(
 async def test_every_seller_is_present_with_its_city_and_state(
     db: AsyncConnection,
 ) -> None:
-    # Con số lấy từ chính dữ liệu, không đóng cứng: tệp thô có 3.096 dòng kể cả tiêu
-    # đề, nhưng đó là số dòng chứ không phải số mã phân biệt.
-    assert await scalar(db, "SELECT count(*) FROM sellers") == await scalar(
-        db, "SELECT count(DISTINCT seller_id) FROM raw_sellers"
+    # Con số lấy từ chính tệp CSV, không đóng cứng: tệp có 3.096 dòng kể cả tiêu đề,
+    # nhưng đó là số dòng chứ không phải số mã phân biệt.
+    distinct_sellers = len(
+        {row["seller_id"] for row in read_rows("olist_sellers_dataset.csv")}
     )
+    assert await scalar(db, "SELECT count(*) FROM sellers") == distinct_sellers
     assert await scalar(db, "SELECT count(*) FROM sellers") > 0
     # Seller State là bang người bán GỬI đi, khác tập bang khách nhận của orders —
     # nếu hai con số bằng nhau thì bài test không phân biệt được hai cột.
     assert await scalar(db, "SELECT count(DISTINCT seller_state) FROM sellers") == 23
 
 
+# Danh sách ngắn đi ba mục so với trước, không phải mất độ phủ: ba chỉ mục
+# ix_raw_*_order_id đã biến mất cùng chín bảng thô ở migration 0010. Bảng tạm dựng trong
+# bước dựng không mang chỉ mục nào — có ANALYZE rồi thì trình lập kế hoạch chọn hash join.
 @pytest.mark.parametrize(
     "index_name",
     [
@@ -156,9 +162,6 @@ async def test_every_seller_is_present_with_its_city_and_state(
         "ix_order_sellers_seller_id",
         "ix_orders_purchased_at",
         "ix_orders_order_id_prefix",
-        "ix_raw_order_items_order_id",
-        "ix_raw_order_payments_order_id",
-        "ix_raw_order_reviews_order_id",
     ],
 )
 async def test_index_exists(db: AsyncConnection, index_name: str) -> None:
@@ -215,21 +218,22 @@ async def test_edge_case_fixture_loads_with_all_four_cases(db: AsyncConnection) 
     assert all(seller_counts[o] > 1 for o in multi_seller_ids)
 
 
-async def test_product_and_payment_lines_match_the_golden_counts(
-    db: AsyncConnection,
-) -> None:
+async def test_line_tables_match_the_golden_counts(db: AsyncConnection) -> None:
     assert await scalar(db, "SELECT count(*) FROM order_items") == 112650
     assert await scalar(db, "SELECT count(*) FROM order_payments") == 103886
+    # order_sellers là bảng dẫn xuất duy nhất chưa có ai ghim tổng số dòng: bài đếm đơn
+    # nhiều người bán ở trên chỉ nhìn phần đuôi, nên bảng này mất dòng vẫn xanh.
+    assert await scalar(db, "SELECT count(*) FROM order_sellers") == 100010
 
 
-async def test_every_raw_review_row_becomes_a_numbered_review_line(
+async def test_every_csv_review_row_becomes_a_numbered_review_line(
     db: AsyncConnection,
 ) -> None:
-    assert await scalar(db, "SELECT count(*) FROM order_reviews") == await scalar(
-        db, "SELECT count(*) FROM raw_order_reviews"
+    assert await scalar(db, "SELECT count(*) FROM order_reviews") == row_count(
+        "olist_order_reviews_dataset.csv"
     )
-    # Cộng thêm con số vàng đếm thẳng từ CSV: phép so trên chỉ bám theo bước nạp, nên một
-    # lỗi làm mất dòng ở cả hai bảng vẫn cho hai vế bằng nhau.
+    # Cộng thêm con số vàng viết tay: phép so trên bám theo tệp CSV, nên nó vẫn xanh nếu
+    # có ai thay tệp bằng một tệp ngắn hơn.
     assert await scalar(db, "SELECT count(*) FROM order_reviews") == 99224
     # 547 đơn có nhiều hơn một đánh giá. Con số này về 0 nghĩa là cột thứ tự mất tác dụng
     # và bảng đang âm thầm bỏ bớt dòng.
@@ -307,4 +311,4 @@ async def test_build_is_idempotent(derived_data: dict[str, int]) -> None:
         "product_categories",
     }
     assert set(DERIVED_TABLES) == set(derived_data)
-    assert await build_all(settings.TEST_DATABASE_URL) == derived_data
+    assert await build_all(settings.TEST_DATABASE_URL, CSV_DIR) == derived_data
