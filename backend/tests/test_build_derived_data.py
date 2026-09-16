@@ -8,7 +8,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from app.core.config import settings
-from app.scripts.build_derived_data import build_all
+from app.scripts.build_derived_data import DERIVED_TABLES, build_all
 
 EDGE_CASE_ORDERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
@@ -215,5 +215,96 @@ async def test_edge_case_fixture_loads_with_all_four_cases(db: AsyncConnection) 
     assert all(seller_counts[o] > 1 for o in multi_seller_ids)
 
 
+async def test_product_and_payment_lines_match_the_golden_counts(
+    db: AsyncConnection,
+) -> None:
+    assert await scalar(db, "SELECT count(*) FROM order_items") == 112650
+    assert await scalar(db, "SELECT count(*) FROM order_payments") == 103886
+
+
+async def test_every_raw_review_row_becomes_a_numbered_review_line(
+    db: AsyncConnection,
+) -> None:
+    assert await scalar(db, "SELECT count(*) FROM order_reviews") == await scalar(
+        db, "SELECT count(*) FROM raw_order_reviews"
+    )
+    # Cộng thêm con số vàng đếm thẳng từ CSV: phép so trên chỉ bám theo bước nạp, nên một
+    # lỗi làm mất dòng ở cả hai bảng vẫn cho hai vế bằng nhau.
+    assert await scalar(db, "SELECT count(*) FROM order_reviews") == 99224
+    # 547 đơn có nhiều hơn một đánh giá. Con số này về 0 nghĩa là cột thứ tự mất tác dụng
+    # và bảng đang âm thầm bỏ bớt dòng.
+    assert (
+        await scalar(
+            db,
+            "SELECT count(*) FROM (SELECT order_id FROM order_reviews "
+            "GROUP BY order_id HAVING count(*) > 1) t",
+        )
+        == 547
+    )
+    # Thứ tự liền mạch từ 1: max phải bằng đúng số dòng của chính đơn đó.
+    assert (
+        await scalar(
+            db,
+            "SELECT count(*) FROM (SELECT order_id FROM order_reviews GROUP BY order_id "
+            "HAVING max(review_sequential) <> count(*) OR min(review_sequential) <> 1) t",
+        )
+        == 0
+    )
+
+
+async def test_orders_paid_with_more_than_one_payment_line(db: AsyncConnection) -> None:
+    assert (
+        await scalar(
+            db,
+            "SELECT count(*) FROM (SELECT order_id FROM order_payments "
+            "GROUP BY order_id HAVING count(*) > 1) t",
+        )
+        == 2961
+    )
+
+
+async def test_product_lines_keep_the_original_category_and_the_weight(
+    db: AsyncConnection,
+) -> None:
+    # Dòng sản phẩm lưu tên danh mục GỐC; nhãn tiếng Anh tra ở product_categories lúc đọc.
+    assert (
+        await scalar(db, "SELECT count(*) FROM order_items WHERE product_category_name IS NULL")
+        == 1603
+    )
+    assert await scalar(db, "SELECT count(*) FROM order_items WHERE product_weight_g IS NULL") == 18
+
+
+async def test_the_category_lookup_covers_every_translated_category(
+    db: AsyncConnection,
+) -> None:
+    assert await scalar(db, "SELECT count(*) FROM product_categories") == 71
+    # Đúng hai danh mục chưa có bản dịch — pc_gamer và
+    # portateis_cozinha_e_preparadores_de_alimentos — trải trên 24 dòng sản phẩm. Ghim con
+    # số thay vì chỉ đòi lớn hơn 0: bảng tra mất 50 danh mục thì phép so lỏng vẫn xanh.
+    # Các dòng đó vẫn hiện tên gốc nhờ coalesce ở đường đọc, còn ô chọn danh mục thì không
+    # nên mời chọn chúng.
+    untranslated = (
+        "FROM order_items i WHERE i.product_category_name IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM product_categories c "
+        "WHERE c.product_category_name = i.product_category_name)"
+    )
+
+    assert await scalar(db, f"SELECT count(*) {untranslated}") == 24
+    assert await scalar(db, f"SELECT count(DISTINCT i.product_category_name) {untranslated}") == 2
+
+
 async def test_build_is_idempotent(derived_data: dict[str, int]) -> None:
+    # Bảy tên viết thẳng ra chứ không đọc lại DERIVED_TABLES: build_all dựng từ điển TỪ
+    # chính tuple đó, nên so hai thứ ấy với nhau là luôn đúng dù ai có rút bớt bảng nào.
+    # Danh sách viết tay ở đây mới là thứ đỏ lên khi bước dựng bỏ sót một bảng.
+    assert set(derived_data) == {
+        "orders",
+        "order_sellers",
+        "order_items",
+        "order_payments",
+        "order_reviews",
+        "sellers",
+        "product_categories",
+    }
+    assert set(DERIVED_TABLES) == set(derived_data)
     assert await build_all(settings.TEST_DATABASE_URL) == derived_data

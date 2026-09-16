@@ -331,8 +331,14 @@ async def test_default_period_falls_back_when_no_month_is_full(
     try:
         # Thu bảng về tập con cố định ngay trong transaction rồi rollback ở finally.
         # Dịch vụ nhận đúng session này nên nó thấy thao tác xoá chưa commit. Khoá
-        # ngoại quy định thứ tự: bảng nối trước, bảng cha sau.
-        for table in ("order_sellers", "orders"):
+        # ngoại quy định thứ tự: mọi bảng con trỏ về orders trước, bảng cha sau.
+        for table in (
+            "order_items",
+            "order_payments",
+            "order_reviews",
+            "order_sellers",
+            "orders",
+        ):
             await session.execute(
                 text(f"DELETE FROM {table} WHERE order_id <> ALL(:ids)").bindparams(
                     ORDER_IDS

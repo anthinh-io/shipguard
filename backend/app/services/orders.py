@@ -8,13 +8,14 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.derived import order_sellers, orders, sellers
-from app.models.raw import (
-    raw_order_items,
-    raw_order_payments,
-    raw_order_reviews,
-    raw_product_category_name_translation,
-    raw_products,
+from app.models.derived import (
+    order_items,
+    order_payments,
+    order_reviews,
+    order_sellers,
+    orders,
+    product_categories,
+    sellers,
 )
 from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
@@ -333,25 +334,24 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     items = (
         await session.execute(
             sa.select(
-                raw_order_items.c.order_item_id,
-                raw_order_items.c.product_id,
+                order_items.c.order_item_id,
+                order_items.c.product_id,
                 sa.func.coalesce(
-                    raw_product_category_name_translation.c.product_category_name_english,
-                    raw_products.c.product_category_name,
+                    product_categories.c.product_category_name_english,
+                    order_items.c.product_category_name,
                 ).label("category"),
-                raw_order_items.c.price,
-                raw_order_items.c.freight_value,
-                raw_order_items.c.seller_id,
+                order_items.c.price,
+                order_items.c.freight_value,
+                order_items.c.seller_id,
             )
-            .select_from(raw_order_items)
-            .outerjoin(raw_products, raw_products.c.product_id == raw_order_items.c.product_id)
+            .select_from(order_items)
             .outerjoin(
-                raw_product_category_name_translation,
-                raw_product_category_name_translation.c.product_category_name
-                == raw_products.c.product_category_name,
+                product_categories,
+                product_categories.c.product_category_name
+                == order_items.c.product_category_name,
             )
-            .where(raw_order_items.c.order_id == order_id)
-            .order_by(raw_order_items.c.order_item_id)
+            .where(order_items.c.order_id == order_id)
+            .order_by(order_items.c.order_item_id)
         )
     ).all()
     order_sellers_rows = (
@@ -365,25 +365,27 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     payments = (
         await session.execute(
             sa.select(
-                raw_order_payments.c.payment_sequential,
-                raw_order_payments.c.payment_type,
-                raw_order_payments.c.payment_installments,
-                raw_order_payments.c.payment_value,
+                order_payments.c.payment_sequential,
+                order_payments.c.payment_type,
+                order_payments.c.payment_installments,
+                order_payments.c.payment_value,
             )
-            .where(raw_order_payments.c.order_id == order_id)
-            .order_by(raw_order_payments.c.payment_sequential)
+            .where(order_payments.c.order_id == order_id)
+            .order_by(order_payments.c.payment_sequential)
         )
     ).all()
     reviews = (
         await session.execute(
             sa.select(
-                raw_order_reviews.c.review_score,
-                raw_order_reviews.c.review_comment_title,
-                raw_order_reviews.c.review_comment_message,
-                raw_order_reviews.c.review_creation_date,
+                order_reviews.c.review_score,
+                order_reviews.c.comment_title,
+                order_reviews.c.comment_message,
+                order_reviews.c.review_created_at,
             )
-            .where(raw_order_reviews.c.order_id == order_id)
-            .order_by(raw_order_reviews.c.review_creation_date)
+            .where(order_reviews.c.order_id == order_id)
+            # Thứ tự đã đóng cứng lúc dựng bảng: sắp theo riêng thời điểm tạo là bất định
+            # với các đơn có nhiều đánh giá cùng ngày.
+            .order_by(order_reviews.c.review_sequential)
         )
     ).all()
 
@@ -438,9 +440,9 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
         reviews=[
             OrderReview(
                 review_score=row.review_score,
-                comment_title=row.review_comment_title,
-                comment_message=row.review_comment_message,
-                created_at=row.review_creation_date,
+                comment_title=row.comment_title,
+                comment_message=row.comment_message,
+                created_at=row.review_created_at,
             )
             for row in reviews
         ],

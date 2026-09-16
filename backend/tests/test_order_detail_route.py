@@ -228,6 +228,24 @@ async def test_reviews_carry_the_score_and_comment(
     assert set(reviews[0]) == {"review_score", "comment_title", "comment_message", "created_at"}
 
 
+async def test_multiple_reviews_come_back_oldest_first_in_a_stable_order(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # 547 đơn có nhiều hơn một đánh giá. Trước đây thứ tự đọc bất định ở 157 cặp trùng
+    # thời điểm tạo; giờ nó được đóng cứng lúc dựng bằng review_sequential.
+    order_id = await session.scalar(
+        text(
+            "SELECT order_id FROM order_reviews GROUP BY order_id "
+            "HAVING count(*) > 1 ORDER BY order_id LIMIT 1"
+        )
+    )
+
+    reviews = (await get_detail(client, order_id))["reviews"]
+
+    assert len(reviews) > 1
+    assert [r["created_at"] for r in reviews] == sorted(r["created_at"] for r in reviews)
+
+
 async def test_an_order_without_items_has_no_items_sellers_or_value(
     client: AsyncClient, session: AsyncSession
 ) -> None:

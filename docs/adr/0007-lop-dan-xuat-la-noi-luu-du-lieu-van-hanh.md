@@ -94,9 +94,10 @@ A rụng vì làm bẩn tập huấn luyện. D rụng vì cái giá sửa mọi
 - **Dễ hơn:** đơn mới dùng lại nguyên danh sách đơn, trang chi tiết, KPI; mô hình huấn luyện trên tập cố định; mọi đường đọc vận hành chỉ nhìn lớp dẫn xuất.
 - **Khó hơn:** sửa lỗi dữ liệu dẫn xuất sau khi đã có đơn mới phải viết migration dữ liệu; đơn mới đã giao không quay lại làm dữ liệu huấn luyện, và lịch sử người bán dùng làm đặc trưng dừng ở dữ liệu Olist.
 - **Cần xem lại:** nếu có huấn luyện lại định kỳ trên đơn mới, cần một đường đưa đơn đã giao từ lớp dẫn xuất sang dữ liệu huấn luyện.
+- **Cần xem lại:** sau khi việc 1 và 2 xong, lớp dẫn xuất phủ đủ danh sách đặc trưng mà lệnh huấn luyện dự kiến dùng, nên **Phương án E** (xoá hẳn bảng thô) rẻ hơn lúc bị loại. Mở lại câu hỏi **sau khi lệnh huấn luyện đã viết xong**, khi đã đọc được nó thật sự chạm bảng và cột nào thay vì suy đoán. Hai biến thể đóng cửa khác nhau: "huấn luyện đọc lớp dẫn xuất" chỉ khả thi **trước khi có đơn tạo trong Ship Guard** — từ đó lớp dẫn xuất hết là tập cố định, và quyết định 3 đã chốt không có cột đánh dấu nguồn; còn "huấn luyện đọc thẳng CSV" thì bỏ lúc nào cũng được. Cái giá phải cân: ba tệp test đang dùng bảng thô làm nguồn đối chiếu độc lập ngay trong cùng cơ sở dữ liệu, cộng bốn câu SQL dựng lại `edge_case_orders.json`.
 
 ## Việc cần làm
 
-1. [ ] Bảng dẫn xuất dòng sản phẩm, dòng thanh toán và đánh giá, đổ dữ liệu từ `build_derived_data`
-2. [ ] Trang chi tiết đơn đọc sản phẩm, thanh toán và đánh giá từ lớp dẫn xuất
+1. [x] Bảng dẫn xuất dòng sản phẩm, dòng thanh toán và đánh giá, đổ dữ liệu từ `build_derived_data`
+2. [x] Trang chi tiết đơn đọc sản phẩm, thanh toán và đánh giá từ lớp dẫn xuất
 3. [ ] `build_derived_data` dừng khi đã có `Risk Assessment`

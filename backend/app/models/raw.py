@@ -32,7 +32,10 @@ raw_order_items = sa.Table(
     sa.Column("shipping_limit_date", sa.DateTime),
     sa.Column("price", sa.Numeric(12, 2)),
     sa.Column("freight_value", sa.Numeric(12, 2)),
-    # Trang chi tiết đơn tra sản phẩm, thanh toán và đánh giá theo từng order_id.
+    # Ba chỉ mục order_id này dựng cho trang chi tiết đơn (migration 0007). Từ migration
+    # 0009 trang đó đọc lớp dẫn xuất, và bước dựng thì nối cả bảng nên không dùng tới
+    # chúng: hiện không đường đọc nào cần chúng. Giữ lại chứ không xoá vì đây là quyết
+    # định riêng, không thuộc phạm vi việc chuyển đường đọc.
     sa.Index("ix_raw_order_items_order_id", "order_id"),
 )
 

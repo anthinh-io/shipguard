@@ -84,3 +84,61 @@ sellers = sa.Table(
     sa.Column("seller_city", sa.Text, nullable=False),
     sa.Column("seller_state", sa.Text, nullable=False),
 )
+
+# Dòng sản phẩm của một đơn. Khoá ngoại tới orders an toàn vì bảng này được truncate và dựng
+# lại cùng lượt với orders — khác order_notes, vốn phải sống sót qua mỗi lần dựng lại.
+#
+# Lưu tên danh mục GỐC chứ không phải nhãn tiếng Anh đã tra sẵn: nhãn nằm ở
+# product_categories, để riêng thì sửa bản dịch không phải dựng lại 112.650 dòng.
+order_items = sa.Table(
+    "order_items",
+    Base.metadata,
+    sa.Column("order_id", sa.Text, sa.ForeignKey("orders.order_id"), primary_key=True),
+    sa.Column("order_item_id", sa.Integer, primary_key=True),
+    sa.Column("product_id", sa.Text, nullable=False),
+    sa.Column("product_category_name", sa.Text),
+    # Mô hình dự đoán cần cân nặng; trang chi tiết đơn không hiện nó.
+    sa.Column("product_weight_g", sa.Integer),
+    sa.Column("price", sa.Numeric(12, 2), nullable=False),
+    sa.Column("freight_value", sa.Numeric(12, 2), nullable=False),
+    sa.Column("seller_id", sa.Text, nullable=False),
+)
+
+order_payments = sa.Table(
+    "order_payments",
+    Base.metadata,
+    sa.Column("order_id", sa.Text, sa.ForeignKey("orders.order_id"), primary_key=True),
+    sa.Column("payment_sequential", sa.Integer, primary_key=True),
+    sa.Column("payment_type", sa.Text, nullable=False),
+    sa.Column("payment_installments", sa.Integer, nullable=False),
+    sa.Column("payment_value", sa.Numeric(12, 2), nullable=False),
+)
+
+# review_sequential: 547 đơn Olist có nhiều hơn một đánh giá, nên order_id một mình không làm
+# khoá chính được. Nó cũng là mốc sắp xếp cố định — 157 cặp (order_id, ngày tạo) trùng nhau
+# nên sắp theo riêng ngày tạo là bất định.
+#
+# Tên cột không đồng nhất tiền tố là có chủ đích: comment_title và comment_message lấy đúng
+# tên trường của phản hồi API, còn review_created_at thì cố ý KHÔNG đặt là created_at —
+# order_notes.created_at là mốc thật có múi giờ, còn đây là dấu thời gian không múi giờ của
+# dữ liệu Olist, và hai thứ đó không được lẫn vào nhau.
+order_reviews = sa.Table(
+    "order_reviews",
+    Base.metadata,
+    sa.Column("order_id", sa.Text, sa.ForeignKey("orders.order_id"), primary_key=True),
+    sa.Column("review_sequential", sa.Integer, primary_key=True),
+    sa.Column("review_score", sa.SmallInteger, nullable=False),
+    sa.Column("comment_title", sa.Text),
+    sa.Column("comment_message", sa.Text),
+    sa.Column("review_created_at", sa.DateTime, nullable=False),
+)
+
+# Nhãn tiếng Anh của danh mục sản phẩm. Hai danh mục chưa có bản dịch (pc_gamer,
+# portateis_cozinha_e_preparadores_de_alimentos) cố ý không có ở đây: dòng sản phẩm thuộc
+# chúng vẫn hiện tên gốc nhờ coalesce ở đường đọc.
+product_categories = sa.Table(
+    "product_categories",
+    Base.metadata,
+    sa.Column("product_category_name", sa.Text, primary_key=True),
+    sa.Column("product_category_name_english", sa.Text, nullable=False),
+)
