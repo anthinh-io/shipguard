@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUserDep, SessionDep, get_current_user
+from app.api.deps import CurrentUserDep, PredictorDep, SessionDep, get_current_user
 from app.services.order_notes import (
     NewOrderNote,
     OrderNote,
@@ -25,6 +25,17 @@ from app.services.orders import (
     get_order_detail,
     list_customer_states,
     list_orders,
+)
+from app.services.risk_assessments import (
+    CreatedOrder,
+    InvalidOrderError,
+    NewOrder,
+    ProductCategory,
+    RiskAssessmentOut,
+    SellerZipMissingError,
+    create_new_order,
+    list_product_categories,
+    list_risk_assessments,
 )
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(get_current_user)])
@@ -99,6 +110,31 @@ async def orders(
     )
 
 
+# Đơn + dòng sản phẩm + dòng thanh toán + Risk Assessment đầu tiên trong một giao dịch
+# (ADR-0009) — đơn không bao giờ được tồn tại mà thiếu đánh giá (CONTEXT.md, mục Risk
+# Assessment). InvalidOrderError giữ được vị trí trường sai, cùng khuôn detail mà
+# Pydantic tự sinh cho lỗi 422 thường, để #32 chỉ đúng ô sai chứ không gom một dòng.
+@router.post("/orders", response_model=CreatedOrder, status_code=201)
+async def create_order(
+    payload: NewOrder,
+    session: SessionDep,
+    predictor: PredictorDep,
+    current_user: CurrentUserDep,
+) -> CreatedOrder:
+    try:
+        return await create_new_order(session, predictor, current_user.user_id, payload)
+    except InvalidOrderError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {"type": "value_error", "loc": ["body", *field_error.loc], "msg": field_error.msg}
+                for field_error in error.errors
+            ],
+        ) from None
+    except SellerZipMissingError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
+
+
 # Phải khai báo trước /orders/{order_id}, không thì "export" bị hiểu là một mã đơn và
 # nhận 404. Không có page: file gồm mọi đơn khớp bộ lọc, không chỉ trang đang xem.
 # Content-Disposition dành cho ai gọi thẳng; CORS không mở header này cho trình duyệt,
@@ -145,9 +181,26 @@ async def add_note(
     return note
 
 
+# Mới nhất trên cùng. Đơn Olist lịch sử không bao giờ có Risk Assessment nên trả mảng
+# rỗng, không phải 404 — 404 chỉ dành cho mã đơn không tồn tại.
+@router.get("/orders/{order_id}/risk-assessments", response_model=list[RiskAssessmentOut])
+async def order_risk_assessments(session: SessionDep, order_id: str) -> list[RiskAssessmentOut]:
+    history = await list_risk_assessments(session, order_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return history
+
+
 # Tuỳ chọn cho ô chọn bang của trang đơn hàng. Tách khỏi /orders vì danh sách này không
 # đổi theo trang hay bộ lọc, nên chỉ cần gọi một lần khi mở trang. Đường dẫn không nằm
 # dưới /orders: mẫu chặn `${BACKEND_URL}/orders**` của Playwright vượt cả dấu gạch chéo.
 @router.get("/customer-states", response_model=list[str])
 async def customer_states(session: SessionDep) -> list[str]:
     return await list_customer_states(session)
+
+
+# Danh mục sản phẩm kèm nhãn hiển thị, cho ô chọn của biểu mẫu tạo đơn. Cùng lý do với
+# /customer-states: cấp gốc, không nằm dưới /orders.
+@router.get("/product-categories", response_model=list[ProductCategory])
+async def product_categories(session: SessionDep) -> list[ProductCategory]:
+    return await list_product_categories(session)

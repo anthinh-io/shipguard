@@ -135,9 +135,14 @@ ORDER_SELLERS_SQL = """
 
 # DISTINCT chứ không phải SELECT trần: khoá chính seller_id sẽ từ chối bản sao, và một
 # mã người bán lặp lại y hệt trong tệp thô là chuyện bình thường, không phải lỗi dữ liệu.
+#
+# lpad cùng lý do với ORDERS_SQL: cột số nguyên của bảng tạm đã làm mất số 0 đầu của mã bưu
+# chính. Mô hình dự đoán cần cột này để tính khoảng cách người bán -> khách (distance_km);
+# thiếu nó thì phép tính khoảng cách ra NaN mà không có gì báo.
 SELLERS_SQL = """
-    INSERT INTO sellers (seller_id, seller_city, seller_state)
-    SELECT DISTINCT seller_id, seller_city, seller_state
+    INSERT INTO sellers (seller_id, seller_city, seller_state, seller_zip_code_prefix)
+    SELECT DISTINCT seller_id, seller_city, seller_state,
+           lpad(seller_zip_code_prefix::text, 5, '0')
     FROM raw_sellers
 """
 
@@ -231,11 +236,31 @@ DERIVED_TABLES = (
 )
 
 
-async def build_all(dsn: str, csv_dir: Path) -> dict[str, int]:
+# ADR-0007 việc 3, ADR-0010 việc 4: đã có Risk Assessment nào là dấu hiệu có đơn tạo trong
+# Ship Guard, và TRUNCATE bên dưới sẽ xoá mất chúng không hoàn tác được.
+RISK_ASSESSMENTS_EXIST_ERROR = (
+    "Đã có Risk Assessment trong cơ sở dữ liệu — dấu hiệu có đơn tạo trong Ship Guard. "
+    "Dựng lại dữ liệu dẫn xuất sẽ xoá mất các đơn đó (ADR-0007). Dừng lại, không đổi gì."
+)
+
+
+async def build_all(
+    dsn: str, csv_dir: Path, *, allow_existing_assessments: bool = False
+) -> dict[str, int]:
     asyncpg_dsn = dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
     conn = await asyncpg.connect(asyncpg_dsn)
     try:
         async with conn.transaction():
+            # Kiểm tra trước khi nạp CSV, không phải chỉ trước TRUNCATE: chặn sớm thì
+            # không tốn công COPY hàng trăm nghìn dòng vào bảng tạm cho một lần chạy sẽ bị
+            # từ chối. allow_existing_assessments chỉ để test tự dựng lại dữ liệu giữa
+            # phiên (xem tests/conftest.py) — main() không bao giờ truyền cờ này, nên
+            # người vận hành không có đường nào bỏ qua chốt chặn.
+            if not allow_existing_assessments:
+                exists = await conn.fetchval("SELECT count(*) FROM risk_assessments")
+                if exists:
+                    raise RuntimeError(RISK_ASSESSMENTS_EXIST_ERROR)
+
             await conn.execute(RAW_TEMP_TABLES_SQL)
             for filename, table in CSV_TO_TABLE.items():
                 with open(csv_dir / filename, "rb") as source:

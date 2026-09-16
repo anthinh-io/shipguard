@@ -1,15 +1,25 @@
 import json
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
 from olist_csv import read_rows, row_count
-from sqlalchemy import bindparam, text
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy import bindparam, insert, text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
+
+from conftest import rebuild_derived_data
 
 from app.core.config import settings
-from app.scripts.build_derived_data import CSV_DIR, DERIVED_TABLES, build_all
+from app.models.risk import risk_assessments
+from app.scripts.build_derived_data import (
+    CSV_DIR,
+    DERIVED_TABLES,
+    RISK_ASSESSMENTS_EXIST_ERROR,
+    build_all,
+)
+from app.services.users import create_user
 
 EDGE_CASE_ORDERS = json.loads(
     (Path(__file__).parent / "fixtures" / "edge_case_orders.json").read_text("utf-8")
@@ -311,4 +321,67 @@ async def test_build_is_idempotent(derived_data: dict[str, int]) -> None:
         "product_categories",
     }
     assert set(DERIVED_TABLES) == set(derived_data)
-    assert await build_all(settings.TEST_DATABASE_URL, CSV_DIR) == derived_data
+    assert await rebuild_derived_data(settings.TEST_DATABASE_URL) == derived_data
+
+
+async def test_seller_zip_code_prefix_matches_csv_with_leading_zeros(
+    db: AsyncConnection,
+) -> None:
+    # Cùng phép kiểm với customer_zip_code_prefix: cột tạm là số nguyên nên đã làm mất số 0
+    # đầu, và SELLERS_SQL phải lpad lại — đối chiếu thẳng CSV để không tự lừa chính mình.
+    csv_zips = {
+        row["seller_id"]: row["seller_zip_code_prefix"]
+        for row in read_rows("olist_sellers_dataset.csv")
+    }
+    rows = await db.execute(text("SELECT seller_id, seller_zip_code_prefix FROM sellers"))
+    db_zips = {row.seller_id: row.seller_zip_code_prefix for row in rows}
+
+    assert db_zips == csv_zips
+    assert all(len(zip_code) == 5 for zip_code in db_zips.values())
+
+
+async def test_build_refuses_to_run_once_a_risk_assessment_exists(
+    auth_session: AsyncSession, derived_data: dict[str, int]
+) -> None:
+    # ADR-0007 việc 3 / ADR-0010 việc 4: một Risk Assessment là dấu hiệu có đơn tạo trong
+    # Ship Guard, và TRUNCATE của build_all sẽ xoá mất đơn đó không hoàn tác được. Dùng
+    # build_all trực tiếp (không cờ) vì đây chính là hành vi mặc định đang bị kiểm.
+    user_id = await create_user(
+        auth_session,
+        email="build-guard@shipguard.vn",
+        password="correct-horse-battery",
+        display_name="Build Guard",
+        role="operations_staff",
+    )
+    await auth_session.execute(
+        insert(risk_assessments).values(
+            order_id="deadbeefdeadbeefdeadbeefdeadbeef",
+            checkpoint="order_placed",
+            late_probability=0.5,
+            is_high_risk=False,
+            threshold_used=0.18,
+            model_version="test",
+            risk_cause_stage="carrier_transit",
+            created_by=user_id,
+        )
+    )
+    await auth_session.commit()
+
+    engine = create_async_engine(settings.TEST_DATABASE_URL)
+    try:
+        async with engine.connect() as connection:
+            before = await connection.scalar(text("SELECT count(*) FROM orders"))
+
+            with pytest.raises(RuntimeError, match=re.escape(RISK_ASSESSMENTS_EXIST_ERROR)):
+                await build_all(settings.TEST_DATABASE_URL, CSV_DIR)
+
+            after = await connection.scalar(text("SELECT count(*) FROM orders"))
+            assert after == before
+    finally:
+        await engine.dispose()
+
+    # Dọn lại: risk_assessments không được auth_session xoá tự động sau mỗi test (chỉ xoá
+    # lúc VÀO), và các bài chạy sau trong cùng phiên không phải bài nào cũng đi qua
+    # auth_session để được dọn hộ.
+    await auth_session.execute(text("TRUNCATE risk_assessments"))
+    await auth_session.commit()
