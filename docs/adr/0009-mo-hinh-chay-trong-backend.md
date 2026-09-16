@@ -62,6 +62,6 @@ C rụng vì có thể sinh đơn không có đánh giá — trái quy tắc ch�
 
 ## Việc cần làm
 
-1. [ ] Thêm thư viện ML vào `backend/pyproject.toml`
-2. [ ] `RISK_MODEL_DIR`, `RISK_THRESHOLD` trong cấu hình và `.env.example`
-3. [ ] Nạp mô hình lúc khởi động; dependency cung cấp bộ dự đoán
+1. [x] Thêm thư viện ML vào `backend/pyproject.toml`
+2. [x] `RISK_MODEL_DIR`, `RISK_THRESHOLD` trong cấu hình và `.env.example`
+3. [x] Nạp mô hình lúc khởi động; dependency cung cấp bộ dự đoán

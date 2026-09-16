@@ -5,6 +5,9 @@ members = ["backend"]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
+    # Chỉ để chạy notebook phân tích mô hình; backend không cần hai gói này.
+    "jupyter>=1.1",
+    "matplotlib>=3.9",
 ]
 
 [tool.pytest.ini_options]

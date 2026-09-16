@@ -14,10 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.deps import get_db
 from app.core.config import settings
 from app.main import app
+from app.risk.training import train
 from app.scripts.build_derived_data import build_all
 from app.scripts.load_raw_data import CSV_DIR, load_all
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+# Huấn luyện trên một phần dữ liệu để test chạy trong vài chục giây thay vì vài phút.
+# Mọi bài dùng bộ mô hình này chỉ kiểm hình dạng và tính lặp lại, không kiểm chất
+# lượng dự đoán — F1 trên tập con nhỏ không nói lên điều gì, và tiêu chí chấp nhận
+# vốn cho phép dưới mục tiêu. Chất lượng kiểm bằng một lần chạy đầy đủ.
+RISK_SAMPLE_STEP = 30
 
 
 async def create_database_if_missing(url: str) -> None:
@@ -132,3 +139,13 @@ def client_for_database() -> (
     Callable[[str | URL], AbstractAsyncContextManager[AsyncClient]]
 ):
     return _client_using_database
+
+
+# Huấn luyện một lần cho cả phiên và dùng lại: dựng bộ mô hình là bước đắt nhất trong
+# bộ test. Không phụ thuộc fixture cơ sở dữ liệu nào — lệnh huấn luyện đọc thẳng tệp
+# CSV và không chạm Postgres (ADR-0010).
+@pytest.fixture(scope="session")
+def risk_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    directory = tmp_path_factory.mktemp("risk_model")
+    train(model_dir=directory, sample_step=RISK_SAMPLE_STEP)
+    return directory

@@ -61,6 +61,7 @@ uv sync
 uv run alembic -c backend/alembic.ini upgrade head
 uv run python -m app.scripts.load_raw_data
 uv run python -m app.scripts.build_derived_data
+uv run python -m app.scripts.train_risk_model
 uv run fastapi dev backend/app/main.py
 ```
 
@@ -74,6 +75,12 @@ nên không bao giờ bị nhân đôi dữ liệu.
 
 Lệnh `build_derived_data` dựng bảy bảng dẫn xuất từ các bảng thô, cũng chạy lại
 an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bên dưới.
+
+Lệnh `train_risk_model` huấn luyện bộ mô hình dự đoán rủi ro. Nó **không đụng cơ sở
+dữ liệu** — đọc thẳng tệp CSV trong `datasets/raw/` (ADR-0010) — nên không phụ thuộc
+ba lệnh trên và chạy được cả khi Postgres đang tắt. Xếp ở vị trí này vì backend cần
+tệp mô hình thì mới dự đoán được. Xem
+[Huấn luyện mô hình rủi ro](#huấn-luyện-mô-hình-rủi-ro) bên dưới.
 
 Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
@@ -439,6 +446,85 @@ Test dùng cơ sở dữ liệu riêng tên `shipguard_test`, được tạo t�
 đầu và không chạm vào cơ sở dữ liệu phát triển. Bộ test tự khẳng định hai URL
 khác nhau trước khi chạy migration.
 
+Các bài test của mô hình rủi ro huấn luyện thật, nhưng trên một phần dữ liệu
+(`RISK_SAMPLE_STEP` trong `tests/conftest.py`) để chạy trong khoảng nửa phút thay vì
+năm phút. Chúng chỉ kiểm hình dạng báo cáo và tính lặp lại, **không** kiểm chất lượng
+dự đoán: F1 trên một phần nhỏ dữ liệu không nói lên điều gì. Chất lượng được kiểm
+bằng một lần chạy đầy đủ, xem mục dưới.
+
+## Huấn luyện mô hình rủi ro
+
+```bash
+uv run python -m app.scripts.train_risk_model
+```
+
+Mất khoảng năm phút trên toàn bộ dữ liệu Olist. Lệnh đọc thẳng tệp CSV trong
+`datasets/raw/` và không cần Postgres (ADR-0010).
+
+Mỗi chặng trong ba chặng được dự đoán dưới dạng **phân phối** thời gian chứ không
+phải một con số, rồi `Late Probability` suy ra bằng mô phỏng Monte Carlo 2.000 mẫu
+(ADR-0008). Ba thuật toán ứng viên cùng được huấn luyện — XGBoost hồi quy phân vị,
+XGBoost log-normal AFT, Scikit-learn HistGradientBoosting hồi quy phân vị — và bộ có
+F1 cao nhất ở mốc đặt hàng trên tập kiểm tra được giữ lại.
+
+Bốn tệp sinh ra trong `RISK_MODEL_DIR`:
+
+| Tệp | Nội dung |
+| --- | --- |
+| `risk_model.joblib` | Bộ mô hình được chọn, bộ mã hoá, trung vị lịch sử ba chặng, bảng lịch sử người bán, bảng toạ độ theo mã bưu chính |
+| `evaluation_report.json` | Toàn bộ báo cáo đánh giá — nguồn sự thật |
+| `evaluation_metrics.csv` | Chín dòng (3 thuật toán × 3 mốc dự đoán), mở bằng Excel |
+| `test_predictions.csv` | Xác suất trễ và kết quả thật trên tập kiểm tra, để notebook phân tích dùng lại |
+
+**Sau khi huấn luyện, chép "Ngưỡng đề xuất" mà lệnh in ra vào `RISK_THRESHOLD` trong
+`.env`.** Lệnh cố ý không tự ghi vào cấu hình: ngưỡng là quyết định vận hành, và đổi
+nó làm mọi đơn được đánh giá từ đó trở đi đổi mức rủi ro.
+
+Ngưỡng hợp lý nằm quanh 0,15–0,25. Nếu báo cáo đề xuất một con số xấp xỉ 0,5 thì có
+gì đó sai: tỷ lệ trễ nền chỉ 6,8%, nên ở mốc đặt hàng gần như không đơn nào đạt xác
+suất 0,5.
+
+Đọc F1 trong báo cáo cần nhớ hai điều. Thứ nhất, dữ liệu chia **theo thời điểm đặt
+hàng** chứ không trộn ngẫu nhiên, và tỷ lệ trễ tụt từ 7,8% ở tập huấn luyện xuống
+4,3% ở tập kiểm tra — trộn ngẫu nhiên cho điểm đẹp hơn nhiều nhưng là điểm giả, vì
+mô hình thật luôn dự đoán cho đơn đặt sau mọi đơn nó đã học. Thứ hai, mỗi ô có hai
+con số: `best_f1` là điểm tốt nhất phép quét tìm được trên chính tập kiểm tra (tiêu
+chí chọn thuật toán theo ADR-0008, nhưng lạc quan vì ngưỡng được chọn khi đã nhìn
+đáp án), còn `at_selected_threshold` là điểm khi dùng ngưỡng lấy từ tập kiểm định —
+đây mới là con số sẽ nhận được khi triển khai.
+
+**Kết quả lần chạy đầy đủ gần nhất:** `sklearn_quantile` được chọn, ngưỡng đề xuất
+0,18, F1 ở mốc đặt hàng **0,20 — chưa đạt** mục tiêu 0,30 của README. Mô hình vẫn
+được xuất và báo cáo ghi rõ là chưa đạt, đúng như ADR-0008 đã định. F1 tăng dần theo
+mốc (0,20 → 0,20 → 0,29), đúng kỳ vọng: càng về sau càng nhiều chặng đã có số thật.
+
+Phân tích sâu hơn — đặc trưng nào dẫn dắt từng chặng, xác suất có được hiệu chỉnh
+không, mô hình sai ở những đơn nào:
+
+```bash
+uv run jupyter lab backend/notebooks/risk_model_analysis.ipynb
+```
+
+Notebook chỉ đọc kết quả, không huấn luyện lại. Lưu nó với ô kết quả đã xoá sạch:
+số liệu đã nằm ở JSON và CSV rồi.
+
+### Tệp mô hình
+
+`risk_model.joblib` là đối tượng Python tuần tự hoá bằng giao thức `pickle`; đuôi
+`.joblib` chỉ là quy ước cho biết joblib đã ghi nó, không phải một định dạng mô hình
+riêng. Hai hệ quả:
+
+- **Nạp tệp là chạy mã tuỳ ý.** Chỉ nạp tệp do chính lệnh huấn luyện sinh ra; không
+  bao giờ nhận tệp mô hình từ bên ngoài qua API.
+- **Tệp gắn chặt với phiên bản thư viện.** Mô hình ghi bằng một bản XGBoost hay
+  Scikit-learn có thể không nạp được bằng bản khác. `uv.lock` đã ghim phiên bản; khi
+  lệch thì huấn luyện lại, và `model_version` trong báo cáo cho biết tệp hiện có đến
+  từ lần chạy nào. Lỗi kiểu này **không** phải `FileNotFoundError`, nên
+  `get_predictor` bắt lỗi rộng và trả 503 chứ không phải 500.
+
+Tệp mô hình và báo cáo không vào git — xem `/models/` và `*.joblib` trong
+`.gitignore` ở gốc repo.
+
 ## Cấu hình
 
 Mọi giá trị đọc từ `.env` ở gốc repo — cùng chỗ với `docker-compose.yml`, và cả
@@ -454,8 +540,16 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md` |
 | `JWT_SECRET_KEY` | Khóa ký access token. Đổi khóa thì mọi access token đang có hết hiệu lực ngay |
 | `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME` | Chỉ đọc ở lần khởi động đầu, khi chưa có Super Admin — xem [Đăng nhập](#đăng-nhập) |
+| `RISK_MODEL_DIR` | Nơi lệnh huấn luyện ghi tệp mô hình và báo cáo; backend đọc lại từ đây. Chưa có tệp thì backend **vẫn khởi động bình thường**, chỉ thao tác cần dự đoán mới báo lỗi |
+| `RISK_THRESHOLD` | Mức `Late Probability` để một đơn là `High Risk`, lớn hơn 0 và nhỏ hơn 1. Lấy con số "Ngưỡng đề xuất" trong báo cáo đánh giá — xem [Huấn luyện mô hình rủi ro](#huấn-luyện-mô-hình-rủi-ro) |
 
 Ghi lược đồ `postgresql://` thuần — mã tự thêm trình điều khiển `+asyncpg`.
+
+Riêng `RISK_MODEL_DIR` là ngoại lệ có chủ đích với quy tắc khởi động ở trên. Thiếu
+tài khoản quản trị thì máy chủ dừng hẳn, vì backend không có lối vào nào còn tệ hơn
+backend không chạy. Thiếu tệp mô hình thì không: bảng điều khiển và tra cứu đơn phải
+dùng được ngay cả khi chưa huấn luyện lần nào. Biến cấu hình vẫn bắt buộc — thiếu nó
+là hỏng lúc nạp cấu hình — nhưng thư mục nó trỏ tới thì được phép rỗng.
 
 ## Migration
 

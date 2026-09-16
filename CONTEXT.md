@@ -150,6 +150,10 @@ _Avoid_: Resolved, Closed, Done
 Việc đối chiếu mọi `Risk Assessment` của một đơn với `Delivery Outcome` thật khi đơn được ghi nhận đã giao. Đánh giá là đúng khi `High Risk` mà đơn trễ, hoặc Low Risk mà đơn đúng hạn.
 _Avoid_: Validation, Verification
 
+**Model Version**:
+Định danh một lần huấn luyện, gắn vào cả tệp mô hình lẫn báo cáo đánh giá của lần đó. Mỗi `Risk Assessment` ghi lại phiên bản đã sinh ra nó, để biết một kết quả cũ đến từ bản mô hình nào khi mô hình được huấn luyện lại.
+_Avoid_: Model ID, Build, Revision
+
 ## Người dùng
 
 **User**:
