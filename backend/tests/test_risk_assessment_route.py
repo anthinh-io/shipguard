@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from fake_risk import FakePredictor
 from httpx import AsyncClient
-from sqlalchemy import insert, text
+from sqlalchemy import insert, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_predictor
@@ -115,6 +115,82 @@ async def test_history_lists_newest_assessment_first(
     assert response.status_code == 200
     ids = [row["id"] for row in response.json()]
     assert ids == [second_assessment_id, first_assessment_id]
+
+
+async def test_needs_handling_flags_only_the_latest_high_risk_assessment_without_intervention(
+    client: AsyncClient, staff_id: int, session: AsyncSession
+) -> None:
+    app.dependency_overrides[get_predictor] = lambda: FakePredictor(late_probability=0.9)
+    headers = await bearer(client, STAFF)
+    create_response = await client.post("/orders", json=_payload(), headers=headers)
+    order_id = create_response.json()["order_id"]
+    first_assessment_id = create_response.json()["risk_assessment"]["id"]
+    # needs_handling chỉ tính trong list_risk_assessments (lịch sử), không ở phản hồi tạo
+    # đơn — mặc định False ở đây là đúng, dù đánh giá này đang High Risk.
+    assert create_response.json()["risk_assessment"]["needs_handling"] is False
+    assert create_response.json()["risk_assessment"]["was_correct"] is None
+
+    second_assessment_id = await session.scalar(
+        insert(risk_assessments)
+        .values(
+            order_id=order_id,
+            checkpoint="payment_approved",
+            late_probability=0.9,
+            is_high_risk=True,
+            threshold_used=0.18,
+            model_version="fake-risk-model",
+            risk_cause_stage="carrier_transit",
+            carrier_transit_median_days=8.5,
+            carrier_transit_historical_median_days=7.1,
+            assessed_at=datetime.now(timezone.utc),
+            created_by=staff_id,
+        )
+        .returning(risk_assessments.c.id)
+    )
+    await session.commit()
+
+    response = await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)
+    by_id = {row["id"]: row for row in response.json()}
+    # Đánh giá mới nhất (High Risk, chưa có Intervention) mới là việc cần xử lý; đánh giá
+    # cũ hơn không còn — CONTEXT.md, mục Handled.
+    assert by_id[second_assessment_id]["needs_handling"] is True
+    assert by_id[first_assessment_id]["needs_handling"] is False
+
+
+async def test_needs_handling_is_false_once_an_intervention_is_recorded(
+    client: AsyncClient, staff_id: int, session: AsyncSession
+) -> None:
+    app.dependency_overrides[get_predictor] = lambda: FakePredictor(late_probability=0.9)
+    headers = await bearer(client, STAFF)
+    create_response = await client.post("/orders", json=_payload(), headers=headers)
+    order_id = create_response.json()["order_id"]
+
+    await session.execute(
+        update(risk_assessments)
+        .where(risk_assessments.c.order_id == order_id)
+        .values(intervention="remind_seller")
+    )
+    await session.commit()
+
+    response = await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)
+
+    assert response.json()[0]["needs_handling"] is False
+
+
+async def test_needs_handling_is_false_for_a_canceled_order(
+    client: AsyncClient, staff_id: int
+) -> None:
+    app.dependency_overrides[get_predictor] = lambda: FakePredictor(late_probability=0.9)
+    headers = await bearer(client, STAFF)
+    create_response = await client.post("/orders", json=_payload(), headers=headers)
+    order_id = create_response.json()["order_id"]
+    cancel_response = await client.post(f"/orders/{order_id}/cancellation", headers=headers)
+    assert cancel_response.status_code == 201, cancel_response.text
+
+    response = await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)
+
+    # Đơn đã hủy không còn việc cần xử lý dù đánh giá cuối vẫn High Risk.
+    assert response.json()[0]["needs_handling"] is False
 
 
 async def test_olist_order_has_no_assessment_history(client: AsyncClient, staff_id: int) -> None:

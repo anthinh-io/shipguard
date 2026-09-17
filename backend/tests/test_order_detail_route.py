@@ -82,6 +82,8 @@ async def test_a_late_multi_seller_order_shows_every_part_of_the_order(
         "sellers",
         "payments",
         "reviews",
+        "next_milestone",
+        "cancelable",
     }
     assert body["order_id"] == order_id
     assert body["order_status"] == "delivered"

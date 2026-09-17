@@ -6,6 +6,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUserDep, PredictorDep, SessionDep, get_current_user
+from app.services.order_lifecycle import (
+    CanceledOrder,
+    EditMilestoneTimestamp,
+    InvalidMilestoneTimestampError,
+    LifecycleConflictError,
+    MilestoneRecorded,
+    OrderNotFoundError,
+    RecordMilestone,
+    cancel_order,
+    edit_milestone,
+    record_milestone,
+)
+from app.services.order_milestones import Milestone
 from app.services.order_notes import (
     NewOrderNote,
     OrderNote,
@@ -189,6 +202,80 @@ async def order_risk_assessments(session: SessionDep, order_id: str) -> list[Ris
     if history is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return history
+
+
+# Ghi nhận một Order Milestone, và — trừ delivered_to_customer — sinh một Risk Assessment
+# mới ở Prediction Checkpoint tương ứng (#33). delivered_to_customer chạy Reconciliation
+# thay vào đó, nên PredictorDep vẫn khai trên route này để chặn ở tầng dependency-injection
+# TRƯỚC khi transaction mở — dù bước ghi nhận giao hàng không thật sự cần predict.
+@router.post("/orders/{order_id}/milestones", response_model=MilestoneRecorded, status_code=201)
+async def record_order_milestone(
+    order_id: str,
+    payload: RecordMilestone,
+    session: SessionDep,
+    predictor: PredictorDep,
+    current_user: CurrentUserDep,
+) -> MilestoneRecorded:
+    try:
+        return await record_milestone(
+            session, predictor, order_id, payload, current_user.user_id
+        )
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found") from None
+    except LifecycleConflictError as error:
+        raise HTTPException(
+            status_code=409, detail={"code": error.code, "message": error.message}
+        ) from None
+    except InvalidMilestoneTimestampError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": ["body", "recorded_at"], "msg": error.msg}],
+        ) from None
+    except SellerZipMissingError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
+
+
+# Sửa mốc mới nhất — {milestone} ghi rõ tên trên path, không alias ngầm "latest": người
+# gọi nhắm nhầm mốc nhận đúng lỗi NotLatestMilestoneError thay vì sửa nhầm mốc khác.
+@router.patch("/orders/{order_id}/milestones/{milestone}", response_model=MilestoneRecorded)
+async def edit_order_milestone(
+    order_id: str,
+    milestone: Milestone,
+    payload: EditMilestoneTimestamp,
+    session: SessionDep,
+    predictor: PredictorDep,
+    current_user: CurrentUserDep,
+) -> MilestoneRecorded:
+    try:
+        return await edit_milestone(
+            session, predictor, order_id, milestone, payload, current_user.user_id
+        )
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found") from None
+    except LifecycleConflictError as error:
+        raise HTTPException(
+            status_code=409, detail={"code": error.code, "message": error.message}
+        ) from None
+    except InvalidMilestoneTimestampError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": ["body", "recorded_at"], "msg": error.msg}],
+        ) from None
+    except SellerZipMissingError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
+
+
+# Không PredictorDep: hủy đơn không sinh Risk Assessment, không chạy Reconciliation.
+@router.post("/orders/{order_id}/cancellation", response_model=CanceledOrder, status_code=201)
+async def cancel_order_route(order_id: str, session: SessionDep) -> CanceledOrder:
+    try:
+        return await cancel_order(session, order_id)
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found") from None
+    except LifecycleConflictError as error:
+        raise HTTPException(
+            status_code=409, detail={"code": error.code, "message": error.message}
+        ) from None
 
 
 # Tuỳ chọn cho ô chọn bang của trang đơn hàng. Tách khỏi /orders vì danh sách này không

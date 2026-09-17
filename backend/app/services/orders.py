@@ -17,6 +17,8 @@ from app.models.derived import (
     product_categories,
     sellers,
 )
+from app.models.risk import risk_assessments
+from app.services.order_milestones import Milestone, is_cancelable, next_milestone
 from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 PAGE_SIZE = 50
@@ -293,6 +295,10 @@ class OrderDetail(BaseModel):
     sellers: list[OrderSeller]
     payments: list[OrderPayment]
     reviews: list[OrderReview]
+    # Order Milestone kế tiếp cần ghi nhận, và liệu đơn có hủy được — None/False cho mọi
+    # đơn Olist lịch sử (0 dòng risk_assessments, xem app/models/risk.py).
+    next_milestone: Milestone | None
+    cancelable: bool
 
 
 def _days(column: sa.ColumnElement) -> sa.ColumnElement:
@@ -306,6 +312,9 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     Mỗi phần một truy vấn nhỏ theo order_id thay vì một câu JOIN lớn: sản phẩm, thanh toán
     và đánh giá là các danh sách độc lập, JOIN chung sẽ nhân chéo số dòng của nhau.
     """
+    has_assessment = sa.exists(
+        sa.select(1).where(risk_assessments.c.order_id == orders.c.order_id)
+    ).label("has_assessment")
     order = (
         await session.execute(
             sa.select(
@@ -325,6 +334,7 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
                 orders.c.customer_city,
                 orders.c.customer_state,
                 orders.c.customer_zip_code_prefix,
+                has_assessment,
             ).where(orders.c.order_id == order_id)
         )
     ).one_or_none()
@@ -446,6 +456,16 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
             )
             for row in reviews
         ],
+        next_milestone=next_milestone(
+            has_assessment=order.has_assessment,
+            order_status=order.order_status,
+            payment_approved_at=order.payment_approved_at,
+            handed_to_carrier_at=order.handed_to_carrier_at,
+            delivered_to_customer_at=order.delivered_to_customer_at,
+        ),
+        cancelable=is_cancelable(
+            has_assessment=order.has_assessment, order_status=order.order_status
+        ),
     )
 
 
