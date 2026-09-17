@@ -43,3 +43,9 @@ def next_milestone(
 
 def is_cancelable(*, has_assessment: bool, order_status: str) -> bool:
     return has_assessment and order_status not in ("delivered", "canceled")
+
+
+# Diễn giải đúng ngay cả khi MILESTONE_SEQUENCE đổi thứ tự/thêm mốc sau này — khác suy theo
+# vị trí ("mốc cuối cùng của dãy"), vốn là một sự tình cờ về vị trí chứ không phải ý nghĩa.
+def is_delivery_milestone(milestone: Milestone) -> bool:
+    return MILESTONE_STATUS[milestone] == "delivered"

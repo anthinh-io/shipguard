@@ -1,7 +1,8 @@
 import secrets
+from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
 from pydantic import BaseModel, Field, StringConstraints, model_validator
@@ -260,9 +261,17 @@ def _reference_errors(
     return errors
 
 
-def _build_order_input(
-    order_id: str, payload: NewOrder, purchased_at: datetime, seller_by_id: dict[str, sa.Row]
-) -> OrderInput:
+# Dùng chung bởi _build_order_input (đơn mới, đọc từ NewOrder) và
+# order_lifecycle.load_order_input (đơn đã tồn tại, đọc từ sa.Row của order_items/
+# order_payments) — cả hai nguồn đều có đúng các thuộc tính dưới đây dù kiểu khác nhau
+# (Pydantic vs. Row), nên gõ kiểu lỏng thay vì ép cùng một type. Tách ra để luật gộp
+# (_payment_summary trong risk/features.py) chỉ có một chỗ viết, không lệch nhau giữa lúc
+# tạo đơn và lúc đánh giá lại theo mốc (#33).
+def _build_lines_and_payments(
+    items: Iterable[Any],
+    payments: Iterable[Any],
+    seller_by_id: dict[str, sa.Row],
+) -> tuple[tuple[OrderLine, ...], tuple[str, ...], int]:
     lines = tuple(
         OrderLine(
             seller_id=item.seller_id,
@@ -273,14 +282,23 @@ def _build_order_input(
             price=item.price,
             freight_value=item.freight_value,
         )
-        for item in payload.items
+        for item in items
     )
     # Khớp cách lệnh huấn luyện gộp nhiều dòng thanh toán về một đơn (_payment_summary
     # trong risk/features.py): payment_type_combo là tập hình thức khác nhau đã sắp xếp,
     # max_installments là số kỳ lớn nhất. Lệch cách gộp này thì đặc trưng lệch âm thầm so
     # với lúc huấn luyện.
-    payment_types = tuple(sorted({payment.payment_type for payment in payload.payments}))
-    max_installments = max(payment.payment_installments for payment in payload.payments)
+    payment_types = tuple(sorted({payment.payment_type for payment in payments}))
+    max_installments = max(payment.payment_installments for payment in payments)
+    return lines, payment_types, max_installments
+
+
+def _build_order_input(
+    order_id: str, payload: NewOrder, purchased_at: datetime, seller_by_id: dict[str, sa.Row]
+) -> OrderInput:
+    lines, payment_types, max_installments = _build_lines_and_payments(
+        payload.items, payload.payments, seller_by_id
+    )
     return OrderInput(
         order_id=order_id,
         purchased_at=purchased_at,
@@ -417,34 +435,33 @@ async def insert_assessment(
     order_input: OrderInput,
     current_user_id: int,
 ) -> RiskAssessmentOut:
-    """Predict, ghi một dòng `risk_assessments`, rồi đọc lại — không tự commit.
+    """Predict rồi ghi một dòng `risk_assessments` — không tự commit.
 
     Người gọi kiểm soát ranh giới giao dịch (ADR-0009). Dùng chung bởi create_new_order
     (#31) và order_lifecycle.record_milestone/edit_milestone (#33).
     """
     prediction = predictor.predict(order_input)
     threshold = settings.RISK_THRESHOLD
-    assessment_id = await session.scalar(
-        sa.insert(risk_assessments)
-        .values(
-            order_id=order_id,
-            checkpoint=prediction.checkpoint,
-            late_probability=prediction.late_probability,
-            # Mức rủi ro chốt ngay lúc đánh giá — đạt ngưỡng dùng >=, khớp CONTEXT.md mục
-            # High Risk và metrics_at của lệnh huấn luyện.
-            is_high_risk=prediction.late_probability >= threshold,
-            threshold_used=threshold,
-            model_version=prediction.model_version,
-            risk_cause_stage=prediction.risk_cause.stage,
-            risk_cause_seller_id=prediction.risk_cause.seller_id,
-            created_by=current_user_id,
-            **_stage_columns(prediction.stages),
-        )
-        .returning(risk_assessments.c.id)
-    )
+    # RETURNING nguyên bảng thay vì chỉ id rồi SELECT lại: một lượt round-trip đủ lấy cả
+    # assessed_at (server_default=now()) lẫn mọi cột khác _to_assessment/_risk_cause cần.
     row = (
         await session.execute(
-            sa.select(risk_assessments).where(risk_assessments.c.id == assessment_id)
+            sa.insert(risk_assessments)
+            .values(
+                order_id=order_id,
+                checkpoint=prediction.checkpoint,
+                late_probability=prediction.late_probability,
+                # Mức rủi ro chốt ngay lúc đánh giá — đạt ngưỡng dùng >=, khớp CONTEXT.md mục
+                # High Risk và metrics_at của lệnh huấn luyện.
+                is_high_risk=prediction.late_probability >= threshold,
+                threshold_used=threshold,
+                model_version=prediction.model_version,
+                risk_cause_stage=prediction.risk_cause.stage,
+                risk_cause_seller_id=prediction.risk_cause.seller_id,
+                created_by=current_user_id,
+                **_stage_columns(prediction.stages),
+            )
+            .returning(risk_assessments)
         )
     ).one()
     return _to_assessment(row)

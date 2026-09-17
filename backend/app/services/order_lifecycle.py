@@ -15,17 +15,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.derived import order_items, order_payments, orders
 from app.models.risk import risk_assessments
-from app.risk.predictor import OrderInput, OrderLine, RiskPredictor
+from app.risk.predictor import OrderInput, RiskPredictor
 from app.services.order_milestones import (
     MILESTONE_SEQUENCE,
     MILESTONE_STATUS,
     Milestone,
     is_cancelable,
+    is_delivery_milestone,
     next_milestone,
 )
 from app.services.risk_assessments import (
     RiskAssessmentOut,
     SellerZipMissingError,
+    _build_lines_and_payments,
     _load_sellers,
     insert_assessment,
 )
@@ -180,6 +182,10 @@ def _later_milestones(milestone: Milestone) -> tuple[Milestone, ...]:
 
 
 async def _load_order_row(session: AsyncSession, order_id: str) -> sa.Row | None:
+    # Ba cột customer_state/customer_zip_code_prefix/estimated_delivery_date thêm vào đây
+    # (không dùng bởi bốn thao tác chính) là để load_order_input dùng lại đúng dòng này
+    # thay vì tự SELECT `orders` lần hai — an toàn vì không câu UPDATE nào của
+    # record_milestone/edit_milestone/cancel_order đụng tới ba cột đó hay purchased_at.
     return (
         await session.execute(
             sa.select(
@@ -188,6 +194,9 @@ async def _load_order_row(session: AsyncSession, order_id: str) -> sa.Row | None
                 orders.c.payment_approved_at,
                 orders.c.handed_to_carrier_at,
                 orders.c.delivered_to_customer_at,
+                orders.c.customer_state,
+                orders.c.customer_zip_code_prefix,
+                orders.c.estimated_delivery_date,
             ).where(orders.c.order_id == order_id)
         )
     ).one_or_none()
@@ -214,27 +223,23 @@ async def _check_gates(session: AsyncSession, order_id: str, order: sa.Row | Non
 async def load_order_input(
     session: AsyncSession,
     order_id: str,
+    order: sa.Row,
     *,
     payment_approved_at: datetime | None,
     handed_to_carrier_at: datetime | None,
 ) -> OrderInput:
     """Dựng lại `OrderInput` của một đơn đã tồn tại, cho bộ dự đoán chấm ở mốc mới.
 
+    `order` là dòng `_load_order_row` người gọi đã đọc từ trước (đọc TRƯỚC câu UPDATE của
+    record_milestone/edit_milestone) — dùng lại thay vì tự SELECT `orders` lần hai. Chỉ an
+    toàn vì UPDATE đó không đụng tới purchased_at/customer_state/customer_zip_code_prefix/
+    estimated_delivery_date, xem chú thích tại _load_order_row.
+
     `payment_approved_at`/`handed_to_carrier_at` là giá trị MỚI NHẤT tính đến thời điểm
     gọi — người gọi (record_milestone/edit_milestone) luôn truyền đủ cả mốc vừa đổi lẫn
     mốc chốt trước đó, không chỉ mốc vừa đổi, nếu không `_checkpoint()`/`_settled_days()`
     (predictor.py:236-260) suy sai chặng.
     """
-    order = (
-        await session.execute(
-            sa.select(
-                orders.c.purchased_at,
-                orders.c.customer_state,
-                orders.c.customer_zip_code_prefix,
-                orders.c.estimated_delivery_date,
-            ).where(orders.c.order_id == order_id)
-        )
-    ).one()
     items = (
         await session.execute(
             sa.select(
@@ -266,21 +271,9 @@ async def load_order_input(
     if missing_zip is not None:
         raise SellerZipMissingError(missing_zip)
 
-    lines = tuple(
-        OrderLine(
-            seller_id=item.seller_id,
-            seller_state=seller_by_id[item.seller_id].seller_state,
-            seller_zip=seller_by_id[item.seller_id].seller_zip_code_prefix,
-            product_category_name=item.product_category_name,
-            product_weight_g=item.product_weight_g,
-            price=item.price,
-            freight_value=item.freight_value,
-        )
-        for item in items
+    lines, payment_types, max_installments = _build_lines_and_payments(
+        items, payments, seller_by_id
     )
-    # Cùng cách gộp payment_types/payment_installments với _build_order_input.
-    payment_types = tuple(sorted({payment.payment_type for payment in payments}))
-    max_installments = max(payment.payment_installments for payment in payments)
 
     return OrderInput(
         order_id=order_id,
@@ -359,7 +352,7 @@ async def record_milestone(
     }
 
     assessment: RiskAssessmentOut | None = None
-    if payload.milestone == "delivered_to_customer":
+    if is_delivery_milestone(payload.milestone):
         # Reconciliation: đối chiếu MỌI dòng lịch sử của đơn, không chỉ dòng mới nhất.
         await session.execute(
             sa.update(risk_assessments)
@@ -370,6 +363,7 @@ async def record_milestone(
         order_input = await load_order_input(
             session,
             order_id,
+            order,
             payment_approved_at=timestamps["payment_approved_at"],
             handed_to_carrier_at=timestamps["handed_to_carrier_at"],
         )
@@ -443,15 +437,16 @@ async def edit_milestone(
         column_name: recorded_at,
     }
 
-    # "Mốc đã giao không sửa được" đúng về cấu trúc: milestone == "delivered_to_customer"
-    # chỉ có thể là mốc mới nhất khi order_status == "delivered", và nhánh đó đã bị chặn
-    # ở _check_gates phía trên — nên nhánh else dưới đây chỉ còn payment_approved/
-    # handed_to_carrier, giữ nguyên order_status hiện tại (chưa đổi ở PATCH).
+    # "Mốc đã giao không sửa được" đúng về cấu trúc: is_delivery_milestone(milestone) chỉ
+    # có thể đúng khi order_status == "delivered", và nhánh đó đã bị chặn ở _check_gates
+    # phía trên — nên nhánh else dưới đây chỉ còn payment_approved/handed_to_carrier, giữ
+    # nguyên order_status hiện tại (chưa đổi ở PATCH).
     assessment: RiskAssessmentOut | None = None
-    if milestone != "delivered_to_customer":
+    if not is_delivery_milestone(milestone):
         order_input = await load_order_input(
             session,
             order_id,
+            order,
             payment_approved_at=timestamps["payment_approved_at"],
             handed_to_carrier_at=timestamps["handed_to_carrier_at"],
         )
