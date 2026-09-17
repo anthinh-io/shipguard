@@ -81,6 +81,7 @@
     "export": "Export CSV",
     "exporting": "Exporting…",
     "exportError": "Could not export the file ({detail}). Please try again.",
+    "new": "New order",
     "total": "{count, plural, one {# order} other {# orders}}",
     "columns": {
       "orderId": "Order ID",
@@ -127,6 +128,44 @@
     "next": "Next",
     "page": "Page",
     "pageCount": "of {count, number}"
+  },
+  "createOrder": {
+    "title": "New order",
+    "submit": "Create order",
+    "submitting": "Creating…",
+    "purchasedAt": "Purchase time",
+    "committedDeliveryDate": "Committed delivery date",
+    "products": {
+      "title": "Items",
+      "add": "Add item",
+      "remove": "Remove item",
+      "seller": "Seller",
+      "category": "Category",
+      "weight": "Weight (grams)",
+      "price": "Price",
+      "freight": "Freight"
+    },
+    "payments": {
+      "title": "Payments",
+      "add": "Add payment",
+      "remove": "Remove payment",
+      "type": "Method",
+      "amount": "Amount",
+      "installments": "Installments"
+    },
+    "address": {
+      "state": "Delivery state",
+      "city": "City",
+      "zip": "ZIP code prefix"
+    },
+    "errors": {
+      "formLevel": "The server rejected the request: {detail}",
+      "modelNotReady": "The risk prediction model isn't ready yet. Please try again later.",
+      "unreachable": "Couldn't reach the server. Please try again.",
+      "purchasedAtFuture": "The purchase time cannot be in the future.",
+      "deliveryBeforePurchase": "The committed delivery date cannot be before the purchase time.",
+      "required": "This field cannot be empty."
+    }
   },
   "orderDetail": {
     "loading": "Loading order details…",
@@ -186,6 +225,28 @@
       "score": "{score}/5 stars",
       "noComment": "No comment left.",
       "empty": "No review for this order yet."
+    },
+    "riskAssessment": {
+      "title": "Risk Assessment",
+      "loading": "Loading risk assessment…",
+      "error": "Couldn't load the risk assessment from the server ({detail}). Please try again.",
+      "empty": "This order has no risk assessment yet.",
+      "lateProbability": "Late probability",
+      "level": {
+        "high": "High Risk",
+        "low": "Low Risk"
+      },
+      "cause": {
+        "expectedVsTypical": "Expected {expected} days, typically {typical} days",
+        "sellerCaused": "Seller involved"
+      },
+      "checkpoint": "Checkpoint",
+      "checkpointValues": {
+        "order_placed": "Order just placed",
+        "payment_approved": "Payment approved",
+        "handed_to_carrier": "Handed to carrier"
+      },
+      "assessedAt": "Assessed at"
     }
   },
   "orderNotes": {

@@ -81,6 +81,7 @@
     "export": "Xuất CSV",
     "exporting": "Đang xuất…",
     "exportError": "Không xuất được file ({detail}). Vui lòng thử lại.",
+    "new": "Tạo đơn",
     "total": "{count, number} đơn",
     "columns": {
       "orderId": "Mã đơn",
@@ -127,6 +128,44 @@
     "next": "Trang sau",
     "page": "Trang",
     "pageCount": "/ {count, number}"
+  },
+  "createOrder": {
+    "title": "Tạo đơn",
+    "submit": "Tạo đơn",
+    "submitting": "Đang tạo…",
+    "purchasedAt": "Thời điểm đặt hàng",
+    "committedDeliveryDate": "Ngày giao cam kết",
+    "products": {
+      "title": "Sản phẩm",
+      "add": "Thêm dòng sản phẩm",
+      "remove": "Xoá dòng này",
+      "seller": "Người bán",
+      "category": "Danh mục",
+      "weight": "Cân nặng (gram)",
+      "price": "Giá",
+      "freight": "Phí vận chuyển"
+    },
+    "payments": {
+      "title": "Thanh toán",
+      "add": "Thêm dòng thanh toán",
+      "remove": "Xoá dòng này",
+      "type": "Hình thức",
+      "amount": "Số tiền",
+      "installments": "Số kỳ trả góp"
+    },
+    "address": {
+      "state": "Bang nhận hàng",
+      "city": "Thành phố",
+      "zip": "Mã bưu chính"
+    },
+    "errors": {
+      "formLevel": "Máy chủ từ chối yêu cầu: {detail}",
+      "modelNotReady": "Mô hình dự đoán rủi ro chưa sẵn sàng. Vui lòng thử lại sau.",
+      "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại.",
+      "purchasedAtFuture": "Thời điểm đặt hàng không được ở trong tương lai.",
+      "deliveryBeforePurchase": "Ngày giao cam kết không được sớm hơn thời điểm đặt hàng.",
+      "required": "Trường này không được để trống."
+    }
   },
   "orderDetail": {
     "loading": "Đang tải chi tiết đơn…",
@@ -186,6 +225,28 @@
       "score": "{score}/5 sao",
       "noComment": "Khách không để lại bình luận.",
       "empty": "Đơn này chưa có đánh giá."
+    },
+    "riskAssessment": {
+      "title": "Đánh giá rủi ro",
+      "loading": "Đang tải đánh giá rủi ro…",
+      "error": "Không lấy được đánh giá rủi ro từ máy chủ ({detail}). Vui lòng thử lại.",
+      "empty": "Đơn này chưa có đánh giá rủi ro.",
+      "lateProbability": "Xác suất giao trễ",
+      "level": {
+        "high": "Rủi ro cao",
+        "low": "Rủi ro thấp"
+      },
+      "cause": {
+        "expectedVsTypical": "Dự kiến {expected} ngày, thường {typical} ngày",
+        "sellerCaused": "Người bán liên quan"
+      },
+      "checkpoint": "Điểm đánh giá",
+      "checkpointValues": {
+        "order_placed": "Vừa đặt hàng",
+        "payment_approved": "Đã duyệt thanh toán",
+        "handed_to_carrier": "Đã bàn giao vận chuyển"
+      },
+      "assessedAt": "Thời điểm đánh giá"
     }
   },
   "orderNotes": {

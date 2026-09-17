@@ -95,6 +95,11 @@ async function mockOrder(
     if (url.pathname === `/orders/${ORDER_ID}`) {
       return route.fulfill({ json: ORDER });
     }
+    // Khối Risk Assessment (#32) gọi endpoint này trên mọi lần mở trang chi tiết; đơn giả
+    // lập ở đây không cần đánh giá nào — tránh khối đó hiện trạng thái lỗi ngoài ý muốn.
+    if (url.pathname === `/orders/${ORDER_ID}/risk-assessments`) {
+      return route.fulfill({ json: [] });
+    }
     return route.fulfill({ status: 404, json: { detail: "Order not found" } });
   });
   return mock;

@@ -12,6 +12,7 @@ import {
   type DeliveryOutcome,
 } from "@/app/lib/order-format";
 import { OrderNotes } from "./order-notes";
+import { OrderRiskAssessment } from "./order-risk-assessment";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -195,6 +196,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <Timeline data={data} />
+          <OrderRiskAssessment orderId={data.order_id} sellers={data.sellers} />
           <Items data={data} />
           <Sellers data={data} />
           <Address data={data} />
@@ -214,7 +216,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   );
 }
 
-function Section({
+// Xuất ra để order-risk-assessment.tsx (#32) dùng lại đúng khung Section/Field này thay vì
+// dựng một bản khác cho cùng một kiểu bố cục.
+export function Section({
   title,
   testId,
   children,
@@ -234,7 +238,7 @@ function Section({
 }
 
 // Nhãn và giá trị xếp dọc ở màn hẹp, hai cột ở màn rộng hơn — không bao giờ cuộn ngang.
-function Field({
+export function Field({
   label,
   testId,
   children,

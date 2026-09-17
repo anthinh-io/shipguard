@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Plus, Search } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
 import {
@@ -391,6 +391,10 @@ export function OrderList({ params }: { params: OrderListParams }) {
         >
           <Download aria-hidden />
           {exporting ? t("exporting") : t("export")}
+        </Button>
+        <Button data-testid="orders-new" size="sm" onClick={() => router.push("/orders/new")}>
+          <Plus aria-hidden />
+          {t("new")}
         </Button>
       </div>
       {exportFailure ? (
