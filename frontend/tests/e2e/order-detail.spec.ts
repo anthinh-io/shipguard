@@ -127,6 +127,11 @@ async function mockOrders(page: Page): Promise<URL[]> {
     if (/^\/orders\/[^/]+\/notes$/.test(url.pathname)) {
       return route.fulfill({ json: [] });
     }
+    // Khối Risk Assessment (#32) gọi endpoint này trên mọi lần mở trang chi tiết; đơn giả
+    // lập ở đây không cần đánh giá nào cho các bài test hiện có.
+    if (/^\/orders\/[^/]+\/risk-assessments$/.test(url.pathname)) {
+      return route.fulfill({ json: [] });
+    }
     const detailId = url.pathname.match(/^\/orders\/([^/]+)$/)?.[1];
     if (detailId !== undefined) {
       const body = { [LATE_ID]: LATE_ORDER, [BARE_ID]: BARE_ORDER }[decodeURIComponent(detailId)];
