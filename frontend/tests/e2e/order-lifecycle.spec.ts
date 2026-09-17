@@ -244,6 +244,51 @@ test("đơn đã giao: khối mốc không có nút nào, lịch sử hiện rõ
   await expect(page.getByTestId("risk-assessment-history-outcome")).toHaveText("Sai");
 });
 
+test("màn hình hẹp: khối mốc (đủ ba nút) và lịch sử đánh giá (nhiều dòng) vẫn xếp một cột, không cuộn ngang", async ({
+  page,
+}) => {
+  const state: MockState = {
+    order: baseOrder({
+      order_status: "approved",
+      next_milestone: "handed_to_carrier",
+      timeline: {
+        purchased_at: "2018-02-09T17:21:04",
+        payment_approved_at: "2018-02-10T02:00:00",
+        handed_to_carrier_at: null,
+        delivered_at: null,
+        estimated_delivery_date: "2018-03-07",
+        payment_approval_days: 0.3,
+        seller_handling_days: null,
+        carrier_transit_days: null,
+      },
+    }),
+    history: [
+      baseAssessment({ id: 2, checkpoint: "payment_approved" }),
+      baseAssessment({ id: 1, checkpoint: "order_placed" }),
+    ],
+  };
+  await mockLifecycleOrder(page, state);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.goto(`/orders/${ORDER_ID}`);
+  // Đủ ba điều khiển hiện cùng lúc: ghi nhận mốc kế tiếp, sửa mốc mới nhất, hủy đơn.
+  await expect(page.getByTestId("milestone-record-submit")).toBeVisible();
+  await page.getByTestId("milestone-edit-open").click();
+  await expect(page.getByTestId("milestone-edit-input")).toBeVisible();
+  await expect(page.getByTestId("milestone-cancel-open")).toBeVisible();
+  await expect(page.getByTestId("risk-assessment-history-row")).toHaveCount(1);
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  const milestoneActions = await page.getByTestId("order-milestone-actions").boundingBox();
+  const riskAssessment = await page.getByTestId("order-risk-assessment").boundingBox();
+  expect(riskAssessment!.y).toBeGreaterThan(milestoneActions!.y + milestoneActions!.height - 1);
+  expect(Math.abs(riskAssessment!.x - milestoneActions!.x)).toBeLessThan(1);
+});
+
 test("đơn mới tạo: ghi nhận duyệt thanh toán thì trạng thái đổi, lịch sử có thêm một dòng ngay, và giờ hiện đúng ngày UTC", async ({
   page,
 }) => {
