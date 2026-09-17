@@ -143,6 +143,12 @@ class RiskAssessmentOut(BaseModel):
     threshold_used: float
     model_version: str
     risk_cause: RiskCauseOut
+    # Reconciliation (#33): None cho tới khi đơn được ghi nhận đã giao.
+    was_correct: bool | None
+    # Handled (CONTEXT.md): chỉ True cho lần đánh giá mới nhất của một đơn còn High Risk
+    # và chưa có Intervention — list_risk_assessments tính, insert_assessment luôn False
+    # vì dòng vừa tạo luôn là mới nhất và chưa thể có Intervention.
+    needs_handling: bool = False
 
 
 class CreatedOrder(BaseModel):
@@ -183,7 +189,7 @@ def _risk_cause(row: sa.Row) -> RiskCauseOut:
     )
 
 
-def _to_assessment(row: sa.Row) -> RiskAssessmentOut:
+def _to_assessment(row: sa.Row, *, needs_handling: bool = False) -> RiskAssessmentOut:
     return RiskAssessmentOut(
         id=row.id,
         checkpoint=row.checkpoint,
@@ -193,12 +199,9 @@ def _to_assessment(row: sa.Row) -> RiskAssessmentOut:
         threshold_used=row.threshold_used,
         model_version=row.model_version,
         risk_cause=_risk_cause(row),
+        was_correct=row.was_correct,
+        needs_handling=needs_handling,
     )
-
-
-async def _order_exists(session: AsyncSession, order_id: str) -> bool:
-    found = await session.scalar(sa.select(1).where(orders.c.order_id == order_id))
-    return found is not None
 
 
 async def _load_sellers(session: AsyncSession, seller_ids: set[str]) -> dict[str, sa.Row]:
@@ -333,7 +336,6 @@ async def create_new_order(
     purchased_at = payload.purchased_at.astimezone(timezone.utc).replace(tzinfo=None)
 
     order_input = _build_order_input(order_id, payload, purchased_at, seller_by_id)
-    prediction = predictor.predict(order_input)
 
     order_value = sum(
         (Decimal(str(item.price)) + Decimal(str(item.freight_value)) for item in payload.items),
@@ -399,6 +401,28 @@ async def create_new_order(
         ],
     )
 
+    assessment = await insert_assessment(
+        session, predictor, order_id, order_input, current_user_id
+    )
+
+    await session.commit()
+
+    return CreatedOrder(order_id=order_id, risk_assessment=assessment)
+
+
+async def insert_assessment(
+    session: AsyncSession,
+    predictor: RiskPredictor,
+    order_id: str,
+    order_input: OrderInput,
+    current_user_id: int,
+) -> RiskAssessmentOut:
+    """Predict, ghi một dòng `risk_assessments`, rồi đọc lại — không tự commit.
+
+    Người gọi kiểm soát ranh giới giao dịch (ADR-0009). Dùng chung bởi create_new_order
+    (#31) và order_lifecycle.record_milestone/edit_milestone (#33).
+    """
+    prediction = predictor.predict(order_input)
     threshold = settings.RISK_THRESHOLD
     assessment_id = await session.scalar(
         sa.insert(risk_assessments)
@@ -418,22 +442,24 @@ async def create_new_order(
         )
         .returning(risk_assessments.c.id)
     )
-
-    await session.commit()
-
     row = (
         await session.execute(
             sa.select(risk_assessments).where(risk_assessments.c.id == assessment_id)
         )
     ).one()
-    return CreatedOrder(order_id=order_id, risk_assessment=_to_assessment(row))
+    return _to_assessment(row)
 
 
 async def list_risk_assessments(
     session: AsyncSession, order_id: str
 ) -> list[RiskAssessmentOut] | None:
     """Lịch sử đánh giá, mới nhất trên cùng; None nếu không có đơn nào mang mã đó."""
-    if not await _order_exists(session, order_id):
+    # orders.order_status là NOT NULL, nên None ở đây CHÍNH LÀ phép kiểm đơn không tồn
+    # tại — không cần một câu _order_exists riêng rồi lại truy vấn order_status lần hai.
+    order_status = await session.scalar(
+        sa.select(orders.c.order_status).where(orders.c.order_id == order_id)
+    )
+    if order_status is None:
         return None
     rows = (
         await session.execute(
@@ -443,7 +469,21 @@ async def list_risk_assessments(
             .order_by(risk_assessments.c.assessed_at.desc(), risk_assessments.c.id.desc())
         )
     ).all()
-    return [_to_assessment(row) for row in rows]
+    return [
+        _to_assessment(
+            row,
+            # Handled (CONTEXT.md): chỉ lần đánh giá MỚI NHẤT của một đơn còn High Risk
+            # và chưa có Intervention mới là việc cần xử lý; đơn đã hủy không còn việc
+            # cần xử lý dù đánh giá cuối vẫn High Risk.
+            needs_handling=(
+                index == 0
+                and order_status != "canceled"
+                and row.is_high_risk
+                and row.intervention is None
+            ),
+        )
+        for index, row in enumerate(rows)
+    ]
 
 
 async def list_product_categories(session: AsyncSession) -> list[ProductCategory]:
