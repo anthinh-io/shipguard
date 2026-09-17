@@ -231,6 +231,7 @@
       "loading": "Loading risk assessment…",
       "error": "Couldn't load the risk assessment from the server ({detail}). Please try again.",
       "empty": "This order has no risk assessment yet.",
+      "refreshFailed": "Could not refresh the assessment history automatically. Reload to see the latest.",
       "lateProbability": "Late probability",
       "level": {
         "high": "High Risk",
@@ -246,7 +247,45 @@
         "payment_approved": "Payment approved",
         "handed_to_carrier": "Handed to carrier"
       },
-      "assessedAt": "Assessed at"
+      "assessedAt": "Assessed at",
+      "outcome": {
+        "title": "Reconciliation",
+        "correct": "Correct",
+        "incorrect": "Incorrect"
+      },
+      "history": {
+        "title": "Previous assessments"
+      }
+    },
+    "milestoneActions": {
+      "title": "Milestones",
+      "noActions": "No milestone action available for this order.",
+      "milestones": {
+        "payment_approved": "Payment approved",
+        "handed_to_carrier": "Handed to carrier",
+        "delivered_to_customer": "Delivered to customer"
+      },
+      "record": "Record {milestone}",
+      "recordedAt": "Recorded at",
+      "submit": "Save",
+      "submitting": "Saving…",
+      "edit": "Edit",
+      "cancelEdit": "Cancel",
+      "cancelOrder": "Cancel order",
+      "errors": {
+        "future": "This time cannot be in the future.",
+        "beforePrevious": "This time cannot be earlier than the previous milestone.",
+        "conflict": "This order has changed since the page loaded. The page has been refreshed.",
+        "modelNotReady": "The risk model isn't ready yet. Please try again shortly.",
+        "unreachable": "Could not reach the server. Please try again.",
+        "refreshFailed": "Recorded, but the page could not refresh automatically. Reload to see the update."
+      },
+      "cancelDialog": {
+        "title": "Cancel this order?",
+        "description": "This cannot be undone. The order will move to canceled.",
+        "confirm": "Cancel order",
+        "cancel": "Keep order"
+      }
     }
   },
   "orderNotes": {

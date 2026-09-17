@@ -18,11 +18,18 @@ type RiskCause = {
 };
 
 type RiskAssessment = {
+  id: number;
   checkpoint: string;
   assessed_at: string;
   late_probability: number;
   is_high_risk: boolean;
+  threshold_used: number;
+  model_version: string;
   risk_cause: RiskCause;
+  // Reconciliation (#33): null cho tới khi đơn được ghi nhận đã giao. Không đọc
+  // needs_handling ở đây — thuộc phạm vi #35 (dựng nửa vời một khối "cần xử lý" chưa có
+  // nút xử lý nào đi kèm thì vô nghĩa).
+  was_correct: boolean | null;
 };
 
 type SellerRef = { seller_id: string; seller_city: string; seller_state: string };
@@ -55,13 +62,11 @@ class RiskAssessmentError extends Error {
 type State =
   | { kind: "loading" }
   | { kind: "error"; failure: Failure }
-  // null: đơn Olist lịch sử, chưa từng có Risk Assessment nào (mảng rỗng từ máy chủ).
-  | { kind: "loaded"; assessment: RiskAssessment | null };
+  // Mảng rỗng: đơn Olist lịch sử, chưa từng có Risk Assessment nào. Mới nhất trên cùng,
+  // đúng thứ tự máy chủ đã trả (list_risk_assessments, #33/#34).
+  | { kind: "loaded"; history: RiskAssessment[] };
 
-// needs_handling/was_correct của RiskAssessmentOut chỉ có ý nghĩa thật ở chính endpoint
-// này; khối này chỉ đọc từ đây, không đọc lại dữ liệu đánh giá trả về lúc tạo đơn hay ghi
-// mốc — nơi hai trường đó luôn mặc định.
-async function fetchLatestAssessment(url: string): Promise<RiskAssessment | null> {
+async function fetchAssessmentHistory(url: string): Promise<RiskAssessment[]> {
   if (!BACKEND_URL) {
     throw new RiskAssessmentError({ kind: "missing_backend_url" });
   }
@@ -69,40 +74,56 @@ async function fetchLatestAssessment(url: string): Promise<RiskAssessment | null
   if (!response.ok) {
     throw new RiskAssessmentError({ kind: "http_status", status: response.status });
   }
-  const data = (await response.json()) as RiskAssessment[];
-  return data[0] ?? null;
+  return (await response.json()) as RiskAssessment[];
 }
 
 export function OrderRiskAssessment({
   orderId,
   sellers,
+  refreshToken,
 }: {
   orderId: string;
   sellers: SellerRef[];
+  // Tăng ở order-detail.tsx sau mỗi thao tác mốc/sửa mốc thành công, để buộc tải lại đúng
+  // url này (ghi nhận mốc mới sinh thêm một dòng; giao hàng đối chiếu lại mọi dòng cũ).
+  refreshToken?: number;
 }) {
   const t = useTranslations("orderDetail");
   const tOrders = useTranslations("orders");
   const [state, setState] = useState<State>({ kind: "loading" });
+  // true khi lần gọi lại (refreshToken > 0) không tải được — đọc riêng, không lẫn với
+  // state.kind vì lịch sử cũ vẫn đang hiện đúng, chỉ chưa chắc là bản mới nhất.
+  const [historyRefreshFailed, setHistoryRefreshFailed] = useState(false);
   const url = `${BACKEND_URL}/orders/${encodeURIComponent(orderId)}/risk-assessments`;
+  const requestKey = `${url}#${refreshToken ?? 0}`;
 
   // Cùng chốt với order-detail.tsx: Strict Mode không gọi hai lần, và phản hồi của đơn cũ
   // không đè lên đơn mới.
   const requested = useRef<string | null>(null);
 
   useEffect(() => {
-    if (requested.current === url) {
+    if (requested.current === requestKey) {
       return;
     }
-    requested.current = url;
+    requested.current = requestKey;
+    setHistoryRefreshFailed(false);
 
-    fetchLatestAssessment(url)
-      .then((assessment) => {
-        if (requested.current === url) {
-          setState({ kind: "loaded", assessment });
+    fetchAssessmentHistory(url)
+      .then((history) => {
+        if (requested.current === requestKey) {
+          setState({ kind: "loaded", history });
         }
       })
       .catch((error: unknown) => {
-        if (requested.current !== url) {
+        if (requested.current !== requestKey) {
+          return;
+        }
+        // Lần gọi lại sau một thao tác đã thành công: giữ nguyên lịch sử đang hiện thay vì
+        // thay bằng màn hình lỗi — thao tác gốc không hề thất bại. Vẫn báo riêng (khác với
+        // order-detail.tsx tải hỏng, vốn đã có banner của chính nó) để không im lặng bỏ qua
+        // một lần tải lại thật sự thất bại.
+        if ((refreshToken ?? 0) > 0) {
+          setHistoryRefreshFailed(true);
           return;
         }
         setState({
@@ -116,7 +137,7 @@ export function OrderRiskAssessment({
                 },
         });
       });
-  }, [url]);
+  }, [requestKey, url, refreshToken]);
 
   function failureDetail(failure: Failure): string {
     return failure.kind === "missing_backend_url"
@@ -128,6 +149,14 @@ export function OrderRiskAssessment({
 
   return (
     <Section title={t("riskAssessment.title")} testId="order-risk-assessment">
+      {historyRefreshFailed ? (
+        <p
+          data-testid="risk-assessment-refresh-failed"
+          className="mb-3 text-sm text-amber-700 dark:text-amber-400"
+        >
+          {t("riskAssessment.refreshFailed")}
+        </p>
+      ) : null}
       {state.kind === "loading" ? (
         <p data-testid="risk-assessment-loading" className="opacity-70">
           {t("riskAssessment.loading")}
@@ -136,14 +165,86 @@ export function OrderRiskAssessment({
         <p data-testid="risk-assessment-error" className="text-red-700 dark:text-red-400">
           {t("riskAssessment.error", { detail: failureDetail(state.failure) })}
         </p>
-      ) : state.assessment === null ? (
+      ) : state.history.length === 0 ? (
         <p data-testid="risk-assessment-empty" className="text-muted-foreground">
           {t("riskAssessment.empty")}
         </p>
       ) : (
-        <AssessmentDetails assessment={state.assessment} sellers={sellers} />
+        <div className="flex flex-col gap-4">
+          <AssessmentDetails assessment={state.history[0]} sellers={sellers} />
+          {state.history.length > 1 ? (
+            <div className="flex flex-col gap-3 border-t pt-4">
+              <h3 className="text-sm font-medium">{t("riskAssessment.history.title")}</h3>
+              <ul className="flex flex-col gap-3">
+                {state.history.slice(1).map((assessment) => (
+                  <li key={assessment.id} data-testid="risk-assessment-history-row">
+                    <HistoryRow assessment={assessment} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       )}
     </Section>
+  );
+}
+
+// Cờ đúng/sai đối chiếu (#33): null tới khi đơn được ghi nhận đã giao, nên không hiện gì
+// trước đó — không phải một trạng thái thứ ba cần vẽ riêng.
+function OutcomeBadge({ wasCorrect, testId }: { wasCorrect: boolean | null; testId: string }) {
+  const t = useTranslations("orderDetail");
+  if (wasCorrect === null) {
+    return null;
+  }
+  return (
+    <Badge
+      data-testid={testId}
+      variant="outline"
+      className={
+        wasCorrect
+          ? "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          : "border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400"
+      }
+    >
+      {t(wasCorrect ? "riskAssessment.outcome.correct" : "riskAssessment.outcome.incorrect")}
+    </Badge>
+  );
+}
+
+// Dòng lịch sử nhạt hơn dòng nổi bật: chỉ probability/badge/checkpoint/assessedAt/outcome,
+// không có nguyên nhân chi tiết (stage/seller) — đỡ rối khi một đơn có nhiều lần đánh giá.
+function HistoryRow({ assessment }: { assessment: RiskAssessment }) {
+  const t = useTranslations("orderDetail");
+  const format = useFormatter();
+  const level = assessment.is_high_risk ? "high" : "low";
+  // Cùng lý do với AssessmentDetails: assessed_at là mốc thật có offset, tính múi giờ
+  // trình duyệt chỉ sau khi đã có dữ liệu để không lệch khi hydrate.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <Badge
+        data-testid="risk-assessment-history-badge"
+        variant="outline"
+        className={RISK_LEVEL_CLASS[level]}
+      >
+        {t(`riskAssessment.level.${level}`)}
+      </Badge>
+      <span data-testid="risk-assessment-history-probability">
+        {format.number(assessment.late_probability, "percent")}
+      </span>
+      <span data-testid="risk-assessment-history-checkpoint">
+        {t(`riskAssessment.checkpointValues.${assessment.checkpoint}`)}
+      </span>
+      <span data-testid="risk-assessment-history-assessed-at">
+        {format.dateTime(new Date(assessment.assessed_at), "localDateTime", { timeZone })}
+      </span>
+      <OutcomeBadge
+        wasCorrect={assessment.was_correct}
+        testId="risk-assessment-history-outcome"
+      />
+    </div>
   );
 }
 
@@ -209,6 +310,11 @@ function AssessmentDetails({
       <Field label={t("riskAssessment.assessedAt")} testId="risk-assessment-assessed-at">
         {format.dateTime(new Date(assessment.assessed_at), "localDateTime", { timeZone })}
       </Field>
+      {assessment.was_correct !== null ? (
+        <Field label={t("riskAssessment.outcome.title")} testId="risk-assessment-outcome-field">
+          <OutcomeBadge wasCorrect={assessment.was_correct} testId="risk-assessment-outcome" />
+        </Field>
+      ) : null}
     </dl>
   );
 }
