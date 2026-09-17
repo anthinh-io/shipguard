@@ -107,6 +107,19 @@ class NotLatestMilestoneError(LifecycleConflictError):
         )
 
 
+class OrderChangedConcurrentlyError(LifecycleConflictError):
+    """Dự phòng: chỉ nổ ra nếu UPDATE có điều kiện bị 0 dòng khớp mà đọc lại đơn vẫn
+    không giải thích được lý do cụ thể (canceled/delivered/mốc đã đổi) — về lý thuyết
+    không nên xảy ra vì điều kiện WHERE đã phủ đúng các trường hợp đó, nhưng giữ lại để
+    hàm luôn có một lỗi rõ ràng thay vì rơi qua đáy."""
+
+    def __init__(self, order_id: str) -> None:
+        super().__init__(
+            "order_changed_concurrently",
+            f"Order {order_id} was changed by another request; reload and retry",
+        )
+
+
 class RecordMilestone(BaseModel):
     milestone: Milestone
     recorded_at: datetime
@@ -159,6 +172,11 @@ def _latest_milestone(order: sa.Row) -> Milestone | None:
         if getattr(order, _MILESTONE_COLUMN[milestone]) is not None:
             return milestone
     return None
+
+
+def _later_milestones(milestone: Milestone) -> tuple[Milestone, ...]:
+    index = MILESTONE_SEQUENCE.index(milestone)
+    return MILESTONE_SEQUENCE[index + 1 :]
 
 
 async def _load_order_row(session: AsyncSession, order_id: str) -> sa.Row | None:
@@ -304,19 +322,33 @@ async def record_milestone(
     column_name = _MILESTONE_COLUMN[payload.milestone]
     new_status = MILESTONE_STATUS[payload.milestone]
 
-    # WHERE cột mốc còn NULL: chặn hai request ghi cùng một mốc chạy đua nhau — request
-    # thua cuộc thấy 0 dòng khớp (mốc đã bị request kia lấp) và nhận lại đúng lỗi
-    # OutOfOrderMilestoneError mà một retry hợp lệ đáng ra phải thấy, thay vì âm thầm
-    # ghi đè và sinh hai dòng risk_assessments cho cùng một mốc.
+    # WHERE cột mốc còn NULL VÀ order_status chưa đổi kể từ lúc đọc: chặn cả hai đường
+    # đua — (1) hai request ghi cùng một mốc, (2) một request đang ghi mốc trong lúc một
+    # request khác vừa hủy đơn. Không khớp WHERE thì đơn đã đổi trạng thái từ lúc đọc,
+    # đọc lại để trả đúng lỗi (đã hủy/đã giao/mốc đã bị lấp) thay vì luôn báo
+    # OutOfOrderMilestoneError sai ngữ cảnh.
     result = await session.execute(
         sa.update(orders)
-        .where(orders.c.order_id == order_id, orders.c[column_name].is_(None))
+        .where(
+            orders.c.order_id == order_id,
+            orders.c[column_name].is_(None),
+            orders.c.order_status == order.order_status,
+        )
         .values(**{column_name: recorded_at, "order_status": new_status})
         .returning(orders.c.is_late)
     )
     updated = result.one_or_none()
     if updated is None:
-        raise OutOfOrderMilestoneError(expected, payload.milestone)
+        fresh_order = await _load_order_row(session, order_id)
+        await _check_gates(session, order_id, fresh_order)
+        fresh_expected = next_milestone(
+            has_assessment=True,
+            order_status=fresh_order.order_status,
+            payment_approved_at=fresh_order.payment_approved_at,
+            handed_to_carrier_at=fresh_order.handed_to_carrier_at,
+            delivered_to_customer_at=fresh_order.delivered_to_customer_at,
+        )
+        raise OutOfOrderMilestoneError(fresh_expected, payload.milestone)
     is_late = updated.is_late
 
     timestamps = {
@@ -381,12 +413,28 @@ async def edit_milestone(
     _validate_recorded_at(payload.recorded_at, not_before=previous_at)
     recorded_at = _to_naive_utc(payload.recorded_at)
     column_name = _MILESTONE_COLUMN[milestone]
+    old_value = getattr(order, column_name)
 
-    await session.execute(
+    # WHERE giá trị cột mốc chưa đổi (chặn sửa-sửa đua nhau), mọi mốc SAU nó vẫn còn
+    # NULL (chặn edit đè lên một đơn vừa được record_milestone đẩy đi tiếp — mốc đang
+    # sửa không còn là "mới nhất" nữa dù cột của chính nó chưa đổi), và order_status
+    # chưa đổi (chặn edit đè lên một đơn vừa bị hủy). Không khớp thì đọc lại để báo
+    # đúng lỗi thay vì âm thầm ghi đè.
+    result = await session.execute(
         sa.update(orders)
-        .where(orders.c.order_id == order_id)
+        .where(
+            orders.c.order_id == order_id,
+            orders.c[column_name] == old_value,
+            orders.c.order_status == order.order_status,
+            *(orders.c[_MILESTONE_COLUMN[m]].is_(None) for m in _later_milestones(milestone)),
+        )
         .values(**{column_name: recorded_at})
+        .returning(orders.c.order_id)
     )
+    if result.one_or_none() is None:
+        fresh_order = await _load_order_row(session, order_id)
+        await _check_gates(session, order_id, fresh_order)
+        raise NotLatestMilestoneError(_latest_milestone(fresh_order), milestone)
 
     timestamps = {
         "payment_approved_at": order.payment_approved_at,
@@ -432,8 +480,22 @@ async def cancel_order(session: AsyncSession, order_id: str) -> CanceledOrder:
     order = await _load_order_row(session, order_id)
     await _check_gates(session, order_id, order)
 
-    await session.execute(
-        sa.update(orders).where(orders.c.order_id == order_id).values(order_status="canceled")
+    # WHERE order_status chưa ở trạng thái chốt (delivered/canceled) — không so bằng
+    # đúng giá trị đã đọc, vì một mốc trung gian (vd created → approved) đổi đồng thời
+    # không làm hủy đơn sai, chỉ có tới trạng thái chốt mới thật sự xung đột với hủy.
+    # Không khớp thì một request khác vừa giao/hủy đơn trước — đọc lại để báo đúng lỗi.
+    result = await session.execute(
+        sa.update(orders)
+        .where(
+            orders.c.order_id == order_id,
+            orders.c.order_status.not_in(("canceled", "delivered")),
+        )
+        .values(order_status="canceled")
+        .returning(orders.c.order_id)
     )
+    if result.one_or_none() is None:
+        fresh_order = await _load_order_row(session, order_id)
+        await _check_gates(session, order_id, fresh_order)
+        raise OrderChangedConcurrentlyError(order_id)
     await session.commit()
     return CanceledOrder(order_id=order_id, order_status="canceled")
