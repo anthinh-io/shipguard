@@ -141,6 +141,25 @@ async def test_recording_payment_approved_updates_status_and_adds_an_assessment(
     assert len(history) == 2
 
 
+async def test_order_detail_reports_the_next_milestone_and_cancelable_flag(
+    client: AsyncClient, staff_id: int
+) -> None:
+    install_predictor()
+    headers = await bearer(client, STAFF)
+    order_id = await _create_order(client, headers)
+
+    response = await client.get(f"/orders/{order_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["next_milestone"] == "payment_approved"
+    assert response.json()["cancelable"] is True
+
+    await _record(client, headers, order_id, "payment_approved", "2018-01-11T09:00:00+00:00")
+
+    response = await client.get(f"/orders/{order_id}", headers=headers)
+    assert response.json()["next_milestone"] == "handed_to_carrier"
+    assert response.json()["cancelable"] is True
+
+
 async def test_full_lifecycle_reconciles_every_assessment_on_delivery(
     client: AsyncClient, staff_id: int
 ) -> None:
@@ -166,6 +185,38 @@ async def test_full_lifecycle_reconciles_every_assessment_on_delivery(
     history = (await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)).json()
     assert len(history) == 3
     assert all(row["was_correct"] is True for row in history)
+
+
+async def test_reconciliation_treats_each_assessment_independently(
+    client: AsyncClient, staff_id: int
+) -> None:
+    """Một đơn có cả đánh giá High Risk lẫn Low Risk trong lịch sử — khi giao trễ, chỉ
+    đánh giá High Risk là đúng, các đánh giá Low Risk là sai, dù cùng một lần đối chiếu."""
+    install_predictor(FakePredictor(late_probability=0.9))
+    headers = await bearer(client, STAFF)
+    order_id = await _create_order(client, headers)
+
+    install_predictor(FakePredictor(late_probability=0.05))
+    await _record(client, headers, order_id, "payment_approved", "2018-01-11T09:00:00+00:00")
+    await _record(client, headers, order_id, "handed_to_carrier", "2018-01-12T09:00:00+00:00")
+
+    # Sau ngày cam kết (2018-01-25) -> is_late True.
+    response = await _record(
+        client, headers, order_id, "delivered_to_customer", "2018-01-30T09:00:00+00:00"
+    )
+    assert response.status_code == 201, response.text
+
+    history = (await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)).json()
+    assert len(history) == 3
+    # FakePredictor không đổi checkpoint theo mốc (luôn "order_placed"), nên phân biệt
+    # ba lần đánh giá bằng thứ tự — mới nhất trên cùng: [0]=handed_to_carrier,
+    # [1]=payment_approved, [2]=order_placed (lúc tạo đơn).
+    assert history[2]["is_high_risk"] is True
+    assert history[2]["was_correct"] is True
+    assert history[1]["is_high_risk"] is False
+    assert history[1]["was_correct"] is False
+    assert history[0]["is_high_risk"] is False
+    assert history[0]["was_correct"] is False
 
 
 async def test_editing_the_latest_milestone_adds_a_new_assessment_and_keeps_history(
@@ -288,6 +339,26 @@ async def test_canceling_a_delivered_order_is_rejected(
     await _record(client, headers, order_id, "delivered_to_customer", "2018-01-20T09:00:00+00:00")
 
     response = await client.post(f"/orders/{order_id}/cancellation", headers=headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "already_delivered"
+
+
+async def test_editing_a_milestone_after_delivery_is_rejected(
+    client: AsyncClient, staff_id: int
+) -> None:
+    install_predictor()
+    headers = await bearer(client, STAFF)
+    order_id = await _create_order(client, headers)
+    await _record(client, headers, order_id, "payment_approved", "2018-01-11T09:00:00+00:00")
+    await _record(client, headers, order_id, "handed_to_carrier", "2018-01-12T09:00:00+00:00")
+    await _record(client, headers, order_id, "delivered_to_customer", "2018-01-20T09:00:00+00:00")
+
+    response = await client.patch(
+        f"/orders/{order_id}/milestones/handed_to_carrier",
+        json={"recorded_at": "2018-01-12T08:00:00+00:00"},
+        headers=headers,
+    )
 
     assert response.status_code == 409, response.text
     assert response.json()["detail"]["code"] == "already_delivered"
