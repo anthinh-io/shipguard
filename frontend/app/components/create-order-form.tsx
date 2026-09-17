@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { apiFetch } from "@/app/lib/api";
+import { toLocalInputValue } from "@/app/lib/order-format";
 import { createOrder, mapFieldErrors, type PaymentType } from "@/app/lib/orders-api";
 import { OrderStateSelect } from "./order-state-select";
 import { SellerCombobox } from "./seller-combobox";
@@ -40,15 +41,6 @@ function emptyProductLine(): ProductLine {
 
 function emptyPaymentLine(): PaymentLine {
   return { type: "credit_card", amount: "", installments: "1" };
-}
-
-// datetime-local đọc và ghi giờ theo giờ máy (không có múi giờ), nên phải tự lắp chuỗi
-// theo giờ địa phương — toISOString() trả UTC sẽ lệch giờ hiện trên ô nhập.
-function toLocalInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
 }
 
 type FieldErrors = { byPath: Record<string, string>; formLevel: string[] };

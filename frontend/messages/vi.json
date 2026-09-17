@@ -231,6 +231,7 @@
       "loading": "Đang tải đánh giá rủi ro…",
       "error": "Không lấy được đánh giá rủi ro từ máy chủ ({detail}). Vui lòng thử lại.",
       "empty": "Đơn này chưa có đánh giá rủi ro.",
+      "refreshFailed": "Không tự tải lại được lịch sử đánh giá. Tải lại trang để thấy bản mới nhất.",
       "lateProbability": "Xác suất giao trễ",
       "level": {
         "high": "Rủi ro cao",
@@ -246,7 +247,45 @@
         "payment_approved": "Đã duyệt thanh toán",
         "handed_to_carrier": "Đã bàn giao vận chuyển"
       },
-      "assessedAt": "Thời điểm đánh giá"
+      "assessedAt": "Thời điểm đánh giá",
+      "outcome": {
+        "title": "Đối chiếu",
+        "correct": "Đúng",
+        "incorrect": "Sai"
+      },
+      "history": {
+        "title": "Các lần đánh giá trước"
+      }
+    },
+    "milestoneActions": {
+      "title": "Mốc vòng đời",
+      "noActions": "Đơn này không có thao tác mốc nào.",
+      "milestones": {
+        "payment_approved": "Duyệt thanh toán",
+        "handed_to_carrier": "Bàn giao vận chuyển",
+        "delivered_to_customer": "Khách nhận hàng"
+      },
+      "record": "Ghi nhận {milestone}",
+      "recordedAt": "Thời điểm",
+      "submit": "Lưu",
+      "submitting": "Đang lưu…",
+      "edit": "Sửa",
+      "cancelEdit": "Hủy bỏ",
+      "cancelOrder": "Hủy đơn",
+      "errors": {
+        "future": "Thời điểm này không được ở tương lai.",
+        "beforePrevious": "Thời điểm này không được sớm hơn mốc liền trước.",
+        "conflict": "Đơn đã thay đổi từ lúc mở trang. Trang đã được tải lại.",
+        "modelNotReady": "Mô hình rủi ro chưa sẵn sàng. Vui lòng thử lại sau.",
+        "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại.",
+        "refreshFailed": "Đã ghi nhận, nhưng trang chưa tự tải lại được. Tải lại trang để thấy thay đổi."
+      },
+      "cancelDialog": {
+        "title": "Hủy đơn này?",
+        "description": "Không hoàn tác được. Đơn sẽ chuyển sang trạng thái đã hủy.",
+        "confirm": "Xác nhận hủy đơn",
+        "cancel": "Giữ đơn"
+      }
     }
   },
   "orderNotes": {

@@ -11,6 +11,8 @@ import {
   utcTimestamp,
   type DeliveryOutcome,
 } from "@/app/lib/order-format";
+import type { Milestone } from "@/app/lib/order-lifecycle-api";
+import { OrderMilestoneActions } from "./order-milestone-actions";
 import { OrderNotes } from "./order-notes";
 import { OrderRiskAssessment } from "./order-risk-assessment";
 import { Badge } from "./ui/badge";
@@ -60,6 +62,10 @@ type OrderDetailData = {
     comment_message: string | null;
     created_at: string;
   }[];
+  // Mốc kế tiếp ghi nhận được và liệu đơn có hủy được — null/false cho mọi đơn Olist lịch
+  // sử (0 dòng risk_assessments) và cho đơn đã giao/đã hủy (#33, #34).
+  next_milestone: Milestone | null;
+  cancelable: boolean;
 };
 
 type Failure =
@@ -101,25 +107,47 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const tOrders = useTranslations("orders");
   const [state, setState] = useState<State>({ kind: "loading" });
   const url = `${BACKEND_URL}/orders/${encodeURIComponent(orderId)}`;
+  // Tăng sau mỗi thao tác mốc/hủy đơn thành công (order-milestone-actions.tsx) để buộc
+  // tải lại đơn và lịch sử đánh giá — máy chủ suy ra timeline/delivery_outcome/chặng thời
+  // gian mới, tự vá cục bộ từ giá trị vừa gửi sẽ sai khi có chặng khác cùng đổi theo.
+  const [refreshToken, setRefreshToken] = useState(0);
+  // true từ lúc một thao tác thành công bump refreshToken tới khi lần gọi lại đó xong
+  // (thành công hay thất bại) — nguồn sự thật duy nhất OrderMilestoneActions dùng để giữ
+  // nút disabled, không tự suy từ việc so sánh timeline/refreshFailed đổi hay không (một
+  // thao tác mới bắt đầu ngay sau một lần thất bại cũng đổi refreshFailed, dễ bị đọc nhầm
+  // thành "đã xong" nếu suy diễn thay vì đọc thẳng cờ này).
+  const [refreshing, setRefreshing] = useState(false);
+  // true khi lần gọi lại (refreshToken > 0) sau một thao tác thành công không tải được —
+  // chỉ dùng để chọn câu thông báo, không dùng để suy trạng thái disabled.
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const requestKey = `${url}#${refreshToken}`;
 
   // Cùng chốt với order-list.tsx: Strict Mode không gọi hai lần, và phản hồi của đơn cũ
   // không đè lên đơn mới.
   const requested = useRef<string | null>(null);
 
   useEffect(() => {
-    if (requested.current === url) {
+    if (requested.current === requestKey) {
       return;
     }
-    requested.current = url;
+    requested.current = requestKey;
 
     fetchOrder(url)
       .then((data) => {
-        if (requested.current === url) {
+        if (requested.current === requestKey) {
           setState(data ? { kind: "loaded", data } : { kind: "not_found" });
+          setRefreshing(false);
         }
       })
       .catch((error: unknown) => {
-        if (requested.current !== url) {
+        if (requested.current !== requestKey) {
+          return;
+        }
+        // Lần gọi lại sau một thao tác đã thành công: giữ nguyên dữ liệu đang hiện thay vì
+        // thay cả trang bằng màn hình lỗi — thao tác gốc không hề thất bại.
+        if (refreshToken > 0) {
+          setRefreshFailed(true);
+          setRefreshing(false);
           return;
         }
         setState({
@@ -133,7 +161,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                 },
         });
       });
-  }, [url]);
+  }, [requestKey, url, refreshToken]);
 
   if (state.kind === "loading") {
     return (
@@ -196,7 +224,24 @@ export function OrderDetail({ orderId }: { orderId: string }) {
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <Timeline data={data} />
-          <OrderRiskAssessment orderId={data.order_id} sellers={data.sellers} />
+          <OrderMilestoneActions
+            orderId={data.order_id}
+            nextMilestone={data.next_milestone}
+            cancelable={data.cancelable}
+            timeline={data.timeline}
+            refreshing={refreshing}
+            refreshFailed={refreshFailed}
+            onActionSucceeded={() => {
+              setRefreshFailed(false);
+              setRefreshing(true);
+              setRefreshToken((n) => n + 1);
+            }}
+          />
+          <OrderRiskAssessment
+            orderId={data.order_id}
+            sellers={data.sellers}
+            refreshToken={refreshToken}
+          />
           <Items data={data} />
           <Sellers data={data} />
           <Address data={data} />

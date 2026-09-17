@@ -27,3 +27,14 @@ export const OUTCOME_CLASS: Record<DeliveryOutcome, string> = {
   late: "border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400",
   no_outcome: "text-muted-foreground",
 };
+
+// datetime-local đọc và ghi giờ theo giờ máy (không có múi giờ), nên phải tự lắp chuỗi
+// theo giờ địa phương — toISOString() trả UTC sẽ lệch giờ hiện trên ô nhập. Chiều ngược
+// với utcTimestamp: ở đây đầu vào là một thời điểm thật (Date), không phải dấu thời gian
+// không múi giờ của dữ liệu Olist.
+export function toLocalInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
