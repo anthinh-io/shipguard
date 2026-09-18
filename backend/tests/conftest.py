@@ -154,3 +154,8 @@ def risk_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("risk_model")
     train(model_dir=directory, sample_step=RISK_SAMPLE_STEP)
     return directory
+
+
+def comparable_report(report: dict) -> dict:
+    """Report bỏ hai trường không tất định, để so sánh giữa các lần train() khác nhau."""
+    return {k: v for k, v in report.items() if k not in ("model_version", "trained_at")}
