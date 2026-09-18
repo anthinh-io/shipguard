@@ -87,14 +87,21 @@ class StageModel(Protocol):
 class XGBQuantileStage:
     """XGBoost hồi quy phân vị — một mô hình cho cả sáu phân vị."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        n_estimators: int = 300,
+        learning_rate: float = 0.1,
+        max_depth: int = 6,
+        random_state: int = 0,
+    ) -> None:
         self._model = xgb.XGBRegressor(
             objective="reg:quantileerror",
             quantile_alpha=np.array(QUANTILES),
-            n_estimators=300,
-            learning_rate=0.1,
-            max_depth=6,
-            random_state=0,
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            random_state=random_state,
         )
 
     def fit(self, features: pd.DataFrame, target: np.ndarray) -> None:
@@ -115,25 +122,35 @@ class XGBAftStage:
     phân vị rộng hay hẹp tuỳ may rủi.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        learning_rate: float = 0.1,
+        max_depth: int = 6,
+        num_boost_round: int = 300,
+        aft_loss_distribution_scale: float = 1.0,
+        seed: int = 0,
+    ) -> None:
         self._booster: xgb.Booster | None = None
         self._sigma = 1.0
+        self._num_boost_round = num_boost_round
+        self._params = {
+            "objective": "survival:aft",
+            "aft_loss_distribution": "normal",
+            "aft_loss_distribution_scale": aft_loss_distribution_scale,
+            "learning_rate": learning_rate,
+            "max_depth": max_depth,
+            "seed": seed,
+        }
 
     def fit(self, features: pd.DataFrame, target: np.ndarray) -> None:
         matrix = xgb.DMatrix(features)
         matrix.set_float_info("label_lower_bound", target)
         matrix.set_float_info("label_upper_bound", target)
         self._booster = xgb.train(
-            {
-                "objective": "survival:aft",
-                "aft_loss_distribution": "normal",
-                "aft_loss_distribution_scale": 1.0,
-                "learning_rate": 0.1,
-                "max_depth": 6,
-                "seed": 0,
-            },
+            self._params,
             matrix,
-            num_boost_round=300,
+            num_boost_round=self._num_boost_round,
         )
         fitted = np.asarray(self._booster.predict(matrix), dtype=float)
         residual = np.log(target) - np.log(np.clip(fitted, MIN_STAGE_DAYS, None))
@@ -159,14 +176,20 @@ class XGBAftStage:
 class SklearnQuantileStage:
     """Scikit-learn HistGradientBoosting hồi quy phân vị — một mô hình mỗi phân vị."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_iter: int = 200,
+        learning_rate: float = 0.1,
+        random_state: int = 0,
+    ) -> None:
         self._models = [
             HistGradientBoostingRegressor(
                 loss="quantile",
                 quantile=quantile,
-                max_iter=200,
-                learning_rate=0.1,
-                random_state=0,
+                max_iter=max_iter,
+                learning_rate=learning_rate,
+                random_state=random_state,
             )
             for quantile in QUANTILES
         ]
