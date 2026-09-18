@@ -4,14 +4,16 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Plus, Search } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
 import {
   BRL,
   OUTCOME_CLASS,
+  RISK_LEVEL_CLASS,
   utcDay,
   type DeliveryOutcome,
+  type RiskLevel,
 } from "@/app/lib/order-format";
 import {
   hasActiveFilters,
@@ -56,6 +58,7 @@ type OrderListItem = {
   delivered_at: string | null;
   customer_state: string;
   order_value: number | null;
+  risk_level: RiskLevel;
 };
 
 type OrderListData = {
@@ -260,6 +263,7 @@ export function OrderList({ params }: { params: OrderListParams }) {
               <TableHead>{t("columns.orderId")}</TableHead>
               <TableHead>{t("columns.status")}</TableHead>
               <TableHead>{t("columns.outcome")}</TableHead>
+              <TableHead>{t("columns.riskLevel")}</TableHead>
               <SortableHead column="purchased_at" params={params} onSort={handleSort}>
                 {t("columns.purchasedAt")}
               </SortableHead>
@@ -318,6 +322,15 @@ export function OrderList({ params }: { params: OrderListParams }) {
                     className={OUTCOME_CLASS[item.delivery_outcome]}
                   >
                     {t(`outcome.${item.delivery_outcome}`)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    data-testid="order-risk-level"
+                    variant="outline"
+                    className={RISK_LEVEL_CLASS[item.risk_level]}
+                  >
+                    {t(`riskLevel.${item.risk_level}`)}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -391,6 +404,10 @@ export function OrderList({ params }: { params: OrderListParams }) {
         >
           <Download aria-hidden />
           {exporting ? t("exporting") : t("export")}
+        </Button>
+        <Button data-testid="orders-new" size="sm" onClick={() => router.push("/orders/new")}>
+          <Plus aria-hidden />
+          {t("new")}
         </Button>
       </div>
       {exportFailure ? (

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -6,8 +7,12 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.security import CurrentUser, decode_access_token
+from app.risk.predictor import RiskPredictor, load_predictor
+
+logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
@@ -16,6 +21,29 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
+
+
+# Bộ dự đoán là một dependency, không phải biến toàn cục nạp trong lifespan: httpx
+# ASGITransport không chạy lifespan, nên một biến toàn cục sẽ rỗng ở mọi bài test và
+# không có cách nào thay bằng bản giả. Cùng vai trò với get_db ở trên — một điểm nối
+# mà dependency_overrides thay được — dù nó đồng bộ và không cần dọn dẹp sau khi dùng.
+def get_predictor() -> RiskPredictor:
+    # Bắt rộng chứ không riêng FileNotFoundError: một lần huấn luyện bị ngắt giữa
+    # chừng để lại tệp .joblib viết dở, và một tệp ghi bằng phiên bản thư viện khác
+    # cũng ném lỗi kiểu khác. Cả hai đều là "mô hình không dùng được" chứ không phải
+    # "backend hỏng", nên 503 chứ không phải 500.
+    try:
+        return load_predictor(settings.RISK_MODEL_DIR)
+    except Exception:
+        logger.warning(
+            "Không nạp được mô hình rủi ro từ %s", settings.RISK_MODEL_DIR, exc_info=True
+        )
+        raise HTTPException(
+            status_code=503, detail="Risk model is not available"
+        ) from None
+
+
+PredictorDep = Annotated[RiskPredictor, Depends(get_predictor)]
 
 # auto_error=False để mọi kiểu thiếu phiên — không header, sai scheme, token hỏng — đi
 # qua cùng một nhánh 401 bên dưới thay vì dựa vào mã lỗi mặc định của HTTPBearer.

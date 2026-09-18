@@ -13,3 +13,10 @@ __pycache__/
 !*.code-workspace
 *.vsix
 *.local*
+
+# Tệp mô hình và báo cáo đánh giá do lệnh huấn luyện sinh ra. /models/ là giá trị mặc
+# định của RISK_MODEL_DIR và che cả bốn tệp. Trỏ RISK_MODEL_DIR đi nơi khác thì phải
+# thêm thư mục đó vào đây: *.joblib chỉ che tệp mô hình, ba tệp báo cáo mang tên .json
+# và .csv thường nên không thể bắt bằng mẫu chung mà không che nhầm thứ khác.
+/models/
+*.joblib

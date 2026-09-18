@@ -36,6 +36,7 @@ function item(n: number, overrides: Item = {}): Item {
     delivered_at: "2018-10-25T10:00:00",
     customer_state: "SP",
     order_value: 100.5,
+    risk_level: "not_assessed",
     ...overrides,
   };
 }
@@ -63,7 +64,7 @@ async function mockOrders(page: Page, calls: string[] = []) {
   return calls;
 }
 
-test("mở từ sidebar thấy tổng số đơn và trang đầu 50 đơn đủ 8 cột", async ({ page }) => {
+test("mở từ sidebar thấy tổng số đơn và trang đầu 50 đơn đủ 9 cột", async ({ page }) => {
   await page.route(`${BACKEND_URL}/dashboard**`, (route) => route.fulfill({ status: 500 }));
   await mockOrders(page);
 
@@ -76,15 +77,16 @@ test("mở từ sidebar thấy tổng số đơn và trang đầu 50 đơn đủ
   await expect(page.getByTestId("order-row")).toHaveCount(50);
 
   const cells = page.getByTestId("order-row").first().getByRole("cell");
-  await expect(cells).toHaveCount(8);
+  await expect(cells).toHaveCount(9);
   await expect(cells.nth(0)).toHaveText("e481f51c");
   await expect(cells.nth(1)).toHaveText("Đã giao");
   await expect(cells.nth(2)).toHaveText("Đúng hạn");
-  await expect(cells.nth(3)).toHaveText("17/10/2018");
-  await expect(cells.nth(4)).toHaveText("30/10/2018");
-  await expect(cells.nth(5)).toHaveText("25/10/2018");
-  await expect(cells.nth(6)).toHaveText("SP");
-  await expect(cells.nth(7)).toHaveText("R$ 13.664,08");
+  await expect(cells.nth(3)).toHaveText("Chưa đánh giá");
+  await expect(cells.nth(4)).toHaveText("17/10/2018");
+  await expect(cells.nth(5)).toHaveText("30/10/2018");
+  await expect(cells.nth(6)).toHaveText("25/10/2018");
+  await expect(cells.nth(7)).toHaveText("SP");
+  await expect(cells.nth(8)).toHaveText("R$ 13.664,08");
 });
 
 test("gõ tiền tố mã đơn thì gọi lại đúng một lần và URL mang theo từ khoá", async ({
@@ -260,6 +262,6 @@ test("kết quả giao hiện đúng nhãn, ô trống hiện gạch ngang", asy
   await expect(outcomes).toHaveText(["Trễ", "Chưa có kết quả"]);
   const canceled = page.getByTestId("order-row").nth(1).getByRole("cell");
   await expect(canceled.nth(1)).toHaveText("Đã hủy");
-  await expect(canceled.nth(5)).toHaveText("—");
-  await expect(canceled.nth(7)).toHaveText("—");
+  await expect(canceled.nth(6)).toHaveText("—");
+  await expect(canceled.nth(8)).toHaveText("—");
 });

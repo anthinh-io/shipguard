@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { LayoutDashboard, Package, UsersRound } from "lucide-react";
+import { Gauge, LayoutDashboard, Package, UsersRound } from "lucide-react";
 
 import { NavUser } from "./nav-user";
 import type { Role } from "@/app/lib/users-api";
@@ -22,7 +22,7 @@ import {
 
 type NavItem = {
   href: string;
-  labelKey: "dashboard" | "orders" | "admin";
+  labelKey: "dashboard" | "orders" | "modelMetrics" | "admin";
   icon: typeof LayoutDashboard;
   // Không khai là mọi vai trò đều thấy. Ẩn mục chỉ là tiện cho người dùng — máy chủ vẫn tự
   // kiểm vai trò ở từng lời gọi.
@@ -34,6 +34,7 @@ type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", labelKey: "dashboard", icon: LayoutDashboard },
   { href: "/orders", labelKey: "orders", icon: Package },
+  { href: "/model-metrics", labelKey: "modelMetrics", icon: Gauge },
   {
     href: "/admin/users",
     labelKey: "admin",

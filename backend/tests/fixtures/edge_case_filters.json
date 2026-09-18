@@ -25,5 +25,11 @@
   "empty_comparison_period": {
     "start_date": "2016-10-01",
     "end_date": "2016-10-31"
-  }
+  },
+  "translated_category_order": "00010242fe8c5a6d1ba2dd792cb16214",
+  "untranslated_category_order": "0745fd0c5e5bd55f752798a152b1d04b",
+  "uncategorized_order": "0046e1d57f4c07c8c92ab26be8c3dfc0",
+  "multi_payment_order": "0016dfedd97fc2950e388d2971d718c7",
+  "commented_review_order": "00010242fe8c5a6d1ba2dd792cb16214",
+  "leading_zero_zip_order": "0005f50442cb953dcd1d21e1fb923495"
 }
