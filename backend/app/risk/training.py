@@ -10,6 +10,7 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import roc_auc_score
 
 from app.risk.candidates import ALGORITHMS, QUANTILES, FeatureEncoder
 from app.risk.dataset import (
@@ -64,6 +65,8 @@ def metrics_at(probabilities: np.ndarray, truth: np.ndarray, threshold: float) -
     true_positive = int(np.sum(flagged & truth))
     false_positive = int(np.sum(flagged & ~truth))
     false_negative = int(np.sum(~flagged & truth))
+    true_negative = int(np.sum(~flagged & ~truth))
+    total = true_positive + false_positive + false_negative + true_negative
 
     precision = (
         true_positive / (true_positive + false_positive)
@@ -78,12 +81,21 @@ def metrics_at(probabilities: np.ndarray, truth: np.ndarray, threshold: float) -
     f1 = (
         2 * precision * recall / (precision + recall) if precision + recall else 0.0
     )
+    accuracy = (true_positive + true_negative) / total if total else 0.0
     return {
         "threshold": round(float(threshold), 4),
         "precision": round(precision, 4),
         "recall": round(recall, 4),
         "f1": round(f1, 4),
+        "accuracy": round(accuracy, 4),
     }
+
+
+def roc_auc(probabilities: np.ndarray, truth: np.ndarray) -> float | None:
+    """None khi tập chỉ có một lớp nhãn — ROC-AUC không định nghĩa được, không phải lỗi."""
+    if len(np.unique(truth)) < 2:
+        return None
+    return round(float(roc_auc_score(truth, probabilities)), 4)
 
 
 def sweep_thresholds(probabilities: np.ndarray, truth: np.ndarray) -> dict:
@@ -198,7 +210,9 @@ def _evaluate(models: dict, encoder: FeatureEncoder, splits: dict) -> tuple[dict
         for checkpoint in CHECKPOINTS:
             split = splits[split_name]
             probability = _probabilities(models, encoder, split, checkpoint)
-            report[split_name][checkpoint] = sweep_thresholds(probability, split.is_late)
+            scored = sweep_thresholds(probability, split.is_late)
+            scored["roc_auc"] = roc_auc(probability, split.is_late)
+            report[split_name][checkpoint] = scored
             if split_name == "test":
                 predictions[checkpoint] = probability
     return report, predictions
@@ -326,7 +340,9 @@ def _write_outputs(
 
     with open(model_dir / METRICS_FILENAME, "w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["algorithm", "checkpoint", "precision", "recall", "f1"])
+        writer.writerow(
+            ["algorithm", "checkpoint", "precision", "recall", "f1", "accuracy", "roc_auc"]
+        )
         for algorithm, evaluation in report["algorithms"].items():
             for checkpoint in CHECKPOINTS:
                 chosen = evaluation["test"][checkpoint]["at_selected_threshold"]
@@ -337,6 +353,8 @@ def _write_outputs(
                         chosen["precision"],
                         chosen["recall"],
                         chosen["f1"],
+                        chosen["accuracy"],
+                        evaluation["test"][checkpoint]["roc_auc"],
                     ]
                 )
 
@@ -387,6 +405,15 @@ def format_summary(report: dict) -> str:
         f"Ngưỡng đề xuất: {report['suggested_risk_threshold']}"
         f"    ->  đặt RISK_THRESHOLD={report['suggested_risk_threshold']} trong .env",
     ]
+    selected_at_order_placed = report["algorithms"][report["selected_algorithm"]][
+        "test"
+    ]["order_placed"]
+    accuracy = selected_at_order_placed["at_selected_threshold"]["accuracy"]
+    roc = selected_at_order_placed["roc_auc"]
+    roc_text = f"{roc:.2f}" if roc is not None else "không tính được (một lớp nhãn)"
+    lines.append(
+        f"Accuracy tại ngưỡng đề xuất: {accuracy:.2f}    ROC-AUC (mốc đặt hàng): {roc_text}"
+    )
     verdict = "ĐẠT" if report["meets_f1_target"] else "CHƯA ĐẠT"
     lines.append(
         f"Mục tiêu F1 >= {report['f1_target']:.2f} ở mốc đặt hàng: "
