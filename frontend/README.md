@@ -122,8 +122,9 @@ frontend/
                          can thiệp; thời điểm đánh giá và xử lý theo múi giờ
                          trình duyệt
       model-metrics.tsx  Client Component: trang chỉ số mô hình — ba thuật toán,
-                         ngưỡng, F1 so mục tiêu 0,30, đối chiếu tích lũy kèm cảnh
-                         báo mẫu nhỏ
+                         ngưỡng, F1/Accuracy/ROC-AUC so mục tiêu, đối chiếu tích
+                         lũy kèm Accuracy và cảnh báo mẫu nhỏ; chú thích riêng
+                         phân biệt tập kiểm tra tĩnh với đơn thật tích lũy
       order-notes.tsx    Client Component: ghi chú nội bộ — đọc và thêm, kiểm độ
                          dài, thời điểm theo múi giờ trình duyệt
       order-filter-bar.tsx

@@ -288,12 +288,15 @@ cắt khoảng trắng, rỗng thì lưu `null`. Trả 201 kèm `{"intervention"
 
 - `report` — báo cáo huấn luyện đọc từ `RISK_MODEL_DIR`: `model_version`, `trained_at`,
   `selected_algorithm`, `f1_target`, `f1_at_order_placed`, `meets_f1_target`, và
-  `algorithms` — precision / recall / F1 của từng bộ ứng viên ở ba mốc, trên tập kiểm tra.
+  `algorithms` — precision / recall / F1 / accuracy của từng bộ ứng viên ở ba mốc, trên
+  tập kiểm tra, kèm `roc_auc` (null khi tập chỉ có một lớp nhãn).
 - `risk_threshold` — ngưỡng **đang áp dụng** đọc từ cấu hình, có thể khác ngưỡng đề xuất
   trong báo cáo.
-- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision` và
-  `recall` thực tế (null khi mẫu số bằng 0), `small_sample` khi dưới 30 lần. Chỉ đếm lần
-  đánh giá đã có `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
+- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision`,
+  `recall` và `accuracy` thực tế (null khi mẫu số/tổng số bằng 0), `small_sample` khi
+  dưới 30 lần. Không có `roc_auc` — quần thể này đã nhị phân hoá (chỉ còn High/Low
+  Risk), không có `Late Probability` liên tục để tính. Chỉ đếm lần đánh giá đã có
+  `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
 
 Chưa huấn luyện thì trả 200 với `trained: false` và `report: null` — không phải lỗi, và
 phần đối chiếu vẫn tính được vì nó đọc `risk_assessments`, không đọc báo cáo.
