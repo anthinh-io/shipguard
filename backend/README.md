@@ -21,21 +21,37 @@ backend/
       db.py        engine, session, lớp Base của model
       security.py  băm mật khẩu, ký và xác minh access token
     api/
-      deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
-                   cho các endpoint
+      deps.py      SessionDep, CurrentUserDep, UserAdminDep, PredictorDep — phụ
+                   thuộc dùng chung cho các endpoint
       routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
-                   /users, orders.py: /orders, /orders/export,
-                   /orders/{order_id}/notes, /customer-states)
+                   /users, orders.py: /orders và mọi đường dẫn con,
+                   /risk-assessments/{id}/intervention, /customer-states,
+                   /product-categories, model_metrics.py: /model-metrics)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
       users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
                    lại mật khẩu), tự đổi mật khẩu
       order_notes.py
                    Internal Note: đọc, thêm; không sửa, không xóa
-      orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
+      orders.py    danh sách đơn: tìm tiền tố mã đơn, lọc (kể cả theo lần đánh giá
+                   mới nhất), sắp xếp, phân trang; chi tiết đơn
+      risk_assessments.py
+                   tạo đơn cùng Risk Assessment đầu tiên, lịch sử đánh giá, ghi nhận
+                   Intervention
+      order_milestones.py
+                   suy luận thuần, không đụng cơ sở dữ liệu: mốc kế tiếp, hủy được
+                   hay không
+      order_lifecycle.py
+                   ghi / sửa mốc, hủy đơn, Reconciliation khi đã giao
+      model_metrics.py
+                   đọc báo cáo huấn luyện, cộng dồn kết quả đối chiếu
       queries.py   mảnh truy vấn dùng chung: DELIVERED, like_prefix, within_days,
                    sold_by
-    scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
+    risk/          mô hình rủi ro: dataset.py (đọc CSV, nhãn, chia tập), features.py,
+                   candidates.py (ba bộ ứng viên), predictor.py (Monte Carlo, Risk
+                   Cause), training.py
+    scripts/       lệnh chạy tay: dựng dữ liệu dẫn xuất, huấn luyện mô hình, đặt lại
+                   mật khẩu Super Admin
     alembic/       migration
   tests/
   alembic.ini
@@ -59,21 +75,26 @@ Dựng cơ sở dữ liệu, cài phụ thuộc, chạy migration, khởi độn
 docker compose up -d --wait postgres
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
-uv run python -m app.scripts.load_raw_data
 uv run python -m app.scripts.build_derived_data
+uv run python -m app.scripts.train_risk_model
 uv run fastapi dev backend/app/main.py
 ```
 
 `--wait` chặn cho tới khi Postgres nhận kết nối. Thiếu nó thì lệnh migration
 ngay sau đó có thể chạy trong lúc cơ sở dữ liệu còn đang khởi tạo và bị từ chối.
 
-Lệnh `load_raw_data` nạp 9 tệp CSV Olist trong `datasets/raw/` vào các bảng
-`raw_*`, nguyên trạng không lọc hay biến đổi. Chạy lại an toàn: mỗi bảng được
-xoá sạch (`TRUNCATE`) rồi nạp lại trong cùng một transaction trước khi nạp,
-nên không bao giờ bị nhân đôi dữ liệu.
+Lệnh `build_derived_data` làm trọn một lượt trong **một giao dịch duy nhất**: nạp 9 tệp
+CSV Olist trong `datasets/raw/` vào 9 bảng TẠM nguyên trạng, chạy bảy câu `INSERT ...
+SELECT` dựng bảy bảng dẫn xuất từ chúng, rồi kết thúc giao dịch — bảng tạm tự biến mất
+(`ON COMMIT DROP`). Chạy lại an toàn: bảy bảng dẫn xuất được xoá sạch (`TRUNCATE`) rồi
+dựng lại trong cùng giao dịch ấy, nên không bao giờ bị nhân đôi dữ liệu, và giao dịch
+hỏng giữa chừng không để lại bảng tạm nào. Xem mục [Lớp dẫn xuất](#lớp-dẫn-xuất) bên dưới.
 
-Lệnh `build_derived_data` dựng hai bảng dẫn xuất từ các bảng thô, cũng chạy lại
-an toàn theo cùng cách. Xem mục [Hai tầng bảng](#hai-tầng-bảng) bên dưới.
+Lệnh `train_risk_model` huấn luyện bộ mô hình dự đoán rủi ro. Nó **không đụng cơ sở
+dữ liệu** — đọc thẳng tệp CSV trong `datasets/raw/` (ADR-0010) — nên không phụ thuộc
+hai lệnh trên và chạy được cả khi Postgres đang tắt. Xếp ở vị trí này vì backend cần
+tệp mô hình thì mới dự đoán được. Xem
+[Huấn luyện mô hình rủi ro](#huấn-luyện-mô-hình-rủi-ro) bên dưới.
 
 Kiểm tra: `curl http://localhost:8000/health` trả về
 `{"status":"ok","database":"connected"}`. Nếu cơ sở dữ liệu không kết nối được,
@@ -102,6 +123,8 @@ này vào `delivered_from` / `delivered_to` của `/orders`, cộng `delivery_ou
 | `delivered_from`, `delivered_to` | Khoảng ngày giao thực tế, cùng luật; độc lập với khoảng ngày đặt | không lọc |
 | `customer_state` | Bang của khách nhận hàng (`Region`), không phải bang người bán | không lọc |
 | `seller_id` | Mã người bán; `Multi-Seller Order` thuộc về mọi người bán tham gia, vẫn một dòng mỗi đơn | không lọc |
+| `risk_level` | `high`, `low`, `not_assessed` — theo lần `Risk Assessment` mới nhất của đơn; `not_assessed` là đơn chưa từng được đánh giá, gồm mọi đơn Olist | không lọc |
+| `handling_status` | `unhandled`, `handled` — theo lần đánh giá mới nhất. `handled`: đã ghi `Intervention`. `unhandled`: đã được đánh giá, chưa ghi `Intervention`, đơn chưa hủy — kể cả khi lần đó là Low Risk; đi cùng `risk_level=high` mới ra đúng danh sách việc cần xử lý | không lọc |
 | `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
 | `direction` | `asc`, `desc` | `desc` |
 | `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên (chỉ số lớn tới mức tràn `OFFSET` bigint mới nhận 422) | `1` |
@@ -112,6 +135,12 @@ Các bộ lọc kết hợp với nhau bằng AND. Khoảng ngày xét nửa m�
 nửa đêm ngày đầu, `<` nửa đêm sau ngày cuối) để còn dùng được chỉ mục, nên đơn đặt lúc
 02:30 ngày cuối vẫn được tính. Bộ lọc `late` ra 6.534 đơn; nếu thấy 6.535 là đã tính
 nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì theo ngày.
+
+Mỗi dòng mang thêm `risk_level`, nên cột này tự có trong CSV của `/orders/export`. Lần
+đánh giá mới nhất lấy bằng `LEFT JOIN LATERAL`, để đơn nhiều lần đánh giá vẫn một dòng;
+câu đếm `total` dùng chung FROM với câu chọn dòng nên hai con số không lệch nhau. Hợp
+đồng: `total` của `risk_level=high&handling_status=unhandled` bằng số `Risk Assessment`
+có `needs_handling: true` (`test_order_todo_filters.py`).
 
 `GET /orders/export` (đòi token) nhận đúng bộ tham số lọc và sắp xếp của `GET /orders`,
 không có `page`, và stream **mọi** đơn khớp dưới dạng `text/csv` UTF-8 có BOM. Thiếu
@@ -147,11 +176,16 @@ không tồn tại nhận 404 `{"detail": "Order not found"}`.
 | `items` | Từng sản phẩm theo `order_item_id`: `product_id`, `category` (tên tiếng Anh; chưa có bản dịch thì tên gốc; không có danh mục thì `null`), `price`, `freight_value`, `seller_id` |
 | `sellers` | Người bán tham gia: `seller_id`, `seller_city`, `seller_state` (bang gửi đi) |
 | `payments` | Theo `payment_sequential`: `payment_type`, `payment_installments`, `payment_value` |
-| `reviews` | `review_score`, `comment_title`, `comment_message`, `created_at` |
+| `reviews` | Theo `review_sequential`, cũ nhất trước: `review_score`, `comment_title`, `comment_message`, `created_at` |
 
 Danh sách rỗng nghĩa là đơn không có phần đó (775 đơn không có sản phẩm, nhiều đơn
-không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra theo chỉ mục
-`order_id` trên ba bảng thô tương ứng (migration `0007_order_detail`).
+không có đánh giá), không phải lỗi. Sản phẩm, thanh toán và đánh giá tra trên ba bảng
+dẫn xuất tương ứng, qua khoá chính ghép mở đầu bằng `order_id` (migration
+`0009_derived_order_lines`); không bảng thô nào còn nằm trên đường đọc này.
+
+Thứ tự đánh giá đọc theo `review_sequential` chứ không theo thời điểm tạo: 547 đơn Olist
+có nhiều hơn một đánh giá, và 157 cặp (đơn, thời điểm tạo) trùng nhau, nên sắp theo riêng
+thời điểm tạo cho thứ tự bất định giữa các lần chạy.
 
 `GET /orders/{order_id}/notes` (đòi token) trả các `Internal Note` của đơn, mới nhất trên
 cùng: `{"id", "body", "created_at", "author": {"display_name", "role"}}`. `POST` cùng
@@ -160,6 +194,109 @@ Nội dung cắt khoảng trắng hai đầu, còn 1–2.000 ký tự, ngoài kh
 không tồn tại trả 404 ở cả hai phương thức. Không có PATCH hay DELETE: ghi nhầm thì thêm
 ghi chú đính chính. `created_at` là mốc thật có múi giờ, không theo quy ước UTC của dữ liệu
 Olist. Tác giả `Locked User` vẫn hiện tên.
+
+### Tạo đơn và Risk Assessment
+
+`POST /orders` (đòi token) ghi một đơn thật cùng lần `Risk Assessment` đầu tiên **trong
+một giao dịch** (ADR-0009) — đơn không bao giờ được tồn tại mà thiếu đánh giá
+(CONTEXT.md, mục `Risk Assessment`). Thân yêu cầu:
+
+| Trường | Ghi chú |
+| --- | --- |
+| `purchased_at` | ISO 8601 kèm offset, không ở tương lai |
+| `estimated_delivery_date` | Ngày (`YYYY-MM-DD`), không sớm hơn ngày của `purchased_at` |
+| `customer_state`, `customer_city`, `customer_zip_code_prefix` | Địa chỉ giao; `customer_state` phải là một trong các bang đã có đơn |
+| `items[]` | `seller_id` (phải tồn tại), `product_category_name` (phải tồn tại), `product_weight_g` (tuỳ chọn), `price`, `freight_value` — tối thiểu một dòng |
+| `payments[]` | `payment_type` (`credit_card` / `boleto` / `voucher` / `debit_card`), `payment_installments`, `payment_value` — tối thiểu một dòng; chỉ `credit_card` mới nhận số kỳ trả góp lớn hơn 1 |
+
+Trả 201 kèm `{"order_id", "risk_assessment"}`; `risk_assessment` gồm `id`, `checkpoint`
+(luôn `order_placed` ở đây), `late_probability`, `is_high_risk`, `threshold_used`,
+`model_version` và `risk_cause: {stage, seller_id, median_days, historical_median_days,
+excess_days}` — chặng gây rủi ro nhất trong các chặng chưa xảy ra, kèm tên người bán nếu
+nguyên nhân là khâu người bán.
+
+Dữ liệu sai một trường (thiếu dòng sản phẩm/thanh toán, người bán hay danh mục không tồn
+tại, bang ngoài danh sách, trả góp nhiều kỳ mà không phải thẻ tín dụng, thời điểm ở tương
+lai, ngày cam kết trước ngày đặt, số âm) trả 422 kèm `detail` dạng danh sách
+`[{"type", "loc", "msg"}]` chỉ đúng trường sai — cùng hình dạng lỗi Pydantic tự sinh, kể
+cả với các lỗi cần tra cơ sở dữ liệu (người bán, danh mục, bang) mà Pydantic không tự
+kiểm được. Không có gì được lưu khi có lỗi. Chưa có tệp mô hình thì trả 503 và không tạo
+đơn nào.
+
+`GET /orders/{order_id}/risk-assessments` (đòi token) trả lịch sử đánh giá của một đơn,
+mới nhất trên cùng. Đơn Olist lịch sử không bao giờ có đánh giá nên trả mảng rỗng; mã đơn
+không tồn tại trả 404.
+
+`GET /product-categories` (đòi token, **cấp gốc**) trả danh mục sản phẩm kèm nhãn hiển
+thị — `[{"name", "label"}]` — cho ô chọn danh mục của biểu mẫu tạo đơn. Cùng lý do với
+`/customer-states`: mẫu chặn `${BACKEND_URL}/orders**` của Playwright vượt cả dấu gạch
+chéo, nên đường dẫn không nằm dưới `/orders`.
+
+### Mốc vòng đời, hủy đơn và đối chiếu
+
+Chỉ đơn đã có ít nhất một `Risk Assessment` mới thao tác được — đơn Olist lịch sử, kể cả
+khoảng 1.729 đơn còn dang dở, chỉ đọc. Cả ba endpoint đều đòi token.
+
+| Endpoint | Việc |
+| --- | --- |
+| `POST /orders/{order_id}/milestones` | Ghi mốc kế tiếp; body `{"milestone", "recorded_at"}` với `milestone` là `payment_approved`, `handed_to_carrier` hoặc `delivered_to_customer`. Trả 201 `{"order_id", "order_status", "next_milestone", "cancelable", "risk_assessment"}` |
+| `PATCH /orders/{order_id}/milestones/{milestone}` | Sửa thời điểm của mốc mới nhất; body `{"recorded_at"}`, phản hồi như trên |
+| `POST /orders/{order_id}/cancellation` | Hủy đơn chưa giao; trả 201 `{"order_id", "order_status": "canceled"}` |
+
+Ghi hay sửa `payment_approved` / `handed_to_carrier` sinh một `Risk Assessment` mới dùng
+thời gian thật của chặng đã xong; ghi `delivered_to_customer` không sinh đánh giá
+(`risk_assessment: null`) mà chạy `Reconciliation`: mỗi lần đánh giá của đơn nhận
+`was_correct` — `High Risk` mà đơn trễ, hoặc Low Risk mà đơn đúng hạn, là đúng. Trễ so theo
+ngày lịch, đọc cột sinh `is_late`. Đơn hủy không đối chiếu. `Order Status` suy ra từ mốc mới
+nhất: `approved`, `shipped`, `delivered`, hoặc `canceled`.
+
+Mốc ghi vào đúng các cột thời điểm sẵn có của `orders`, nên ba chặng và `is_late` tự có
+qua cột sinh — vì vậy các cột này vẫn **không** được thêm `timezone=True`.
+
+Lỗi: 404 mã đơn không tồn tại. 409 kèm `detail: {"code", "message"}`, `code` là một trong
+`not_ship_guard_order`, `already_delivered`, `already_canceled`, `out_of_order_milestone`,
+`not_latest_milestone`, `order_changed_concurrently`. 422 khi `recorded_at` ở tương lai hoặc
+sớm hơn mốc trước, `loc` trỏ vào `recorded_at`. 503 khi thiếu mô hình — mốc không được lưu.
+Hủy đơn không cần mô hình.
+
+Mỗi thao tác ghi có điều kiện `WHERE` khớp đúng trạng thái vừa đọc, nên hai yêu cầu chạy
+đua trên cùng một đơn không ghi đè nhau: yêu cầu thua nhận 409 `order_changed_concurrently`.
+`test_order_lifecycle_concurrency.py` ép đúng kịch bản đó bằng khóa dòng Postgres.
+
+`GET /orders/{order_id}` mang thêm `next_milestone` (null nếu đơn không thao tác được) và
+`cancelable`. `GET /orders/{order_id}/risk-assessments` mang thêm `was_correct` (null khi
+chưa đối chiếu), `intervention` và `needs_handling` — đúng lần đánh giá mới nhất của đơn
+chưa hủy, `High Risk`, chưa ghi `Intervention`.
+
+### Ghi nhận can thiệp
+
+`POST /risk-assessments/{assessment_id}/intervention` (đòi token, **cấp gốc** cùng lý do
+với `/customer-states`) ghi `Intervention` cho lần đánh giá đang là việc cần xử lý. Body
+`{"intervention", "note"}` với `intervention` là `remind_seller`, `change_carrier`,
+`contact_payment`, `notify_customer` hoặc `other`; `note` tuỳ chọn, 0–2.000 ký tự sau khi
+cắt khoảng trắng, rỗng thì lưu `null`. Trả 201 kèm `{"intervention", "note", "handled_by",
+"handled_at"}`; `handled_by` là tên hiển thị, còn nguyên khi tài khoản bị khóa.
+
+409 kèm `code` `already_handled`, `not_high_risk`, `assessment_superseded` hoặc
+`order_canceled`; 404 mã lần đánh giá không tồn tại. Bốn điều kiện nằm trong cùng một câu
+`UPDATE … WHERE … RETURNING`, nên không đua được với thao tác mốc.
+
+### Chỉ số mô hình
+
+`GET /model-metrics` (đòi token, mọi vai trò) trả `{"trained", "report", "risk_threshold",
+"reconciliation"}`:
+
+- `report` — báo cáo huấn luyện đọc từ `RISK_MODEL_DIR`: `model_version`, `trained_at`,
+  `selected_algorithm`, `f1_target`, `f1_at_order_placed`, `meets_f1_target`, và
+  `algorithms` — precision / recall / F1 của từng bộ ứng viên ở ba mốc, trên tập kiểm tra.
+- `risk_threshold` — ngưỡng **đang áp dụng** đọc từ cấu hình, có thể khác ngưỡng đề xuất
+  trong báo cáo.
+- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision` và
+  `recall` thực tế (null khi mẫu số bằng 0), `small_sample` khi dưới 30 lần. Chỉ đếm lần
+  đánh giá đã có `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
+
+Chưa huấn luyện thì trả 200 với `trained: false` và `report: null` — không phải lỗi, và
+phần đối chiếu vẫn tính được vì nó đọc `risk_assessments`, không đọc báo cáo.
 
 ## Đăng nhập
 
@@ -225,29 +362,68 @@ uv run python -m app.scripts.reset_super_admin_password
 Lệnh hỏi mật khẩu mới hai lần (tối thiểu 8 ký tự, không hiện khi gõ). Đặt lại
 xong, mọi phiên cũ của Super Admin bị đăng xuất.
 
-## Hai tầng bảng
+## Lớp dẫn xuất
 
-Tiền tố phân biệt hai tầng: `raw_*` là tầng thô phản chiếu nguyên trạng tệp CSV,
-tên trần là tầng dẫn xuất.
+Dữ liệu Olist chỉ tồn tại ở hai nơi: tệp CSV trên đĩa và lớp dẫn xuất trong cơ sở dữ
+liệu. Không còn bảng thô nào nằm lại trong lược đồ — chín bảng `raw_*` cũ đã bị xoá ở
+migration `0010_drop_raw_tables`, và bước dựng tự nạp CSV vào bảng tạm cùng tên trong
+giao dịch của nó (ADR-0010).
 
 | Bảng | Nội dung |
 | --- | --- |
-| `raw_*` | 9 bảng thô, nguyên trạng, không lọc không biến đổi |
 | `orders` | Một dòng mỗi đơn — bốn mốc thời gian, ba khoảng thời gian, cờ trễ, bang, thành phố và mã bưu chính của khách, điểm đánh giá thấp nhất, trạng thái đơn, giá trị đơn |
 | `order_sellers` | Bảng nối đơn với người bán, dùng khi lọc theo người bán |
+| `order_items` | Dòng sản phẩm: thứ tự dòng, mã sản phẩm, tên danh mục gốc, cân nặng, giá, phí vận chuyển, người bán |
+| `order_payments` | Dòng thanh toán: thứ tự, hình thức, số kỳ trả góp, số tiền |
+| `order_reviews` | Đánh giá của khách: thứ tự trong đơn, số sao, tiêu đề, nội dung, thời điểm tạo |
+| `product_categories` | Bảng tra danh mục: tên danh mục gốc và nhãn tiếng Anh tương ứng |
+| `sellers` | Người bán: `seller_id`, `seller_city`, `seller_state`, `seller_zip_code_prefix` (mã bưu chính, mô hình dự đoán dùng để tính khoảng cách người bán → khách) |
 | `order_notes` | Internal Note — bảng nghiệp vụ, không phải bảng dẫn xuất |
+| `risk_assessments` | `Risk Assessment` — bảng nghiệp vụ, không phải bảng dẫn xuất |
 
-`order_notes.order_id` cố ý không có khoá ngoại tới `orders`. `build_derived_data`
+Ba bảng dòng sản phẩm, dòng thanh toán và đánh giá **có** khoá ngoại tới `orders`: chúng được
+TRUNCATE rồi dựng lại cùng một lượt với `orders`, đúng như `order_sellers`, nên khoá ngoại
+không chặn bước dựng mà còn bắt được dòng mồ côi. `product_categories` không gắn với đơn nên
+không có khoá ngoại nào. Bất kỳ thao tác nào xoá dòng khỏi `orders` phải xoá bốn bảng con
+trước — `build_derived_data` gộp cả bảy vào một câu `TRUNCATE`, còn test nào thu nhỏ `orders`
+thì xoá theo thứ tự con trước cha.
+
+`order_items.product_category_name` lưu tên danh mục **gốc**, không phải nhãn tiếng Anh đã tra
+sẵn: nhãn nằm ở `product_categories` và được `LEFT JOIN` lúc đọc. Nhờ vậy sửa bản dịch không
+phải dựng lại 112.650 dòng, và hai danh mục chưa có bản dịch (`pc_gamer`,
+`portateis_cozinha_e_preparadores_de_alimentos`) vẫn hiện tên gốc thay vì để trống.
+
+`order_notes.order_id` thì ngược lại, cố ý không có khoá ngoại tới `orders`. `build_derived_data`
 TRUNCATE rồi dựng lại `orders`, nên khoá ngoại sẽ chặn bước dựng, hoặc xóa lan mọi ghi chú
 nếu thêm CASCADE. Tầng dịch vụ tự kiểm đơn tồn tại khi thêm ghi chú. Dựng lại dữ liệu dẫn
 xuất không đụng tới ghi chú. Test `auth_session` TRUNCATE `order_notes` cùng `users`, vì
 ghi chú có khoá ngoại tới tác giả.
 
+`risk_assessments.order_id` cũng cố ý không có khoá ngoại tới `orders`, vì lý do mạnh hơn
+`order_notes`: chính bảng này là thứ chặn `build_derived_data` (xem đoạn dưới). Có khoá
+ngoại tới `users` cho `created_by` và `handled_by` — `User` không bao giờ bị xóa nên khoá
+ngoại này không chặn gì. Dựng đủ ba phần (đánh giá, xử lý, đối chiếu) ngay từ migration
+`0011_risk_assessments`; cột xử lý và đối chiếu để trống cho tới các ticket dùng tới chúng.
+
+**`build_derived_data` tự dừng nếu đã có bất kỳ `Risk Assessment` nào** (ADR-0007, ADR-0010):
+sự tồn tại của một dòng ở đó là dấu hiệu duy nhất có đơn tạo trong Ship Guard, và `TRUNCATE`
+sẽ xoá mất đơn đó không hoàn tác được. Thông báo lỗi nêu rõ lý do, không đổi gì. Bộ test tự
+dựng lại dữ liệu dẫn xuất ở vài chỗ giữa phiên (kiểm tính lặp lại, kiểm ghi chú sống sót);
+những chỗ đó gọi `build_all(..., allow_existing_assessments=True)` qua hàm bọc
+`rebuild_derived_data` trong `tests/conftest.py` — cờ này không tồn tại trong `main()`, nên
+người vận hành không có đường nào bỏ qua chốt chặn.
+
 Migration nào thêm cột vào bảng dẫn xuất (như `0007_order_detail` thêm thành phố và
-mã bưu chính) thì sau `alembic upgrade head` phải chạy lại `build_derived_data`. Chưa
-chạy thì cột mới để trống: trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu
-chính hiện là chưa có. `customer_zip_code_prefix` là chuỗi được đệm lại đủ 5 chữ số:
-cột thô là số nguyên nên `01310` đã nạp thành `1310`.
+mã bưu chính, hay `0011_risk_assessments` thêm `sellers.seller_zip_code_prefix`) thì sau
+`alembic upgrade head` phải chạy lại `build_derived_data`. Chưa chạy thì cột mới để trống:
+trang chi tiết đơn vẫn mở được nhưng thành phố và mã bưu chính hiện là chưa có, còn
+`POST /orders` trả 503 vì thiếu mã bưu chính người bán để tính khoảng cách.
+`customer_zip_code_prefix` và `seller_zip_code_prefix` đều là chuỗi được đệm lại đủ 5 chữ
+số: bảng tạm nhận CSV giữ các cột này ở kiểu số nguyên nên `01310` vào thành `1310`.
+
+Cùng luật đó áp cho migration thêm **bảng** dẫn xuất: sau `0009_derived_order_lines` phải chạy
+lại `build_derived_data`, nếu không bốn bảng mới rỗng và trang chi tiết hiện mọi đơn như không
+có sản phẩm, thanh toán hay đánh giá.
 
 `orders` chứa **mọi** đơn kèm cột trạng thái. Việc chỉ lấy đơn đã giao là chuyện
 của truy vấn KPI, không phải của bước dựng bảng.
@@ -291,30 +467,42 @@ dữ liệu chỉ có 15 đơn như vậy trong 99.441 đơn.
 Dựng lại tệp này bằng các truy vấn sau — `ORDER BY order_id LIMIT n` cho kết quả
 cố định qua mọi lần chạy:
 
+Chạy sau `build_derived_data` — cả bốn đọc lớp dẫn xuất, vì đó là nơi duy nhất còn dữ
+liệu trong cơ sở dữ liệu:
+
 ```sql
 -- delivered_on_estimated_date
-SELECT order_id FROM raw_orders
- WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
-   AND order_delivered_customer_date::date = order_estimated_delivery_date::date
+SELECT order_id FROM orders
+ WHERE order_status = 'delivered' AND delivered_to_customer_at IS NOT NULL
+   AND delivered_to_customer_at::date = estimated_delivery_date
  ORDER BY order_id LIMIT 100;
 -- missing_intermediate_milestone (lấy hết, tổng thể chỉ có 15 đơn)
-SELECT order_id FROM raw_orders
- WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL
-   AND (order_approved_at IS NULL OR order_delivered_carrier_date IS NULL)
+SELECT order_id FROM orders
+ WHERE order_status = 'delivered' AND delivered_to_customer_at IS NOT NULL
+   AND (payment_approved_at IS NULL OR handed_to_carrier_at IS NULL)
  ORDER BY order_id;
--- multi_seller
-SELECT order_id FROM raw_order_items GROUP BY order_id
- HAVING count(DISTINCT seller_id) > 1 ORDER BY order_id LIMIT 100;
--- no_review
-SELECT o.order_id FROM raw_orders o
- WHERE NOT EXISTS (SELECT 1 FROM raw_order_reviews r WHERE r.order_id = o.order_id)
+-- multi_seller — order_sellers đã DISTINCT sẵn, nên count(*) ở đây chính là số người
+-- bán phân biệt của đơn.
+SELECT order_id FROM order_sellers GROUP BY order_id
+ HAVING count(*) > 1 ORDER BY order_id LIMIT 100;
+-- no_review — hỏi bảng đánh giá chứ không hỏi worst_review_score IS NULL: cột ấy rỗng
+-- cả khi đơn có đánh giá mà thiếu điểm.
+SELECT o.order_id FROM orders o
+ WHERE NOT EXISTS (SELECT 1 FROM order_reviews r WHERE r.order_id = o.order_id)
  ORDER BY o.order_id LIMIT 100;
 ```
 
-`tests/fixtures/edge_case_filters.json` là tệp anh em, ghim những thứ *không phải* mã
-đơn: người bán dưới ngưỡng mẫu nhỏ, người bán nhiều đơn nhất, và một kỳ báo cáo mà cả
-hai kỳ đối chiếu đều rỗng. Để riêng vì `edge_case_orders.json` được đọc theo kiểu
-"mọi nhóm đều là danh sách mã đơn", trộn vào sẽ làm hỏng cách đọc đó.
+`tests/fixtures/edge_case_filters.json` là tệp anh em, ghim những thứ *không phải* danh
+sách mã đơn: người bán dưới ngưỡng mẫu nhỏ, người bán nhiều đơn nhất, một kỳ báo cáo mà
+cả hai kỳ đối chiếu đều rỗng, và sáu đơn mẫu mà test chi tiết đơn cần tới. Để riêng vì
+`edge_case_orders.json` được đọc theo kiểu "mọi nhóm đều là danh sách mã đơn", trộn vào
+sẽ làm hỏng cách đọc đó.
+
+Sáu đơn mẫu được ghim thay vì tìm bằng truy vấn lúc chạy test: trước đây các truy vấn ấy
+quét bảng thô, mà bảng thô thì không còn. Chúng ghim **mã đơn và chỉ mã đơn** — giá trị
+kỳ vọng thì test luôn đọc từ CSV. Ghim cả nhãn danh mục hay điểm đánh giá vào đây là lấy
+lại kết quả của chính bước dựng làm thước đo cho bước dựng, đúng cái vòng mà việc chuyển
+sang CSV sinh ra để cắt.
 
 ```sql
 -- small_sample_sellers (2.343 người bán như vậy; lấy 20 mã đầu cho cố định)
@@ -334,6 +522,92 @@ SELECT date_trunc('month', delivered_to_customer_at) AS month, count(*)
   FROM orders WHERE order_status = 'delivered'
    AND delivered_to_customer_at IS NOT NULL
  GROUP BY 1 ORDER BY 1 LIMIT 3;
+-- translated_category_order: đơn đầu tiên có dòng hàng thuộc danh mục đã dịch
+SELECT i.order_id FROM order_items i
+  JOIN product_categories c ON c.product_category_name = i.product_category_name
+ ORDER BY i.order_id LIMIT 1;
+-- untranslated_category_order: đơn đầu tiên có danh mục nhưng chưa có bản dịch
+SELECT i.order_id FROM order_items i
+ WHERE i.product_category_name IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM product_categories c
+                    WHERE c.product_category_name = i.product_category_name)
+ ORDER BY i.order_id LIMIT 1;
+-- uncategorized_order: đơn đầu tiên có dòng hàng không thuộc danh mục nào
+SELECT order_id FROM order_items WHERE product_category_name IS NULL
+ ORDER BY order_id LIMIT 1;
+-- multi_payment_order: đơn đầu tiên trả làm nhiều kỳ
+SELECT order_id FROM order_payments GROUP BY order_id
+ HAVING count(*) > 1 ORDER BY order_id LIMIT 1;
+-- commented_review_order: đơn đầu tiên có đánh giá kèm nội dung
+SELECT order_id FROM order_reviews WHERE comment_message IS NOT NULL
+ ORDER BY order_id LIMIT 1;
+-- leading_zero_zip_order: đơn đầu tiên có mã bưu chính bắt đầu bằng số 0
+SELECT order_id FROM orders WHERE customer_zip_code_prefix LIKE '0%'
+ ORDER BY order_id LIMIT 1;
+```
+
+## Ảnh chụp chi tiết đơn dùng cho test
+
+`tests/fixtures/order_detail_snapshot.json` giữ phản hồi đầy đủ của `GET /orders/{order_id}`
+cho cả 312 đơn trong `edge_case_orders.json`, một đơn một dòng. Nó được chụp **trước** khi
+trang chi tiết chuyển từ bảng thô sang lớp dẫn xuất (migration `0009_derived_order_lines`), và
+`test_order_detail_snapshot.py` khẳng định phản hồi sau khi chuyển giống hệt từng byte.
+
+Kiểu lỗi mà nó sinh ra để bắt là sai lệch âm thầm: đổi nhầm một phép nối hay một tên cột thì
+trang vẫn mở bình thường, chỉ khác vài trường ở vài đơn, và không bài test nào khác đỏ. Ảnh
+chụp đi qua endpoint chứ không qua hàm dịch vụ, nên nó bắt được cả sai lệch ở tầng Pydantic —
+số thập phân dựng thành chuỗi, định dạng dấu thời gian.
+
+**Không chụp lại tệp này để làm một bài test đỏ thành xanh.** Đỏ nghĩa là phản hồi đã đổi, và
+việc phải làm là tìm ra vì sao. Chỉ dựng lại khi phản hồi được cố ý đổi, và khi đó ảnh chụp mới
+phải nằm trong cùng commit với thay đổi gây ra nó.
+
+Dựng lại bằng kịch bản sau, chạy từ gốc repo sau khi `uv run pytest` đã tạo và nạp cơ sở dữ
+liệu test:
+
+```python
+import asyncio, json
+from pathlib import Path
+
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.api.deps import get_db
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.main import app
+
+FIXTURES = Path("backend/tests/fixtures")
+
+
+async def main() -> None:
+    edge = json.loads((FIXTURES / "edge_case_orders.json").read_text("utf-8"))
+    engine = create_async_engine(settings.TEST_DATABASE_URL)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_get_db():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    snapshot = {}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.headers["Authorization"] = f"Bearer {create_access_token(1, 'operations_staff', [])}"
+        for order_id in sorted({o for g in edge.values() for o in g}):
+            response = await client.get(f"/orders/{order_id}")
+            assert response.status_code == 200, response.text
+            snapshot[order_id] = response.json()
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+    body = ",\n".join(
+        f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False, sort_keys=True)}"
+        for k, v in snapshot.items()
+    )
+    (FIXTURES / "order_detail_snapshot.json").write_text("{\n" + body + "\n}\n", "utf-8")
+
+
+asyncio.run(main())
 ```
 
 ## Kiểm thử
@@ -350,6 +624,85 @@ Test dùng cơ sở dữ liệu riêng tên `shipguard_test`, được tạo t�
 đầu và không chạm vào cơ sở dữ liệu phát triển. Bộ test tự khẳng định hai URL
 khác nhau trước khi chạy migration.
 
+Các bài test của mô hình rủi ro huấn luyện thật, nhưng trên một phần dữ liệu
+(`RISK_SAMPLE_STEP` trong `tests/conftest.py`) để chạy trong khoảng nửa phút thay vì
+năm phút. Chúng chỉ kiểm hình dạng báo cáo và tính lặp lại, **không** kiểm chất lượng
+dự đoán: F1 trên một phần nhỏ dữ liệu không nói lên điều gì. Chất lượng được kiểm
+bằng một lần chạy đầy đủ, xem mục dưới.
+
+## Huấn luyện mô hình rủi ro
+
+```bash
+uv run python -m app.scripts.train_risk_model
+```
+
+Mất khoảng năm phút trên toàn bộ dữ liệu Olist. Lệnh đọc thẳng tệp CSV trong
+`datasets/raw/` và không cần Postgres (ADR-0010).
+
+Mỗi chặng trong ba chặng được dự đoán dưới dạng **phân phối** thời gian chứ không
+phải một con số, rồi `Late Probability` suy ra bằng mô phỏng Monte Carlo 2.000 mẫu
+(ADR-0008). Ba thuật toán ứng viên cùng được huấn luyện — XGBoost hồi quy phân vị,
+XGBoost log-normal AFT, Scikit-learn HistGradientBoosting hồi quy phân vị — và bộ có
+F1 cao nhất ở mốc đặt hàng trên tập kiểm tra được giữ lại.
+
+Bốn tệp sinh ra trong `RISK_MODEL_DIR`:
+
+| Tệp | Nội dung |
+| --- | --- |
+| `risk_model.joblib` | Bộ mô hình được chọn, bộ mã hoá, trung vị lịch sử ba chặng, bảng lịch sử người bán, bảng toạ độ theo mã bưu chính |
+| `evaluation_report.json` | Toàn bộ báo cáo đánh giá — nguồn sự thật |
+| `evaluation_metrics.csv` | Chín dòng (3 thuật toán × 3 mốc dự đoán), mở bằng Excel |
+| `test_predictions.csv` | Xác suất trễ và kết quả thật trên tập kiểm tra, để notebook phân tích dùng lại |
+
+**Sau khi huấn luyện, chép "Ngưỡng đề xuất" mà lệnh in ra vào `RISK_THRESHOLD` trong
+`.env`.** Lệnh cố ý không tự ghi vào cấu hình: ngưỡng là quyết định vận hành, và đổi
+nó làm mọi đơn được đánh giá từ đó trở đi đổi mức rủi ro.
+
+Ngưỡng hợp lý nằm quanh 0,15–0,25. Nếu báo cáo đề xuất một con số xấp xỉ 0,5 thì có
+gì đó sai: tỷ lệ trễ nền chỉ 6,8%, nên ở mốc đặt hàng gần như không đơn nào đạt xác
+suất 0,5.
+
+Đọc F1 trong báo cáo cần nhớ hai điều. Thứ nhất, dữ liệu chia **theo thời điểm đặt
+hàng** chứ không trộn ngẫu nhiên, và tỷ lệ trễ tụt từ 7,8% ở tập huấn luyện xuống
+4,3% ở tập kiểm tra — trộn ngẫu nhiên cho điểm đẹp hơn nhiều nhưng là điểm giả, vì
+mô hình thật luôn dự đoán cho đơn đặt sau mọi đơn nó đã học. Thứ hai, mỗi ô có hai
+con số: `best_f1` là điểm tốt nhất phép quét tìm được trên chính tập kiểm tra (tiêu
+chí chọn thuật toán theo ADR-0008, nhưng lạc quan vì ngưỡng được chọn khi đã nhìn
+đáp án), còn `at_selected_threshold` là điểm khi dùng ngưỡng lấy từ tập kiểm định —
+đây mới là con số sẽ nhận được khi triển khai.
+
+**Kết quả lần chạy đầy đủ gần nhất:** `sklearn_quantile` được chọn, ngưỡng đề xuất
+0,18, F1 ở mốc đặt hàng **0,20 — chưa đạt** mục tiêu 0,30 của README. Mô hình vẫn
+được xuất và báo cáo ghi rõ là chưa đạt, đúng như ADR-0008 đã định. F1 tăng dần theo
+mốc (0,20 → 0,20 → 0,29), đúng kỳ vọng: càng về sau càng nhiều chặng đã có số thật.
+
+Phân tích sâu hơn — đặc trưng nào dẫn dắt từng chặng, xác suất có được hiệu chỉnh
+không, mô hình sai ở những đơn nào:
+
+```bash
+uv run jupyter lab backend/notebooks/risk_model_analysis.ipynb
+```
+
+Notebook chỉ đọc kết quả, không huấn luyện lại. Lưu nó với ô kết quả đã xoá sạch:
+số liệu đã nằm ở JSON và CSV rồi.
+
+### Tệp mô hình
+
+`risk_model.joblib` là đối tượng Python tuần tự hoá bằng giao thức `pickle`; đuôi
+`.joblib` chỉ là quy ước cho biết joblib đã ghi nó, không phải một định dạng mô hình
+riêng. Hai hệ quả:
+
+- **Nạp tệp là chạy mã tuỳ ý.** Chỉ nạp tệp do chính lệnh huấn luyện sinh ra; không
+  bao giờ nhận tệp mô hình từ bên ngoài qua API.
+- **Tệp gắn chặt với phiên bản thư viện.** Mô hình ghi bằng một bản XGBoost hay
+  Scikit-learn có thể không nạp được bằng bản khác. `uv.lock` đã ghim phiên bản; khi
+  lệch thì huấn luyện lại, và `model_version` trong báo cáo cho biết tệp hiện có đến
+  từ lần chạy nào. Lỗi kiểu này **không** phải `FileNotFoundError`, nên
+  `get_predictor` bắt lỗi rộng và trả 503 chứ không phải 500.
+
+Tệp mô hình và báo cáo không vào git — xem `/models/` và `*.joblib` trong
+`.gitignore` ở gốc repo.
+
 ## Cấu hình
 
 Mọi giá trị đọc từ `.env` ở gốc repo — cùng chỗ với `docker-compose.yml`, và cả
@@ -365,8 +718,16 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md` |
 | `JWT_SECRET_KEY` | Khóa ký access token. Đổi khóa thì mọi access token đang có hết hiệu lực ngay |
 | `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, `SUPER_ADMIN_NAME` | Chỉ đọc ở lần khởi động đầu, khi chưa có Super Admin — xem [Đăng nhập](#đăng-nhập) |
+| `RISK_MODEL_DIR` | Nơi lệnh huấn luyện ghi tệp mô hình và báo cáo; backend đọc lại từ đây. Chưa có tệp thì backend **vẫn khởi động bình thường**, chỉ thao tác cần dự đoán mới báo lỗi |
+| `RISK_THRESHOLD` | Mức `Late Probability` để một đơn là `High Risk`, lớn hơn 0 và nhỏ hơn 1. Lấy con số "Ngưỡng đề xuất" trong báo cáo đánh giá — xem [Huấn luyện mô hình rủi ro](#huấn-luyện-mô-hình-rủi-ro) |
 
 Ghi lược đồ `postgresql://` thuần — mã tự thêm trình điều khiển `+asyncpg`.
+
+Riêng `RISK_MODEL_DIR` là ngoại lệ có chủ đích với quy tắc khởi động ở trên. Thiếu
+tài khoản quản trị thì máy chủ dừng hẳn, vì backend không có lối vào nào còn tệ hơn
+backend không chạy. Thiếu tệp mô hình thì không: bảng điều khiển và tra cứu đơn phải
+dùng được ngay cả khi chưa huấn luyện lần nào. Biến cấu hình vẫn bắt buộc — thiếu nó
+là hỏng lúc nạp cấu hình — nhưng thư mục nó trỏ tới thì được phép rỗng.
 
 ## Migration
 

@@ -8,14 +8,17 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.derived import order_sellers, orders, sellers
-from app.models.raw import (
-    raw_order_items,
-    raw_order_payments,
-    raw_order_reviews,
-    raw_product_category_name_translation,
-    raw_products,
+from app.models.derived import (
+    order_items,
+    order_payments,
+    order_reviews,
+    order_sellers,
+    orders,
+    product_categories,
+    sellers,
 )
+from app.models.risk import risk_assessments
+from app.services.order_milestones import Milestone, is_cancelable, next_milestone
 from app.services.queries import DELIVERED, like_prefix, sold_by, within_days
 
 PAGE_SIZE = 50
@@ -24,6 +27,13 @@ EXPORT_BATCH = 1000
 
 OrderSort = Literal["purchased_at", "estimated_delivery_date", "delivered_at", "order_value"]
 SortDirection = Literal["asc", "desc"]
+
+# Risk Level và trạng thái xử lý (#36) đều tính trên lần đánh giá MỚI NHẤT của đơn — cùng
+# tiêu chí phá thế hoà (assessed_at DESC, id DESC) với list_risk_assessments/
+# _superseded_clause trong risk_assessments.py. Không tái dùng thẳng hai hàm đó: import
+# ngược từ đây sang risk_assessments.py sẽ khép vòng (xem chú thích đầu risk_assessments.py).
+RiskLevel = Literal["high", "low", "not_assessed"]
+HandlingStatus = Literal["unhandled", "handled"]
 
 # Order Status theo CONTEXT.md: đúng tám giá trị sàn ghi nhận.
 OrderStatus = Literal[
@@ -70,6 +80,9 @@ class OrderListItem(BaseModel):
     delivered_at: datetime | None
     customer_state: str
     order_value: float | None
+    # Cột duy nhất cần thêm cho #36: field mới ở đây tự thành cột CSV qua
+    # export_orders_csv (đọc model_fields), không cần sửa gì thêm ở đó.
+    risk_level: RiskLevel
 
 
 class OrderList(BaseModel):
@@ -89,6 +102,49 @@ class OrderFilters(BaseModel):
     delivered: tuple[date, date] | None = None
     customer_state: str | None = None
     seller_id: str | None = None
+    risk_level: RiskLevel | None = None
+    handling_status: HandlingStatus | None = None
+
+
+# Lần đánh giá mới nhất của mỗi đơn, tối đa một dòng — LATERAL chứ không JOIN thường: JOIN
+# thường nhân dòng với đơn có nhiều lần đánh giá, làm sai cả total lẫn số dòng trả về, cùng
+# cạm bẫy sold_by đã cảnh báo ở queries.py. LATERAL là bắt buộc chứ không phải lựa chọn:
+# subquery tương quan tới orders.c.order_id (một FROM khác trong cùng câu lệnh) chỉ hợp lệ
+# trên Postgres khi có từ khoá LATERAL.
+_latest_assessment = (
+    sa.select(
+        risk_assessments.c.is_high_risk,
+        risk_assessments.c.intervention,
+    )
+    .where(risk_assessments.c.order_id == orders.c.order_id)
+    .order_by(risk_assessments.c.assessed_at.desc(), risk_assessments.c.id.desc())
+    .limit(1)
+    .lateral("latest_assessment")
+)
+
+# FROM dùng chung bởi list_orders (câu đếm) và _list_statement (câu chọn dòng) — hai câu
+# phải cùng một FROM/JOIN, không thì total và items lệch nhau khi risk_level/handling_status
+# tham gia lọc.
+_ORDERS_WITH_LATEST_ASSESSMENT = orders.outerjoin(_latest_assessment, sa.true())
+
+# is_high_risk là NOT NULL trên risk_assessments, nên NULL ở đây chỉ có thể do LEFT JOIN
+# không khớp dòng nào — tức đơn chưa từng được đánh giá.
+_RISK_LEVEL = sa.case(
+    (_latest_assessment.c.is_high_risk.is_(None), "not_assessed"),
+    (_latest_assessment.c.is_high_risk.is_(True), "high"),
+    else_="low",
+)
+
+# Đúng định nghĩa needs_handling của list_risk_assessments (risk_assessments.py): lần đánh
+# giá mới nhất, chưa có Intervention, đơn chưa hủy. Chỉ nhánh "chưa xử lý" loại đơn đã hủy —
+# "đã xử lý" thì không, một Intervention đã ghi vẫn là đã ghi dù đơn sau đó bị hủy.
+_IS_UNHANDLED = sa.and_(
+    _latest_assessment.c.is_high_risk.is_not(None),
+    _latest_assessment.c.intervention.is_(None),
+    orders.c.order_status != "canceled",
+)
+
+_IS_HANDLED = _latest_assessment.c.intervention.is_not(None)
 
 
 def _where(filters: OrderFilters) -> list[sa.ColumnElement[bool]]:
@@ -111,6 +167,10 @@ def _where(filters: OrderFilters) -> list[sa.ColumnElement[bool]]:
         clauses.append(orders.c.customer_state == filters.customer_state)
     if filters.seller_id is not None:
         clauses.append(sold_by(filters.seller_id))
+    if filters.risk_level is not None:
+        clauses.append(_RISK_LEVEL == filters.risk_level)
+    if filters.handling_status is not None:
+        clauses.append(_IS_UNHANDLED if filters.handling_status == "unhandled" else _IS_HANDLED)
     return clauses
 
 
@@ -135,7 +195,9 @@ def _list_statement(
             orders.c.order_value,
             orders.c.is_late,
             DELIVERED.label("is_delivered"),
+            _RISK_LEVEL.label("risk_level"),
         )
+        .select_from(_ORDERS_WITH_LATEST_ASSESSMENT)
         .where(*_where(filters))
         # order_id phá hoà để lật trang không trả trùng hay bỏ sót đơn.
         .order_by(ordering, orders.c.order_id)
@@ -152,6 +214,7 @@ def _to_item(row: sa.Row) -> OrderListItem:
         delivered_at=row.delivered_to_customer_at,
         customer_state=row.customer_state,
         order_value=row.order_value,
+        risk_level=row.risk_level,
     )
 
 
@@ -164,8 +227,12 @@ async def list_orders(
     page: int,
 ) -> OrderList:
     """Một trang danh sách đơn khớp mọi điều kiện trong `filters` cùng lúc."""
+    # Cùng FROM với _list_statement: risk_level/handling_status lọc trên dòng đã LEFT JOIN
+    # LATERAL, nên câu đếm phải qua đúng JOIN đó thì total mới khớp items.
     total = await session.scalar(
-        sa.select(sa.func.count()).select_from(orders).where(*_where(filters))
+        sa.select(sa.func.count())
+        .select_from(_ORDERS_WITH_LATEST_ASSESSMENT)
+        .where(*_where(filters))
     )
     rows = (
         await session.execute(
@@ -292,6 +359,10 @@ class OrderDetail(BaseModel):
     sellers: list[OrderSeller]
     payments: list[OrderPayment]
     reviews: list[OrderReview]
+    # Order Milestone kế tiếp cần ghi nhận, và liệu đơn có hủy được — None/False cho mọi
+    # đơn Olist lịch sử (0 dòng risk_assessments, xem app/models/risk.py).
+    next_milestone: Milestone | None
+    cancelable: bool
 
 
 def _days(column: sa.ColumnElement) -> sa.ColumnElement:
@@ -305,6 +376,9 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     Mỗi phần một truy vấn nhỏ theo order_id thay vì một câu JOIN lớn: sản phẩm, thanh toán
     và đánh giá là các danh sách độc lập, JOIN chung sẽ nhân chéo số dòng của nhau.
     """
+    has_assessment = sa.exists(
+        sa.select(1).where(risk_assessments.c.order_id == orders.c.order_id)
+    ).label("has_assessment")
     order = (
         await session.execute(
             sa.select(
@@ -324,6 +398,7 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
                 orders.c.customer_city,
                 orders.c.customer_state,
                 orders.c.customer_zip_code_prefix,
+                has_assessment,
             ).where(orders.c.order_id == order_id)
         )
     ).one_or_none()
@@ -333,25 +408,24 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     items = (
         await session.execute(
             sa.select(
-                raw_order_items.c.order_item_id,
-                raw_order_items.c.product_id,
+                order_items.c.order_item_id,
+                order_items.c.product_id,
                 sa.func.coalesce(
-                    raw_product_category_name_translation.c.product_category_name_english,
-                    raw_products.c.product_category_name,
+                    product_categories.c.product_category_name_english,
+                    order_items.c.product_category_name,
                 ).label("category"),
-                raw_order_items.c.price,
-                raw_order_items.c.freight_value,
-                raw_order_items.c.seller_id,
+                order_items.c.price,
+                order_items.c.freight_value,
+                order_items.c.seller_id,
             )
-            .select_from(raw_order_items)
-            .outerjoin(raw_products, raw_products.c.product_id == raw_order_items.c.product_id)
+            .select_from(order_items)
             .outerjoin(
-                raw_product_category_name_translation,
-                raw_product_category_name_translation.c.product_category_name
-                == raw_products.c.product_category_name,
+                product_categories,
+                product_categories.c.product_category_name
+                == order_items.c.product_category_name,
             )
-            .where(raw_order_items.c.order_id == order_id)
-            .order_by(raw_order_items.c.order_item_id)
+            .where(order_items.c.order_id == order_id)
+            .order_by(order_items.c.order_item_id)
         )
     ).all()
     order_sellers_rows = (
@@ -365,25 +439,27 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
     payments = (
         await session.execute(
             sa.select(
-                raw_order_payments.c.payment_sequential,
-                raw_order_payments.c.payment_type,
-                raw_order_payments.c.payment_installments,
-                raw_order_payments.c.payment_value,
+                order_payments.c.payment_sequential,
+                order_payments.c.payment_type,
+                order_payments.c.payment_installments,
+                order_payments.c.payment_value,
             )
-            .where(raw_order_payments.c.order_id == order_id)
-            .order_by(raw_order_payments.c.payment_sequential)
+            .where(order_payments.c.order_id == order_id)
+            .order_by(order_payments.c.payment_sequential)
         )
     ).all()
     reviews = (
         await session.execute(
             sa.select(
-                raw_order_reviews.c.review_score,
-                raw_order_reviews.c.review_comment_title,
-                raw_order_reviews.c.review_comment_message,
-                raw_order_reviews.c.review_creation_date,
+                order_reviews.c.review_score,
+                order_reviews.c.comment_title,
+                order_reviews.c.comment_message,
+                order_reviews.c.review_created_at,
             )
-            .where(raw_order_reviews.c.order_id == order_id)
-            .order_by(raw_order_reviews.c.review_creation_date)
+            .where(order_reviews.c.order_id == order_id)
+            # Thứ tự đã đóng cứng lúc dựng bảng: sắp theo riêng thời điểm tạo là bất định
+            # với các đơn có nhiều đánh giá cùng ngày.
+            .order_by(order_reviews.c.review_sequential)
         )
     ).all()
 
@@ -438,12 +514,22 @@ async def get_order_detail(session: AsyncSession, order_id: str) -> OrderDetail 
         reviews=[
             OrderReview(
                 review_score=row.review_score,
-                comment_title=row.review_comment_title,
-                comment_message=row.review_comment_message,
-                created_at=row.review_creation_date,
+                comment_title=row.comment_title,
+                comment_message=row.comment_message,
+                created_at=row.review_created_at,
             )
             for row in reviews
         ],
+        next_milestone=next_milestone(
+            has_assessment=order.has_assessment,
+            order_status=order.order_status,
+            payment_approved_at=order.payment_approved_at,
+            handed_to_carrier_at=order.handed_to_carrier_at,
+            delivered_to_customer_at=order.delivered_to_customer_at,
+        ),
+        cancelable=is_cancelable(
+            has_assessment=order.has_assessment, order_status=order.order_status
+        ),
     )
 
 

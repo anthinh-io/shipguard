@@ -81,11 +81,13 @@
     "export": "Xuất CSV",
     "exporting": "Đang xuất…",
     "exportError": "Không xuất được file ({detail}). Vui lòng thử lại.",
+    "new": "Tạo đơn",
     "total": "{count, number} đơn",
     "columns": {
       "orderId": "Mã đơn",
       "status": "Trạng thái",
       "outcome": "Kết quả giao",
+      "riskLevel": "Mức rủi ro",
       "purchasedAt": "Ngày đặt",
       "estimatedDeliveryDate": "Ngày cam kết",
       "deliveredAt": "Ngày giao",
@@ -107,6 +109,15 @@
       "late": "Trễ",
       "no_outcome": "Chưa có kết quả"
     },
+    "riskLevel": {
+      "high": "Rủi ro cao",
+      "low": "Rủi ro thấp",
+      "not_assessed": "Chưa đánh giá"
+    },
+    "handlingStatus": {
+      "unhandled": "Chưa xử lý",
+      "handled": "Đã xử lý"
+    },
     "noMatch": "Không có đơn nào có mã bắt đầu bằng “{orderId}”.",
     "noMatchFilters": "Không có đơn nào khớp các bộ lọc đang chọn.",
     "filters": {
@@ -118,6 +129,10 @@
       "purchasedPlaceholder": "Ngày đặt",
       "deliveredRange": "Khoảng ngày giao",
       "deliveredPlaceholder": "Ngày giao",
+      "riskLevel": "Mức rủi ro",
+      "allRiskLevels": "Mọi mức rủi ro",
+      "handlingStatus": "Trạng thái xử lý",
+      "allHandlingStatuses": "Mọi trạng thái xử lý",
       "clearAll": "Xoá hết bộ lọc"
     },
     "pageEmpty": "Trang này không có đơn nào.",
@@ -127,6 +142,44 @@
     "next": "Trang sau",
     "page": "Trang",
     "pageCount": "/ {count, number}"
+  },
+  "createOrder": {
+    "title": "Tạo đơn",
+    "submit": "Tạo đơn",
+    "submitting": "Đang tạo…",
+    "purchasedAt": "Thời điểm đặt hàng",
+    "committedDeliveryDate": "Ngày giao cam kết",
+    "products": {
+      "title": "Sản phẩm",
+      "add": "Thêm dòng sản phẩm",
+      "remove": "Xoá dòng này",
+      "seller": "Người bán",
+      "category": "Danh mục",
+      "weight": "Cân nặng (gram)",
+      "price": "Giá",
+      "freight": "Phí vận chuyển"
+    },
+    "payments": {
+      "title": "Thanh toán",
+      "add": "Thêm dòng thanh toán",
+      "remove": "Xoá dòng này",
+      "type": "Hình thức",
+      "amount": "Số tiền",
+      "installments": "Số kỳ trả góp"
+    },
+    "address": {
+      "state": "Bang nhận hàng",
+      "city": "Thành phố",
+      "zip": "Mã bưu chính"
+    },
+    "errors": {
+      "formLevel": "Máy chủ từ chối yêu cầu: {detail}",
+      "modelNotReady": "Mô hình dự đoán rủi ro chưa sẵn sàng. Vui lòng thử lại sau.",
+      "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại.",
+      "purchasedAtFuture": "Thời điểm đặt hàng không được ở trong tương lai.",
+      "deliveryBeforePurchase": "Ngày giao cam kết không được sớm hơn thời điểm đặt hàng.",
+      "required": "Trường này không được để trống."
+    }
   },
   "orderDetail": {
     "loading": "Đang tải chi tiết đơn…",
@@ -186,6 +239,94 @@
       "score": "{score}/5 sao",
       "noComment": "Khách không để lại bình luận.",
       "empty": "Đơn này chưa có đánh giá."
+    },
+    "riskAssessment": {
+      "title": "Đánh giá rủi ro",
+      "loading": "Đang tải đánh giá rủi ro…",
+      "error": "Không lấy được đánh giá rủi ro từ máy chủ ({detail}). Vui lòng thử lại.",
+      "empty": "Đơn này chưa có đánh giá rủi ro.",
+      "refreshFailed": "Không tự tải lại được lịch sử đánh giá. Tải lại trang để thấy bản mới nhất.",
+      "lateProbability": "Xác suất giao trễ",
+      "level": {
+        "high": "Rủi ro cao",
+        "low": "Rủi ro thấp"
+      },
+      "cause": {
+        "expectedVsTypical": "Dự kiến {expected} ngày, thường {typical} ngày",
+        "sellerCaused": "Người bán liên quan"
+      },
+      "checkpoint": "Điểm đánh giá",
+      "checkpointValues": {
+        "order_placed": "Vừa đặt hàng",
+        "payment_approved": "Đã duyệt thanh toán",
+        "handed_to_carrier": "Đã bàn giao vận chuyển"
+      },
+      "assessedAt": "Thời điểm đánh giá",
+      "outcome": {
+        "title": "Đối chiếu",
+        "correct": "Đúng",
+        "incorrect": "Sai"
+      },
+      "history": {
+        "title": "Các lần đánh giá trước"
+      }
+    },
+    "intervention": {
+      "open": "Ghi nhận xử lý",
+      "dialogTitle": "Ghi nhận xử lý",
+      "dialogDescription": "Ghi lại biện pháp đã thực hiện cho đơn rủi ro cao này. Ship Guard chỉ ghi nhận — không tự nhắc người bán hay đổi đơn vị vận chuyển.",
+      "typeLabel": "Biện pháp",
+      "typePlaceholder": "Chọn một biện pháp",
+      "types": {
+        "remind_seller": "Nhắc hoặc ưu tiên người bán",
+        "change_carrier": "Đổi đơn vị vận chuyển",
+        "contact_payment": "Liên hệ về thanh toán",
+        "notify_customer": "Thông báo khách",
+        "other": "Khác"
+      },
+      "noteLabel": "Ghi chú (tuỳ chọn)",
+      "notePlaceholder": "Ghi thêm chi tiết cho đồng nghiệp…",
+      "submit": "Lưu",
+      "submitting": "Đang lưu…",
+      "cancel": "Hủy",
+      "handledBy": "Người xử lý",
+      "handledByLine": "{name} · {time}",
+      "handledBadge": "Đã xử lý: {action}",
+      "errors": {
+        "conflict": "Lần đánh giá này đã đổi từ lúc tải trang. Trang đã được tải lại.",
+        "tooLong": "Ghi chú không được dài quá 2.000 ký tự.",
+        "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+      }
+    },
+    "milestoneActions": {
+      "title": "Mốc vòng đời",
+      "noActions": "Đơn này không có thao tác mốc nào.",
+      "milestones": {
+        "payment_approved": "Duyệt thanh toán",
+        "handed_to_carrier": "Bàn giao vận chuyển",
+        "delivered_to_customer": "Khách nhận hàng"
+      },
+      "record": "Ghi nhận {milestone}",
+      "recordedAt": "Thời điểm",
+      "submit": "Lưu",
+      "submitting": "Đang lưu…",
+      "edit": "Sửa",
+      "cancelEdit": "Hủy bỏ",
+      "cancelOrder": "Hủy đơn",
+      "errors": {
+        "future": "Thời điểm này không được ở tương lai.",
+        "beforePrevious": "Thời điểm này không được sớm hơn mốc liền trước.",
+        "conflict": "Đơn đã thay đổi từ lúc mở trang. Trang đã được tải lại.",
+        "modelNotReady": "Mô hình rủi ro chưa sẵn sàng. Vui lòng thử lại sau.",
+        "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại.",
+        "refreshFailed": "Đã ghi nhận, nhưng trang chưa tự tải lại được. Tải lại trang để thấy thay đổi."
+      },
+      "cancelDialog": {
+        "title": "Hủy đơn này?",
+        "description": "Không hoàn tác được. Đơn sẽ chuyển sang trạng thái đã hủy.",
+        "confirm": "Xác nhận hủy đơn",
+        "cancel": "Giữ đơn"
+      }
     }
   },
   "orderNotes": {
@@ -203,9 +344,46 @@
     "rejected": "Máy chủ không nhận ghi chú này: nội dung phải dài 1–2.000 ký tự sau khi bỏ khoảng trắng hai đầu.",
     "byline": "{name} · {role} · {time}"
   },
+  "modelMetrics": {
+    "title": "Chỉ số độ tin cậy của mô hình",
+    "loading": "Đang tải chỉ số mô hình…",
+    "error": "Không tải được chỉ số mô hình từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "notTrained": "Hệ thống chưa huấn luyện mô hình lần nào.",
+    "selectedAlgorithm": "Thuật toán đang dùng",
+    "modelVersion": "Phiên bản mô hình",
+    "threshold": "Ngưỡng rủi ro cao đang áp dụng",
+    "f1AtOrderPlaced": "F1 ở mốc đặt hàng",
+    "f1Target": "Mục tiêu {target}",
+    "f1Status": {
+      "met": "Đạt",
+      "notMet": "Chưa đạt"
+    },
+    "algorithmComparison": {
+      "title": "So sánh thuật toán ứng viên",
+      "algorithm": "Thuật toán",
+      "selectedBadge": "Đang dùng"
+    },
+    "metric": {
+      "precision": "Precision",
+      "recall": "Recall",
+      "f1": "F1"
+    },
+    "reconciliation": {
+      "title": "Đối chiếu tích lũy trên đơn thật",
+      "correct": "Đúng",
+      "incorrect": "Sai",
+      "total": "Số lần đối chiếu",
+      "smallSampleWarning": "Mới có {count, number} lần đối chiếu — còn quá ít để kết luận chắc."
+    }
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "orders": "Quản lý đơn hàng",
+    "modelMetrics": "Chỉ số mô hình",
     "admin": "Quản trị"
   },
   "sidebar": {

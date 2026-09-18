@@ -31,8 +31,12 @@ frontend/
       page.tsx           Server Component: đọc searchParams, gọi <Dashboard />
       orders/
         page.tsx         Server Component: đọc searchParams, gọi <OrderList />
+        new/
+          page.tsx       Server Component: trang tạo đơn, gọi <CreateOrderForm />
         [orderId]/
           page.tsx       Server Component: đọc params, gọi <OrderDetail />
+      model-metrics/
+        page.tsx         Server Component: gọi <ModelMetrics />
       admin/users/
         page.tsx         Server Component: gọi <UserAdmin />
     login/
@@ -49,8 +53,15 @@ frontend/
       order-list-params.ts
                          đọc/ghi tìm kiếm, bộ lọc, sắp xếp, trang của /orders
                          trên URL; lateOrdersQuery (URL drill-down từ biểu đồ)
-      order-format.ts    BRL, utcDay, utcTimestamp, màu nhãn kết quả giao — dùng
-                         chung cho danh sách và chi tiết đơn
+      order-format.ts    BRL, utcDay, utcTimestamp, màu nhãn kết quả giao và mức
+                         rủi ro, toLocalInputValue — dùng chung cho danh sách và
+                         chi tiết đơn
+      orders-api.ts      POST /orders; ánh xạ lỗi 422 theo `loc` vào đúng trường,
+                         đúng dòng của biểu mẫu
+      order-lifecycle-api.ts
+                         ghi / sửa mốc, hủy đơn, ghi nhận can thiệp; gộp các mã
+                         409 thành một loại "conflict" vì cùng một cách khắc phục
+                         (trang đang cũ, tải lại)
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
                          mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện
     components/
@@ -85,19 +96,40 @@ frontend/
                          Client Component: ô chọn khoảng ngày, bang, người bán
                          dùng chung cho cả hai thanh lọc
       order-list.tsx     Client Component: gọi GET /orders — ô tìm mã đơn,
-                         bảng 8 cột sắp được, phân trang nhảy trang; bấm một
-                         dòng mở /orders/[orderId]; nút Xuất CSV (fetch kèm
-                         token, lưu blob)
+                         bảng sắp được kèm cột mức rủi ro, phân trang nhảy trang;
+                         bấm một dòng mở /orders/[orderId]; nút Tạo đơn; nút Xuất
+                         CSV (fetch kèm token, lưu blob)
+      create-order-form.tsx
+                         Client Component: biểu mẫu tạo đơn — dòng sản phẩm và
+                         thanh toán thêm/bớt được, chỉ thẻ tín dụng mới trả góp
+                         nhiều kỳ, lỗi hiện cạnh đúng trường; tạo xong mở trang
+                         chi tiết
+      order-state-select.tsx
+                         Client Component: ô chọn bang bắt buộc của biểu mẫu,
+                         không có mục "tất cả"
       order-detail.tsx   Client Component: gọi GET /orders/{order_id} — đầu
-                         trang, dòng thời gian và ba chặng, sản phẩm, người bán,
-                         địa chỉ giao, thanh toán, đánh giá; 404 thì báo không
-                         tìm thấy; cột phải dính <OrderNotes />
+                         trang, dòng thời gian và ba chặng, khối mốc, khối rủi
+                         ro, sản phẩm, người bán, địa chỉ giao, thanh toán, đánh
+                         giá; 404 thì báo không tìm thấy; tải lại đơn và lịch sử
+                         sau mỗi thao tác; cột phải dính <OrderNotes />
+      order-milestone-actions.tsx
+                         Client Component: ghi mốc kế tiếp, sửa mốc mới nhất,
+                         hủy đơn có xác nhận; trống khi đơn không thao tác được
+                         (đơn Olist, đã giao, đã hủy)
+      order-risk-assessment.tsx
+                         Client Component: lần đánh giá mới nhất nổi bật và lịch
+                         sử bên dưới, đúng/sai sau đối chiếu, hộp thoại ghi nhận
+                         can thiệp; thời điểm đánh giá và xử lý theo múi giờ
+                         trình duyệt
+      model-metrics.tsx  Client Component: trang chỉ số mô hình — ba thuật toán,
+                         ngưỡng, F1 so mục tiêu 0,30, đối chiếu tích lũy kèm cảnh
+                         báo mẫu nhỏ
       order-notes.tsx    Client Component: ghi chú nội bộ — đọc và thêm, kiểm độ
                          dài, thời điểm theo múi giờ trình duyệt
       order-filter-bar.tsx
                          Client Component: thanh lọc /orders — trạng thái, kết
                          quả giao, ngày đặt, ngày giao, bang (GET /customer-states),
-                         người bán, xoá hết
+                         người bán, mức rủi ro, trạng thái xử lý, xoá hết
       language-toggle.tsx
                          Client Component: nút đổi ngôn ngữ ở trang đăng nhập
                          và hook useLocaleSwitch dùng chung với menu người dùng
@@ -133,7 +165,27 @@ frontend/
                          dính khi cuộn, màn hẹp, song ngữ
       order-filters.spec.ts
                          Playwright: thanh lọc /orders (giả lập máy chủ) — từng
-                         bộ lọc, nửa khoảng ngày chưa lọc, kết hợp, xoá hết, tải lại
+                         bộ lọc kể cả mức rủi ro và trạng thái xử lý, nửa khoảng
+                         ngày chưa lọc, kết hợp, xoá hết, tải lại
+      create-order.spec.ts
+                         Playwright: biểu mẫu tạo đơn (giả lập máy chủ) — hai
+                         người bán, hai dòng thanh toán, khoá số kỳ, lỗi cạnh
+                         trường, mô hình chưa sẵn sàng, khối rủi ro cao/thấp,
+                         màn hẹp
+      order-lifecycle.spec.ts
+                         Playwright: khối mốc và lịch sử đánh giá (giả lập máy
+                         chủ, múi giờ Asia/Ho_Chi_Minh) — đơn Olist và đơn đã giao
+                         không có nút, ghi / sửa mốc thêm dòng lịch sử, chặn
+                         tương lai, hủy có xác nhận, màn hẹp
+      order-intervention.spec.ts
+                         Playwright: hộp thoại ghi nhận can thiệp (giả lập máy
+                         chủ) — gửi đúng biện pháp, không có nút khi rủi ro thấp,
+                         ghi chú quá dài, badge lịch sử
+      model-metrics.spec.ts
+                         Playwright **chạy thật**: đăng nhập thật, tạo đơn hai
+                         người bán, ghi đủ ba mốc, thấy đúng/sai, số đối chiếu
+                         trên trang chỉ số tăng. Cần backend, mô hình đã huấn
+                         luyện và `.env` gốc; tạo đơn thật trong DB dev
       order-list-params.spec.ts
                          kiểm đọc/ghi tham số URL của /orders, không mở trình duyệt
       url-filters.spec.ts
@@ -333,4 +385,4 @@ bất biến của bộ CSV.
 
 | Biến | Dùng ở đâu |
 | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/components/dashboard.tsx`, `app/components/order-list.tsx`, `app/components/order-notes.tsx`, `app/components/order-filter-bar.tsx`, `app/components/seller-combobox.tsx`, `app/components/profile-provider.tsx`, `app/lib/users-api.ts` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |
+| `NEXT_PUBLIC_BACKEND_URL` | `app/lib/api.ts`, `app/lib/users-api.ts`, `app/lib/orders-api.ts`, `app/lib/order-lifecycle-api.ts`, `app/components/dashboard.tsx`, `app/components/order-list.tsx`, `app/components/order-detail.tsx`, `app/components/order-notes.tsx`, `app/components/order-filter-bar.tsx`, `app/components/order-risk-assessment.tsx`, `app/components/order-state-select.tsx`, `app/components/create-order-form.tsx`, `app/components/model-metrics.tsx`, `app/components/seller-combobox.tsx`, `app/components/profile-provider.tsx` — địa chỉ gốc của backend. Trình duyệt gọi thẳng FastAPI nên biến này có tiền tố `NEXT_PUBLIC_` và được nhúng vào gói JavaScript lúc build; đổi địa chỉ là phải build lại. Backend phải khai origin của frontend trong `CORS_ALLOWED_ORIGINS`; cookie refresh token chỉ đi kèm khi frontend và backend cùng site. Cơ chế token: `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md`; lý do không proxy qua Next vẫn đọc ở `docs/adr/0002-trinh-duyet-goi-thang-backend-kem-cors.md`. |

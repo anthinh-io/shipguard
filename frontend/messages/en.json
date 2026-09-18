@@ -81,11 +81,13 @@
     "export": "Export CSV",
     "exporting": "Exporting…",
     "exportError": "Could not export the file ({detail}). Please try again.",
+    "new": "New order",
     "total": "{count, plural, one {# order} other {# orders}}",
     "columns": {
       "orderId": "Order ID",
       "status": "Status",
       "outcome": "Delivery outcome",
+      "riskLevel": "Risk level",
       "purchasedAt": "Purchased",
       "estimatedDeliveryDate": "Estimated delivery",
       "deliveredAt": "Delivered",
@@ -107,6 +109,15 @@
       "late": "Late",
       "no_outcome": "No outcome yet"
     },
+    "riskLevel": {
+      "high": "High Risk",
+      "low": "Low Risk",
+      "not_assessed": "Not assessed"
+    },
+    "handlingStatus": {
+      "unhandled": "Unhandled",
+      "handled": "Handled"
+    },
     "noMatch": "No order ID starts with “{orderId}”.",
     "noMatchFilters": "No orders match the selected filters.",
     "filters": {
@@ -118,6 +129,10 @@
       "purchasedPlaceholder": "Purchase date",
       "deliveredRange": "Delivery date range",
       "deliveredPlaceholder": "Delivery date",
+      "riskLevel": "Risk level",
+      "allRiskLevels": "All risk levels",
+      "handlingStatus": "Handling status",
+      "allHandlingStatuses": "All handling statuses",
       "clearAll": "Clear all filters"
     },
     "pageEmpty": "There are no orders on this page.",
@@ -127,6 +142,44 @@
     "next": "Next",
     "page": "Page",
     "pageCount": "of {count, number}"
+  },
+  "createOrder": {
+    "title": "New order",
+    "submit": "Create order",
+    "submitting": "Creating…",
+    "purchasedAt": "Purchase time",
+    "committedDeliveryDate": "Committed delivery date",
+    "products": {
+      "title": "Items",
+      "add": "Add item",
+      "remove": "Remove item",
+      "seller": "Seller",
+      "category": "Category",
+      "weight": "Weight (grams)",
+      "price": "Price",
+      "freight": "Freight"
+    },
+    "payments": {
+      "title": "Payments",
+      "add": "Add payment",
+      "remove": "Remove payment",
+      "type": "Method",
+      "amount": "Amount",
+      "installments": "Installments"
+    },
+    "address": {
+      "state": "Delivery state",
+      "city": "City",
+      "zip": "ZIP code prefix"
+    },
+    "errors": {
+      "formLevel": "The server rejected the request: {detail}",
+      "modelNotReady": "The risk prediction model isn't ready yet. Please try again later.",
+      "unreachable": "Couldn't reach the server. Please try again.",
+      "purchasedAtFuture": "The purchase time cannot be in the future.",
+      "deliveryBeforePurchase": "The committed delivery date cannot be before the purchase time.",
+      "required": "This field cannot be empty."
+    }
   },
   "orderDetail": {
     "loading": "Loading order details…",
@@ -186,6 +239,94 @@
       "score": "{score}/5 stars",
       "noComment": "No comment left.",
       "empty": "No review for this order yet."
+    },
+    "riskAssessment": {
+      "title": "Risk Assessment",
+      "loading": "Loading risk assessment…",
+      "error": "Couldn't load the risk assessment from the server ({detail}). Please try again.",
+      "empty": "This order has no risk assessment yet.",
+      "refreshFailed": "Could not refresh the assessment history automatically. Reload to see the latest.",
+      "lateProbability": "Late probability",
+      "level": {
+        "high": "High Risk",
+        "low": "Low Risk"
+      },
+      "cause": {
+        "expectedVsTypical": "Expected {expected} days, typically {typical} days",
+        "sellerCaused": "Seller involved"
+      },
+      "checkpoint": "Checkpoint",
+      "checkpointValues": {
+        "order_placed": "Order just placed",
+        "payment_approved": "Payment approved",
+        "handed_to_carrier": "Handed to carrier"
+      },
+      "assessedAt": "Assessed at",
+      "outcome": {
+        "title": "Reconciliation",
+        "correct": "Correct",
+        "incorrect": "Incorrect"
+      },
+      "history": {
+        "title": "Previous assessments"
+      }
+    },
+    "intervention": {
+      "open": "Record intervention",
+      "dialogTitle": "Record intervention",
+      "dialogDescription": "Record what was done about this high-risk order. Ship Guard only records this — it does not remind the seller or change the carrier automatically.",
+      "typeLabel": "Intervention",
+      "typePlaceholder": "Choose an intervention",
+      "types": {
+        "remind_seller": "Remind or prioritize the seller",
+        "change_carrier": "Change carrier",
+        "contact_payment": "Contact about payment",
+        "notify_customer": "Notify the customer",
+        "other": "Other"
+      },
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Add details for your colleagues…",
+      "submit": "Save",
+      "submitting": "Saving…",
+      "cancel": "Cancel",
+      "handledBy": "Handled by",
+      "handledByLine": "{name} · {time}",
+      "handledBadge": "Handled: {action}",
+      "errors": {
+        "conflict": "This assessment has changed since the page loaded. The page has been refreshed.",
+        "tooLong": "The note cannot be longer than 2,000 characters.",
+        "unreachable": "Could not reach the server. Please try again."
+      }
+    },
+    "milestoneActions": {
+      "title": "Milestones",
+      "noActions": "No milestone action available for this order.",
+      "milestones": {
+        "payment_approved": "Payment approved",
+        "handed_to_carrier": "Handed to carrier",
+        "delivered_to_customer": "Delivered to customer"
+      },
+      "record": "Record {milestone}",
+      "recordedAt": "Recorded at",
+      "submit": "Save",
+      "submitting": "Saving…",
+      "edit": "Edit",
+      "cancelEdit": "Cancel",
+      "cancelOrder": "Cancel order",
+      "errors": {
+        "future": "This time cannot be in the future.",
+        "beforePrevious": "This time cannot be earlier than the previous milestone.",
+        "conflict": "This order has changed since the page loaded. The page has been refreshed.",
+        "modelNotReady": "The risk model isn't ready yet. Please try again shortly.",
+        "unreachable": "Could not reach the server. Please try again.",
+        "refreshFailed": "Recorded, but the page could not refresh automatically. Reload to see the update."
+      },
+      "cancelDialog": {
+        "title": "Cancel this order?",
+        "description": "This cannot be undone. The order will move to canceled.",
+        "confirm": "Cancel order",
+        "cancel": "Keep order"
+      }
     }
   },
   "orderNotes": {
@@ -203,9 +344,46 @@
     "rejected": "The server did not accept this note: it must be 1–2,000 characters long after trimming leading and trailing spaces.",
     "byline": "{name} · {role} · {time}"
   },
+  "modelMetrics": {
+    "title": "Model reliability metrics",
+    "loading": "Loading model metrics…",
+    "error": "Couldn't load the model metrics from the server ({detail}). Please try again.",
+    "errorDetail": {
+      "missingBackendUrl": "missing NEXT_PUBLIC_BACKEND_URL environment variable",
+      "httpStatus": "server returned status {status}"
+    },
+    "notTrained": "The system has not trained a model yet.",
+    "selectedAlgorithm": "Algorithm in use",
+    "modelVersion": "Model version",
+    "threshold": "High-risk threshold in use",
+    "f1AtOrderPlaced": "F1 at order placement",
+    "f1Target": "Target {target}",
+    "f1Status": {
+      "met": "Met",
+      "notMet": "Not met"
+    },
+    "algorithmComparison": {
+      "title": "Candidate algorithm comparison",
+      "algorithm": "Algorithm",
+      "selectedBadge": "In use"
+    },
+    "metric": {
+      "precision": "Precision",
+      "recall": "Recall",
+      "f1": "F1"
+    },
+    "reconciliation": {
+      "title": "Cumulative reconciliation on real orders",
+      "correct": "Correct",
+      "incorrect": "Incorrect",
+      "total": "Reconciliations",
+      "smallSampleWarning": "Only {count, number} reconciliations so far — too few to draw firm conclusions."
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "orders": "Order management",
+    "modelMetrics": "Model metrics",
     "admin": "Administration"
   },
   "sidebar": {
