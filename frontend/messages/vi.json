@@ -330,9 +330,46 @@
     "rejected": "Máy chủ không nhận ghi chú này: nội dung phải dài 1–2.000 ký tự sau khi bỏ khoảng trắng hai đầu.",
     "byline": "{name} · {role} · {time}"
   },
+  "modelMetrics": {
+    "title": "Chỉ số độ tin cậy của mô hình",
+    "loading": "Đang tải chỉ số mô hình…",
+    "error": "Không tải được chỉ số mô hình từ máy chủ ({detail}). Vui lòng thử lại.",
+    "errorDetail": {
+      "missingBackendUrl": "thiếu biến môi trường NEXT_PUBLIC_BACKEND_URL",
+      "httpStatus": "máy chủ trả về mã {status}"
+    },
+    "notTrained": "Hệ thống chưa huấn luyện mô hình lần nào.",
+    "selectedAlgorithm": "Thuật toán đang dùng",
+    "modelVersion": "Phiên bản mô hình",
+    "threshold": "Ngưỡng rủi ro cao đang áp dụng",
+    "f1AtOrderPlaced": "F1 ở mốc đặt hàng",
+    "f1Target": "Mục tiêu {target}",
+    "f1Status": {
+      "met": "Đạt",
+      "notMet": "Chưa đạt"
+    },
+    "algorithmComparison": {
+      "title": "So sánh thuật toán ứng viên",
+      "algorithm": "Thuật toán",
+      "selectedBadge": "Đang dùng"
+    },
+    "metric": {
+      "precision": "Precision",
+      "recall": "Recall",
+      "f1": "F1"
+    },
+    "reconciliation": {
+      "title": "Đối chiếu tích lũy trên đơn thật",
+      "correct": "Đúng",
+      "incorrect": "Sai",
+      "total": "Số lần đối chiếu",
+      "smallSampleWarning": "Mới có {count, number} lần đối chiếu — còn quá ít để kết luận chắc."
+    }
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "orders": "Quản lý đơn hàng",
+    "modelMetrics": "Chỉ số mô hình",
     "admin": "Quản trị"
   },
   "sidebar": {
