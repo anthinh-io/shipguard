@@ -150,6 +150,26 @@ _Avoid_: Resolved, Closed, Done
 Việc đối chiếu mọi `Risk Assessment` của một đơn với `Delivery Outcome` thật khi đơn được ghi nhận đã giao. Đánh giá là đúng khi `High Risk` mà đơn trễ, hoặc Low Risk mà đơn đúng hạn.
 _Avoid_: Validation, Verification
 
+**Precision**:
+Trong các lần đánh giá bị xếp `High Risk`, tỷ lệ đơn thực sự trễ. Trả lời câu hỏi báo động rủi ro cao có đáng tin hay không — thấp nghĩa là nhân viên bị làm phiền bởi nhiều báo động giả.
+_Avoid_: Positive Predictive Value, Hit Rate
+
+**Recall**:
+Trong các đơn thực sự trễ, tỷ lệ được xếp `High Risk`. Trả lời câu hỏi mô hình bỏ sót bao nhiêu đơn trễ — thấp nghĩa là nhiều đơn trễ trôi qua mà không ai được cảnh báo.
+_Avoid_: Sensitivity, True Positive Rate, Coverage
+
+**F1**:
+Trung bình điều hoà của `Precision` và `Recall`. Tiêu chí duy nhất dùng để chọn thuật toán và ngưỡng (ADR-0008), vì tỷ lệ trễ nền chỉ khoảng 6,8% khiến `Precision`/`Recall` đọc riêng lẻ dễ gây hiểu lầm.
+_Avoid_: F-score, F-measure, Combined Score
+
+**Accuracy**:
+Tỷ lệ đánh giá đúng trên tổng số đánh giá, gồm cả `High Risk` đúng lẫn Low Risk đúng. Đo ở hai quần thể khác nhau tuỳ ngữ cảnh: trên tập kiểm tra cố định lúc huấn luyện, hoặc trên đơn thật tích luỹ qua `Reconciliation` — hai con số không so được với nhau. Vì tỷ lệ trễ nền chỉ khoảng 6,8%, một mô hình không bao giờ báo `High Risk` vẫn đạt Accuracy cao dù vô dụng, nên không dùng để chọn thuật toán.
+_Avoid_: Correctness Rate, Overall Accuracy
+
+**ROC-AUC**:
+Xác suất mô hình xếp một đơn trễ thật có `Late Probability` cao hơn một đơn đúng hạn thật, tính trên toàn bộ dải ngưỡng chứ không riêng `Risk Threshold` đang dùng. Chỉ tính được ở báo cáo huấn luyện, nơi có `Late Probability` liên tục cùng nhãn thật trên một tập cố định — không tính trong `Reconciliation`, vốn chỉ còn mức `High Risk`/Low Risk đã nhị phân hoá.
+_Avoid_: AUC, Area Under Curve
+
 **Model Version**:
 Định danh một lần huấn luyện, gắn vào cả tệp mô hình lẫn báo cáo đánh giá của lần đó. Mỗi `Risk Assessment` ghi lại phiên bản đã sinh ra nó, để biết một kết quả cũ đến từ bản mô hình nào khi mô hình được huấn luyện lại.
 _Avoid_: Model ID, Build, Revision
