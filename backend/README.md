@@ -21,21 +21,37 @@ backend/
       db.py        engine, session, lớp Base của model
       security.py  băm mật khẩu, ký và xác minh access token
     api/
-      deps.py      SessionDep, CurrentUserDep, UserAdminDep — phụ thuộc dùng chung
-                   cho các endpoint
+      deps.py      SessionDep, CurrentUserDep, UserAdminDep, PredictorDep — phụ
+                   thuộc dùng chung cho các endpoint
       routes/      mỗi tệp một nhóm endpoint (auth.py: /auth/*, users.py: /me và
-                   /users, orders.py: /orders, /orders/export,
-                   /orders/{order_id}/notes, /customer-states)
+                   /users, orders.py: /orders và mọi đường dẫn con,
+                   /risk-assessments/{id}/intervention, /customer-states,
+                   /product-categories, model_metrics.py: /model-metrics)
     services/      logic nghiệp vụ; route chỉ đọc tham số và gọi vào đây
       auth.py      đăng nhập, cấp và xoay vòng refresh token
       users.py     tạo User, Super Admin, quản trị User (khóa, đổi vai trò, đặt
                    lại mật khẩu), tự đổi mật khẩu
       order_notes.py
                    Internal Note: đọc, thêm; không sửa, không xóa
-      orders.py    danh sách đơn: tìm tiền tố mã đơn, sắp xếp, phân trang
+      orders.py    danh sách đơn: tìm tiền tố mã đơn, lọc (kể cả theo lần đánh giá
+                   mới nhất), sắp xếp, phân trang; chi tiết đơn
+      risk_assessments.py
+                   tạo đơn cùng Risk Assessment đầu tiên, lịch sử đánh giá, ghi nhận
+                   Intervention
+      order_milestones.py
+                   suy luận thuần, không đụng cơ sở dữ liệu: mốc kế tiếp, hủy được
+                   hay không
+      order_lifecycle.py
+                   ghi / sửa mốc, hủy đơn, Reconciliation khi đã giao
+      model_metrics.py
+                   đọc báo cáo huấn luyện, cộng dồn kết quả đối chiếu
       queries.py   mảnh truy vấn dùng chung: DELIVERED, like_prefix, within_days,
                    sold_by
-    scripts/       lệnh chạy tay: nạp dữ liệu, đặt lại mật khẩu Super Admin
+    risk/          mô hình rủi ro: dataset.py (đọc CSV, nhãn, chia tập), features.py,
+                   candidates.py (ba bộ ứng viên), predictor.py (Monte Carlo, Risk
+                   Cause), training.py
+    scripts/       lệnh chạy tay: dựng dữ liệu dẫn xuất, huấn luyện mô hình, đặt lại
+                   mật khẩu Super Admin
     alembic/       migration
   tests/
   alembic.ini
@@ -107,6 +123,8 @@ này vào `delivered_from` / `delivered_to` của `/orders`, cộng `delivery_ou
 | `delivered_from`, `delivered_to` | Khoảng ngày giao thực tế, cùng luật; độc lập với khoảng ngày đặt | không lọc |
 | `customer_state` | Bang của khách nhận hàng (`Region`), không phải bang người bán | không lọc |
 | `seller_id` | Mã người bán; `Multi-Seller Order` thuộc về mọi người bán tham gia, vẫn một dòng mỗi đơn | không lọc |
+| `risk_level` | `high`, `low`, `not_assessed` — theo lần `Risk Assessment` mới nhất của đơn; `not_assessed` là đơn chưa từng được đánh giá, gồm mọi đơn Olist | không lọc |
+| `handling_status` | `unhandled`, `handled` — theo lần đánh giá mới nhất. `handled`: đã ghi `Intervention`. `unhandled`: đã được đánh giá, chưa ghi `Intervention`, đơn chưa hủy — kể cả khi lần đó là Low Risk; đi cùng `risk_level=high` mới ra đúng danh sách việc cần xử lý | không lọc |
 | `sort` | `purchased_at`, `estimated_delivery_date`, `delivered_at`, `order_value` | `purchased_at` |
 | `direction` | `asc`, `desc` | `desc` |
 | `page` | Số nguyên từ 1; vượt quá trang cuối thì `items` rỗng, `total` giữ nguyên (chỉ số lớn tới mức tràn `OFFSET` bigint mới nhận 422) | `1` |
@@ -117,6 +135,12 @@ Các bộ lọc kết hợp với nhau bằng AND. Khoảng ngày xét nửa m�
 nửa đêm ngày đầu, `<` nửa đêm sau ngày cuối) để còn dùng được chỉ mục, nên đơn đặt lúc
 02:30 ngày cuối vẫn được tính. Bộ lọc `late` ra 6.534 đơn; nếu thấy 6.535 là đã tính
 nhầm đơn đã hủy có ngày giao, 7.826 là đã so theo giờ thay vì theo ngày.
+
+Mỗi dòng mang thêm `risk_level`, nên cột này tự có trong CSV của `/orders/export`. Lần
+đánh giá mới nhất lấy bằng `LEFT JOIN LATERAL`, để đơn nhiều lần đánh giá vẫn một dòng;
+câu đếm `total` dùng chung FROM với câu chọn dòng nên hai con số không lệch nhau. Hợp
+đồng: `total` của `risk_level=high&handling_status=unhandled` bằng số `Risk Assessment`
+có `needs_handling: true` (`test_order_todo_filters.py`).
 
 `GET /orders/export` (đòi token) nhận đúng bộ tham số lọc và sắp xếp của `GET /orders`,
 không có `page`, và stream **mọi** đơn khớp dưới dạng `text/csv` UTF-8 có BOM. Thiếu
@@ -207,6 +231,72 @@ không tồn tại trả 404.
 thị — `[{"name", "label"}]` — cho ô chọn danh mục của biểu mẫu tạo đơn. Cùng lý do với
 `/customer-states`: mẫu chặn `${BACKEND_URL}/orders**` của Playwright vượt cả dấu gạch
 chéo, nên đường dẫn không nằm dưới `/orders`.
+
+### Mốc vòng đời, hủy đơn và đối chiếu
+
+Chỉ đơn đã có ít nhất một `Risk Assessment` mới thao tác được — đơn Olist lịch sử, kể cả
+khoảng 1.729 đơn còn dang dở, chỉ đọc. Cả ba endpoint đều đòi token.
+
+| Endpoint | Việc |
+| --- | --- |
+| `POST /orders/{order_id}/milestones` | Ghi mốc kế tiếp; body `{"milestone", "recorded_at"}` với `milestone` là `payment_approved`, `handed_to_carrier` hoặc `delivered_to_customer`. Trả 201 `{"order_id", "order_status", "next_milestone", "cancelable", "risk_assessment"}` |
+| `PATCH /orders/{order_id}/milestones/{milestone}` | Sửa thời điểm của mốc mới nhất; body `{"recorded_at"}`, phản hồi như trên |
+| `POST /orders/{order_id}/cancellation` | Hủy đơn chưa giao; trả 201 `{"order_id", "order_status": "canceled"}` |
+
+Ghi hay sửa `payment_approved` / `handed_to_carrier` sinh một `Risk Assessment` mới dùng
+thời gian thật của chặng đã xong; ghi `delivered_to_customer` không sinh đánh giá
+(`risk_assessment: null`) mà chạy `Reconciliation`: mỗi lần đánh giá của đơn nhận
+`was_correct` — `High Risk` mà đơn trễ, hoặc Low Risk mà đơn đúng hạn, là đúng. Trễ so theo
+ngày lịch, đọc cột sinh `is_late`. Đơn hủy không đối chiếu. `Order Status` suy ra từ mốc mới
+nhất: `approved`, `shipped`, `delivered`, hoặc `canceled`.
+
+Mốc ghi vào đúng các cột thời điểm sẵn có của `orders`, nên ba chặng và `is_late` tự có
+qua cột sinh — vì vậy các cột này vẫn **không** được thêm `timezone=True`.
+
+Lỗi: 404 mã đơn không tồn tại. 409 kèm `detail: {"code", "message"}`, `code` là một trong
+`not_ship_guard_order`, `already_delivered`, `already_canceled`, `out_of_order_milestone`,
+`not_latest_milestone`, `order_changed_concurrently`. 422 khi `recorded_at` ở tương lai hoặc
+sớm hơn mốc trước, `loc` trỏ vào `recorded_at`. 503 khi thiếu mô hình — mốc không được lưu.
+Hủy đơn không cần mô hình.
+
+Mỗi thao tác ghi có điều kiện `WHERE` khớp đúng trạng thái vừa đọc, nên hai yêu cầu chạy
+đua trên cùng một đơn không ghi đè nhau: yêu cầu thua nhận 409 `order_changed_concurrently`.
+`test_order_lifecycle_concurrency.py` ép đúng kịch bản đó bằng khóa dòng Postgres.
+
+`GET /orders/{order_id}` mang thêm `next_milestone` (null nếu đơn không thao tác được) và
+`cancelable`. `GET /orders/{order_id}/risk-assessments` mang thêm `was_correct` (null khi
+chưa đối chiếu), `intervention` và `needs_handling` — đúng lần đánh giá mới nhất của đơn
+chưa hủy, `High Risk`, chưa ghi `Intervention`.
+
+### Ghi nhận can thiệp
+
+`POST /risk-assessments/{assessment_id}/intervention` (đòi token, **cấp gốc** cùng lý do
+với `/customer-states`) ghi `Intervention` cho lần đánh giá đang là việc cần xử lý. Body
+`{"intervention", "note"}` với `intervention` là `remind_seller`, `change_carrier`,
+`contact_payment`, `notify_customer` hoặc `other`; `note` tuỳ chọn, 0–2.000 ký tự sau khi
+cắt khoảng trắng, rỗng thì lưu `null`. Trả 201 kèm `{"intervention", "note", "handled_by",
+"handled_at"}`; `handled_by` là tên hiển thị, còn nguyên khi tài khoản bị khóa.
+
+409 kèm `code` `already_handled`, `not_high_risk`, `assessment_superseded` hoặc
+`order_canceled`; 404 mã lần đánh giá không tồn tại. Bốn điều kiện nằm trong cùng một câu
+`UPDATE … WHERE … RETURNING`, nên không đua được với thao tác mốc.
+
+### Chỉ số mô hình
+
+`GET /model-metrics` (đòi token, mọi vai trò) trả `{"trained", "report", "risk_threshold",
+"reconciliation"}`:
+
+- `report` — báo cáo huấn luyện đọc từ `RISK_MODEL_DIR`: `model_version`, `trained_at`,
+  `selected_algorithm`, `f1_target`, `f1_at_order_placed`, `meets_f1_target`, và
+  `algorithms` — precision / recall / F1 của từng bộ ứng viên ở ba mốc, trên tập kiểm tra.
+- `risk_threshold` — ngưỡng **đang áp dụng** đọc từ cấu hình, có thể khác ngưỡng đề xuất
+  trong báo cáo.
+- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision` và
+  `recall` thực tế (null khi mẫu số bằng 0), `small_sample` khi dưới 30 lần. Chỉ đếm lần
+  đánh giá đã có `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
+
+Chưa huấn luyện thì trả 200 với `trained: false` và `report: null` — không phải lỗi, và
+phần đối chiếu vẫn tính được vì nó đọc `risk_assessments`, không đọc báo cáo.
 
 ## Đăng nhập
 
