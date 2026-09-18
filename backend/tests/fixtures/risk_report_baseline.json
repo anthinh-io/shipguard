@@ -1,0 +1,301 @@
+{
+  "algorithms": {
+    "sklearn_quantile": {
+      "test": {
+        "handed_to_carrier": {
+          "accuracy": 0.9772,
+          "at_selected_threshold": {
+            "accuracy": 0.7116,
+            "f1": 0.1965,
+            "precision": 0.1126,
+            "recall": 0.7727,
+            "threshold": 0.08
+          },
+          "best_f1": 0.7027,
+          "best_threshold": 0.54,
+          "precision": 0.8667,
+          "recall": 0.5909,
+          "roc_auc": 0.8645
+        },
+        "order_placed": {
+          "accuracy": 0.9481,
+          "at_selected_threshold": {
+            "accuracy": 0.6328,
+            "f1": 0.1449,
+            "precision": 0.0811,
+            "recall": 0.6818,
+            "threshold": 0.08
+          },
+          "best_f1": 0.359,
+          "best_threshold": 0.45,
+          "precision": 0.4118,
+          "recall": 0.3182,
+          "roc_auc": 0.7667
+        },
+        "payment_approved": {
+          "accuracy": 0.9315,
+          "at_selected_threshold": {
+            "accuracy": 0.6452,
+            "f1": 0.1576,
+            "precision": 0.0884,
+            "recall": 0.7273,
+            "threshold": 0.08
+          },
+          "best_f1": 0.2979,
+          "best_threshold": 0.35,
+          "precision": 0.28,
+          "recall": 0.3182,
+          "roc_auc": 0.7763
+        }
+      },
+      "validation": {
+        "handed_to_carrier": {
+          "accuracy": 0.9563,
+          "f1": 0.3226,
+          "precision": 0.625,
+          "recall": 0.2174,
+          "roc_auc": 0.7906,
+          "threshold": 0.21
+        },
+        "order_placed": {
+          "accuracy": 0.8545,
+          "f1": 0.2553,
+          "precision": 0.169,
+          "recall": 0.5217,
+          "roc_auc": 0.7559,
+          "threshold": 0.08
+        },
+        "payment_approved": {
+          "accuracy": 0.8732,
+          "f1": 0.2651,
+          "precision": 0.1833,
+          "recall": 0.4783,
+          "roc_auc": 0.7576,
+          "threshold": 0.09
+        }
+      }
+    },
+    "xgboost_aft": {
+      "test": {
+        "handed_to_carrier": {
+          "accuracy": 0.9564,
+          "at_selected_threshold": {
+            "accuracy": 0.9523,
+            "f1": 0.5106,
+            "precision": 0.48,
+            "recall": 0.5455,
+            "threshold": 0.07
+          },
+          "best_f1": 0.5333,
+          "best_threshold": 0.09,
+          "precision": 0.5217,
+          "recall": 0.5455,
+          "roc_auc": 0.8037
+        },
+        "order_placed": {
+          "accuracy": 0.9336,
+          "at_selected_threshold": {
+            "accuracy": 0.9253,
+            "f1": 0.25,
+            "precision": 0.2308,
+            "recall": 0.2727,
+            "threshold": 0.07
+          },
+          "best_f1": 0.2727,
+          "best_threshold": 0.17,
+          "precision": 0.2727,
+          "recall": 0.2727,
+          "roc_auc": 0.6478
+        },
+        "payment_approved": {
+          "accuracy": 0.9357,
+          "at_selected_threshold": {
+            "accuracy": 0.9295,
+            "f1": 0.2273,
+            "precision": 0.2273,
+            "recall": 0.2273,
+            "threshold": 0.07
+          },
+          "best_f1": 0.2439,
+          "best_threshold": 0.15,
+          "precision": 0.2632,
+          "recall": 0.2273,
+          "roc_auc": 0.653
+        }
+      },
+      "validation": {
+        "handed_to_carrier": {
+          "accuracy": 0.9501,
+          "f1": 0.25,
+          "precision": 0.4444,
+          "recall": 0.1739,
+          "roc_auc": 0.5814,
+          "threshold": 0.01
+        },
+        "order_placed": {
+          "accuracy": 0.9522,
+          "f1": 0.08,
+          "precision": 0.5,
+          "recall": 0.0435,
+          "roc_auc": 0.5102,
+          "threshold": 0.07
+        },
+        "payment_approved": {
+          "accuracy": 0.9522,
+          "f1": 0.08,
+          "precision": 0.5,
+          "recall": 0.0435,
+          "roc_auc": 0.5315,
+          "threshold": 0.08
+        }
+      }
+    },
+    "xgboost_quantile": {
+      "test": {
+        "handed_to_carrier": {
+          "accuracy": 0.973,
+          "at_selected_threshold": {
+            "accuracy": 0.8672,
+            "f1": 0.3191,
+            "precision": 0.2083,
+            "recall": 0.6818,
+            "threshold": 0.14
+          },
+          "best_f1": 0.5806,
+          "best_threshold": 0.83,
+          "precision": 1.0,
+          "recall": 0.4091,
+          "roc_auc": 0.8549
+        },
+        "order_placed": {
+          "accuracy": 0.9274,
+          "at_selected_threshold": {
+            "accuracy": 0.7448,
+            "f1": 0.1961,
+            "precision": 0.1145,
+            "recall": 0.6818,
+            "threshold": 0.14
+          },
+          "best_f1": 0.2857,
+          "best_threshold": 0.39,
+          "precision": 0.2593,
+          "recall": 0.3182,
+          "roc_auc": 0.7702
+        },
+        "payment_approved": {
+          "accuracy": 0.9315,
+          "at_selected_threshold": {
+            "accuracy": 0.7386,
+            "f1": 0.1923,
+            "precision": 0.1119,
+            "recall": 0.6818,
+            "threshold": 0.14
+          },
+          "best_f1": 0.2667,
+          "best_threshold": 0.44,
+          "precision": 0.2609,
+          "recall": 0.2727,
+          "roc_auc": 0.7732
+        }
+      },
+      "validation": {
+        "handed_to_carrier": {
+          "accuracy": 0.9459,
+          "f1": 0.35,
+          "precision": 0.4118,
+          "recall": 0.3043,
+          "roc_auc": 0.7377,
+          "threshold": 0.14
+        },
+        "order_placed": {
+          "accuracy": 0.9148,
+          "f1": 0.2545,
+          "precision": 0.2188,
+          "recall": 0.3043,
+          "roc_auc": 0.7229,
+          "threshold": 0.14
+        },
+        "payment_approved": {
+          "accuracy": 0.896,
+          "f1": 0.2424,
+          "precision": 0.186,
+          "recall": 0.3478,
+          "roc_auc": 0.7311,
+          "threshold": 0.13
+        }
+      }
+    }
+  },
+  "data_source": "datasets/raw (CSV)",
+  "excluded_orders": {
+    "delivered": 96470,
+    "handed_after_delivery": 23,
+    "handed_before_purchase": 165,
+    "kept": 96267,
+    "missing_milestone": 15
+  },
+  "f1_at_order_placed": 0.1449,
+  "f1_target": 0.3,
+  "features": [
+    "customer_state",
+    "seller_state",
+    "route",
+    "category",
+    "payment_type_combo",
+    "distance_km",
+    "total_weight_g",
+    "total_price",
+    "total_freight",
+    "line_count",
+    "seller_count",
+    "max_installments",
+    "purchase_month",
+    "purchase_weekday",
+    "purchase_hour",
+    "commitment_days",
+    "seller_prior_orders",
+    "seller_prior_handling_days",
+    "seller_prior_late_rate",
+    "seller_prior_overdue_handoff_rate"
+  ],
+  "historical_median_days": {
+    "carrier_transit": 7.181608796296296,
+    "payment_approval": 0.014282407407407407,
+    "seller_handling": 1.7947569444444444
+  },
+  "meets_f1_target": false,
+  "monte_carlo_note": "Đánh giá mô phỏng theo lô nên bộ số ngẫu nhiên khác đường dự đoán thật, vốn gieo theo mã đơn. Phép ước lượng là một.",
+  "quantiles": [
+    0.05,
+    0.25,
+    0.5,
+    0.75,
+    0.9,
+    0.99
+  ],
+  "sample_step": 30,
+  "selected_algorithm": "sklearn_quantile",
+  "selection_rule": "F1 cao nhất ở mốc order_placed trên tập test",
+  "splits": {
+    "test": {
+      "from": "2018-06-20",
+      "late_rate": 0.0456,
+      "rows": 482,
+      "to": "2018-08-28"
+    },
+    "train": {
+      "from": "2016-09-15",
+      "late_rate": 0.0699,
+      "rows": 2246,
+      "to": "2018-04-15"
+    },
+    "validation": {
+      "from": "2018-04-15",
+      "late_rate": 0.0478,
+      "rows": 481,
+      "to": "2018-06-20"
+    }
+  },
+  "suggested_risk_threshold": 0.08,
+  "threshold_rule": "ngưỡng cho F1 cao nhất ở mốc order_placed trên tập validation"
+}
