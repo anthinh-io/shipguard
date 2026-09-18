@@ -13,6 +13,6 @@ __pycache__/
 !*.code-workspace
 *.vsix
 *.local*
-models/
-experiments/
+/models/
+/experiments/
 *.joblib

@@ -667,7 +667,7 @@ nó làm mọi đơn được đánh giá từ đó trở đi đổi mức rủi
 uv run python -m app.scripts.train_risk_model_experiments
 ```
 
-Chạy 10 biến thể liên tiếp — siêu tham số của ba thuật toán hiện có, một biến thể LightGBM, và vài
+Chạy 10 biến thể liên tiếp — siêu tham số của ba thuật toán hiện có, hai biến thể LightGBM, và vài
 tỷ lệ chia tập khác 70/15/15 — mỗi biến thể gọi đúng `train()` ở trên, không có đường huấn luyện
 riêng nào khác. Mất khoảng mười lần thời gian một lần huấn luyện sản xuất (~5 phút) cộng lại, tức
 xấp xỉ 45–60 phút cho toàn bộ.
