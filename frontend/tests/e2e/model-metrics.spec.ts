@@ -108,3 +108,17 @@ test("vòng đời đơn nhiều người bán chạy thật: đánh giá, đố
   const totalAfter = await reconciliationTotal(page, "Vừa đặt hàng");
   expect(totalAfter).toBeGreaterThan(totalBefore);
 });
+
+// #42: chỉ khẳng định cột mới và chú thích hiện đúng vị trí — không khẳng định giá trị
+// số cụ thể, vì con số phụ thuộc seed/dữ liệu huấn luyện thật.
+test("trang chỉ số mô hình hiện cột Accuracy/ROC-AUC và chú thích phân biệt hai bảng", async ({
+  page,
+}) => {
+  await page.goto("/model-metrics");
+
+  await expect(page.getByTestId("model-metrics-algorithm-caption")).toBeVisible();
+  await expect(page.getByTestId("model-metrics-reconciliation-caption")).toBeVisible();
+  await expect(page.getByTestId("model-metrics-algorithm-row").first()).toContainText("Accuracy");
+  await expect(page.getByTestId("model-metrics-algorithm-row").first()).toContainText("ROC-AUC");
+  await expect(page.getByRole("columnheader", { name: "Accuracy" })).toBeVisible();
+});

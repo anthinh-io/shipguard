@@ -365,19 +365,24 @@
     "algorithmComparison": {
       "title": "So sánh thuật toán ứng viên",
       "algorithm": "Thuật toán",
-      "selectedBadge": "Đang dùng"
+      "selectedBadge": "Đang dùng",
+      "caption": "Đo trên tập kiểm tra tĩnh lúc huấn luyện — một tập cố định, không đổi theo thời gian."
     },
     "metric": {
       "precision": "Precision",
       "recall": "Recall",
-      "f1": "F1"
+      "f1": "F1",
+      "accuracy": "Accuracy",
+      "rocAuc": "ROC-AUC",
+      "rocAucNoData": "chưa có dữ liệu"
     },
     "reconciliation": {
       "title": "Đối chiếu tích lũy trên đơn thật",
       "correct": "Đúng",
       "incorrect": "Sai",
       "total": "Số lần đối chiếu",
-      "smallSampleWarning": "Mới có {count, number} lần đối chiếu — còn quá ít để kết luận chắc."
+      "smallSampleWarning": "Mới có {count, number} lần đối chiếu — còn quá ít để kết luận chắc.",
+      "caption": "Đo trên đơn thật tích luỹ qua Đối chiếu, gộp nhiều phiên bản mô hình và ngưỡng theo thời gian — không so được trực tiếp với bảng trên."
     }
   },
   "nav": {
