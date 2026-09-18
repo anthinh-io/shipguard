@@ -7,10 +7,14 @@ import { apiFetch } from "@/app/lib/api";
 import {
   DELIVERY_OUTCOMES,
   EMPTY_ORDER_FILTERS,
+  HANDLING_STATUSES,
   ORDER_STATUSES,
+  RISK_LEVELS,
   type DeliveryOutcome,
+  type HandlingStatus,
   type OrderFilters,
   type OrderStatus,
+  type RiskLevel,
 } from "@/app/lib/order-list-params";
 import { CustomerStateSelect } from "./customer-state-select";
 import { DateRangePicker } from "./date-range-picker";
@@ -142,6 +146,55 @@ export function OrderFilterBar({
         onChange={(sellerId) => onChange({ ...filters, sellerId })}
         deliveredOnly={false}
       />
+
+      <Select
+        value={filters.riskLevel ?? ALL}
+        onValueChange={(value) =>
+          onChange({ ...filters, riskLevel: value === ALL ? null : (value as RiskLevel) })
+        }
+      >
+        <SelectTrigger
+          data-testid="filter-risk-level"
+          aria-label={t("filters.riskLevel")}
+          className="w-[180px]"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>{t("filters.allRiskLevels")}</SelectItem>
+          {RISK_LEVELS.map((level) => (
+            <SelectItem key={level} value={level}>
+              {t(`riskLevel.${level}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={filters.handlingStatus ?? ALL}
+        onValueChange={(value) =>
+          onChange({
+            ...filters,
+            handlingStatus: value === ALL ? null : (value as HandlingStatus),
+          })
+        }
+      >
+        <SelectTrigger
+          data-testid="filter-handling-status"
+          aria-label={t("filters.handlingStatus")}
+          className="w-[180px]"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>{t("filters.allHandlingStatuses")}</SelectItem>
+          {HANDLING_STATUSES.map((status) => (
+            <SelectItem key={status} value={status}>
+              {t(`handlingStatus.${status}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <Button
         variant="ghost"

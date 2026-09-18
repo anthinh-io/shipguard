@@ -51,6 +51,7 @@ async function mockOrders(page: Page, exportStatus = 200): Promise<Request[]> {
             delivered_at: "2017-10-20T21:25:13",
             customer_state: "SP",
             order_value: 146.88,
+            risk_level: "not_assessed",
           },
         ],
         total: 6534,

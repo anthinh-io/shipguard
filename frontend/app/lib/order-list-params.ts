@@ -35,6 +35,17 @@ export const DELIVERY_OUTCOMES = ["on_time", "late", "no_outcome"] as const;
 
 export type DeliveryOutcome = (typeof DELIVERY_OUTCOMES)[number];
 
+// Risk Level và Handling Status theo CONTEXT.md (#36): cả hai tính trên lần đánh giá mới
+// nhất của đơn, backend trả nguyên chuỗi này qua GET /orders — tên khớp field của
+// OrderListItem, cùng lý do với các enum khác trong file này.
+export const RISK_LEVELS = ["high", "low", "not_assessed"] as const;
+
+export type RiskLevel = (typeof RISK_LEVELS)[number];
+
+export const HANDLING_STATUSES = ["unhandled", "handled"] as const;
+
+export type HandlingStatus = (typeof HANDLING_STATUSES)[number];
+
 export type OrderFilters = {
   orderStatus: OrderStatus | null;
   deliveryOutcome: DeliveryOutcome | null;
@@ -44,6 +55,8 @@ export type OrderFilters = {
   // Chỉ mã, vì URL chỉ mang mã. Nhãn trên nút tự tra bang của người bán — xem
   // seller-combobox.tsx.
   sellerId: string | null;
+  riskLevel: RiskLevel | null;
+  handlingStatus: HandlingStatus | null;
 };
 
 export type OrderListParams = {
@@ -62,6 +75,8 @@ export const EMPTY_ORDER_FILTERS: OrderFilters = {
   delivered: null,
   customerState: null,
   sellerId: null,
+  riskLevel: null,
+  handlingStatus: null,
 };
 
 export const DEFAULT_ORDER_LIST_PARAMS: OrderListParams = {
@@ -84,6 +99,8 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
   const page = first(raw.page);
   const orderStatus = first(raw.order_status);
   const deliveryOutcome = first(raw.delivery_outcome);
+  const riskLevel = first(raw.risk_level);
+  const handlingStatus = first(raw.handling_status);
 
   return {
     orderId: first(raw.order_id)?.trim() ?? "",
@@ -107,6 +124,8 @@ export function parseOrderListParams(raw: RawSearchParams): OrderListParams {
       delivered: parseDayRange(raw.delivered_from, raw.delivered_to, { allowSingleDay: true }),
       customerState: first(raw.customer_state) || null,
       sellerId: first(raw.seller_id) || null,
+      riskLevel: RISK_LEVELS.find((value) => value === riskLevel) ?? null,
+      handlingStatus: HANDLING_STATUSES.find((value) => value === handlingStatus) ?? null,
     },
   };
 }
@@ -137,6 +156,12 @@ export function toOrderListQuery(params: OrderListParams): string {
   }
   if (filters.sellerId) {
     query.set("seller_id", filters.sellerId);
+  }
+  if (filters.riskLevel) {
+    query.set("risk_level", filters.riskLevel);
+  }
+  if (filters.handlingStatus) {
+    query.set("handling_status", filters.handlingStatus);
   }
   if (params.sort !== DEFAULT_ORDER_LIST_PARAMS.sort) {
     query.set("sort", params.sort);

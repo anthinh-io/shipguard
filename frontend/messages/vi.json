@@ -87,6 +87,7 @@
       "orderId": "Mã đơn",
       "status": "Trạng thái",
       "outcome": "Kết quả giao",
+      "riskLevel": "Mức rủi ro",
       "purchasedAt": "Ngày đặt",
       "estimatedDeliveryDate": "Ngày cam kết",
       "deliveredAt": "Ngày giao",
@@ -108,6 +109,15 @@
       "late": "Trễ",
       "no_outcome": "Chưa có kết quả"
     },
+    "riskLevel": {
+      "high": "Rủi ro cao",
+      "low": "Rủi ro thấp",
+      "not_assessed": "Chưa đánh giá"
+    },
+    "handlingStatus": {
+      "unhandled": "Chưa xử lý",
+      "handled": "Đã xử lý"
+    },
     "noMatch": "Không có đơn nào có mã bắt đầu bằng “{orderId}”.",
     "noMatchFilters": "Không có đơn nào khớp các bộ lọc đang chọn.",
     "filters": {
@@ -119,6 +129,10 @@
       "purchasedPlaceholder": "Ngày đặt",
       "deliveredRange": "Khoảng ngày giao",
       "deliveredPlaceholder": "Ngày giao",
+      "riskLevel": "Mức rủi ro",
+      "allRiskLevels": "Mọi mức rủi ro",
+      "handlingStatus": "Trạng thái xử lý",
+      "allHandlingStatuses": "Mọi trạng thái xử lý",
       "clearAll": "Xoá hết bộ lọc"
     },
     "pageEmpty": "Trang này không có đơn nào.",
