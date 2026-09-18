@@ -13,6 +13,7 @@ from app.risk.training import (
     REPORT_FILENAME,
     format_summary,
 )
+from conftest import comparable_report
 
 # Bộ test huấn luyện trên một phần dữ liệu, nên F1 ở đây vô nghĩa và KHÔNG bài nào
 # khẳng định F1 >= 0,30. Tiêu chí chấp nhận cũng cho phép dưới mục tiêu, miễn báo cáo
@@ -27,15 +28,11 @@ def report(risk_model_dir: Path) -> dict:
     return json.loads((risk_model_dir / REPORT_FILENAME).read_text("utf-8"))
 
 
-def _comparable(report: dict) -> dict:
-    return {k: v for k, v in report.items() if k not in ("model_version", "trained_at")}
-
-
 def test_default_call_matches_pre_parameterization_baseline(report: dict) -> None:
     """An toàn ngược: gọi train() không truyền algorithms/train_ratio/validation_ratio
     phải cho kết quả giống hệt bản chụp trước khi tham số hoá (Issue #43)."""
     baseline = json.loads((FIXTURES / "risk_report_baseline.json").read_text("utf-8"))
-    assert _comparable(report) == baseline
+    assert comparable_report(report) == baseline
 
 
 def test_training_writes_model_and_report_files(risk_model_dir: Path) -> None:

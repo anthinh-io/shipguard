@@ -6,16 +6,13 @@ import pytest
 
 from app.risk.candidates import SklearnQuantileStage
 from app.risk.training import REPORT_FILENAME, train
+from conftest import comparable_report
 
 # Thô hơn RISK_SAMPLE_STEP=30 của fixture mặc định (conftest.py): các bài dưới đây
 # chỉ cần xác nhận hành vi tham số hoá, không cần độ chính xác của một lần huấn
 # luyện thật, nên chọn bước lấy mẫu thô hơn và chỉ một thuật toán nhẹ để rẻ.
 EXPERIMENT_SAMPLE_STEP = 60
 REDUCED_ALGORITHMS = {"sklearn_quantile": partial(SklearnQuantileStage, max_iter=5)}
-
-
-def _comparable(report: dict) -> dict:
-    return {k: v for k, v in report.items() if k not in ("model_version", "trained_at")}
 
 
 def _train(tmp_path_factory: pytest.TempPathFactory, **kwargs) -> dict:
@@ -51,14 +48,14 @@ def test_custom_algorithm_set_is_reproducible_with_same_seed(
     reduced_algorithms_runs: tuple[dict, dict],
 ) -> None:
     first, second = reduced_algorithms_runs
-    assert _comparable(first) == _comparable(second)
+    assert comparable_report(first) == comparable_report(second)
 
 
 def test_custom_split_ratios_are_reproducible_with_same_seed(
     custom_ratio_runs: tuple[dict, dict],
 ) -> None:
     first, second = custom_ratio_runs
-    assert _comparable(first) == _comparable(second)
+    assert comparable_report(first) == comparable_report(second)
 
 
 def test_custom_split_ratios_change_results_vs_default_ratios(
@@ -74,4 +71,4 @@ def test_custom_split_ratios_change_results_vs_default_ratios(
         custom_ratio_report["splits"]["train"]["rows"]
         != default_ratio_report["splits"]["train"]["rows"]
     )
-    assert _comparable(custom_ratio_report) != _comparable(default_ratio_report)
+    assert comparable_report(custom_ratio_report) != comparable_report(default_ratio_report)
