@@ -192,8 +192,13 @@ def load_training_data(
     )
 
 
-def split_by_purchase_time(orders: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Chia 70/15/15 theo thời điểm đặt hàng, không trộn ngẫu nhiên.
+def split_by_purchase_time(
+    orders: pd.DataFrame,
+    *,
+    train_ratio: float = 0.70,
+    validation_ratio: float = 0.15,
+) -> dict[str, pd.DataFrame]:
+    """Chia theo thời điểm đặt hàng (mặc định 70/15/15), không trộn ngẫu nhiên.
 
     Trộn ngẫu nhiên cho điểm đánh giá đẹp hơn nhiều nhưng là giả: mô hình thật luôn
     dự đoán cho đơn đặt SAU mọi đơn nó đã học. Tỷ lệ trễ của Olist tụt từ 7,8% xuống
@@ -201,8 +206,8 @@ def split_by_purchase_time(orders: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """
     ordered = orders.sort_values(["purchased_at", "order_id"], kind="mergesort")
     total = len(ordered)
-    train_end = int(total * 0.70)
-    validation_end = train_end + int(total * 0.15)
+    train_end = int(total * train_ratio)
+    validation_end = train_end + int(total * validation_ratio)
     return {
         "train": ordered.iloc[:train_end].reset_index(drop=True),
         "validation": ordered.iloc[train_end:validation_end].reset_index(drop=True),

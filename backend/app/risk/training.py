@@ -2,6 +2,7 @@
 
 import csv
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-from app.risk.candidates import ALGORITHMS, QUANTILES, FeatureEncoder
+from app.risk.candidates import ALGORITHMS, QUANTILES, FeatureEncoder, StageModel
 from app.risk.dataset import (
     STAGES,
     TrainingData,
@@ -110,7 +111,9 @@ def sweep_thresholds(probabilities: np.ndarray, truth: np.ndarray) -> dict:
     return scored[best]
 
 
-def _build_splits(data: TrainingData) -> dict[str, Split]:
+def _build_splits(
+    data: TrainingData, *, train_ratio: float, validation_ratio: float
+) -> dict[str, Split]:
     features = build_features(data.orders, data.lines, data.payments, data.zip_coords)
 
     # Bỏ các cột nhãn mà tầng đặc trưng mang theo rồi nối lại toàn bộ nhãn một lượt:
@@ -125,7 +128,9 @@ def _build_splits(data: TrainingData) -> dict[str, Split]:
     )
 
     splits = {}
-    for name, part in split_by_purchase_time(data.orders).items():
+    for name, part in split_by_purchase_time(
+        data.orders, train_ratio=train_ratio, validation_ratio=validation_ratio
+    ).items():
         keep = set(part["order_id"])
         orders = order_level[order_level["order_id"].isin(keep)].sort_values("order_id")
         orders = orders.reset_index(drop=True)
@@ -150,11 +155,13 @@ def _build_splits(data: TrainingData) -> dict[str, Split]:
     return splits
 
 
-def _fit_models(encoder: FeatureEncoder, algorithm: str, train: Split) -> dict:
+def _fit_models(
+    encoder: FeatureEncoder, factory: Callable[[], StageModel], train: Split
+) -> dict:
     models = {}
     for stage in STAGES:
         frame = train.orders if STAGE_GRAIN[stage] == "order" else train.sellers
-        model = ALGORITHMS[algorithm]()
+        model = factory()
         model.fit(encoder.transform(frame), frame[stage].to_numpy(dtype=float))
         models[stage] = model
     return models
@@ -235,36 +242,43 @@ def _apply_chosen_threshold(report: dict, threshold: float, predictions: dict, s
         )
 
 
-def train(model_dir: Path, *, sample_step: int = 1) -> dict[str, Any]:
+def train(
+    model_dir: Path,
+    *,
+    sample_step: int = 1,
+    algorithms: Mapping[str, Callable[[], StageModel]] = ALGORITHMS,
+    train_ratio: float = 0.70,
+    validation_ratio: float = 0.15,
+) -> dict[str, Any]:
     data = load_training_data(sample_step=sample_step)
-    splits = _build_splits(data)
+    splits = _build_splits(data, train_ratio=train_ratio, validation_ratio=validation_ratio)
 
     encoder = FeatureEncoder().fit(splits["train"].orders)
 
-    algorithms: dict[str, Any] = {}
+    evaluations: dict[str, Any] = {}
     fitted: dict[str, dict] = {}
     test_predictions: dict[str, dict] = {}
 
-    for algorithm in ALGORITHMS:
-        models = _fit_models(encoder, algorithm, splits["train"])
+    for name, factory in algorithms.items():
+        models = _fit_models(encoder, factory, splits["train"])
         evaluation, predictions = _evaluate(models, encoder, splits)
 
         threshold = evaluation["validation"]["order_placed"]["threshold"]
         _apply_chosen_threshold(evaluation, threshold, predictions, splits)
 
-        algorithms[algorithm] = evaluation
-        fitted[algorithm] = models
-        test_predictions[algorithm] = predictions
+        evaluations[name] = evaluation
+        fitted[name] = models
+        test_predictions[name] = predictions
 
     # Chọn theo F1 cao nhất ở mốc ĐẶT HÀNG trên tập KIỂM TRA, ngưỡng lấy từ tập KIỂM
     # ĐỊNH (ADR-0008). Phản xạ quen thuộc là chọn cả hai trên kiểm định; ở đây khác đi
     # có chủ đích, và mốc đặt hàng là mốc khó nhất đồng thời là lúc can thiệp còn giá
     # trị nhất.
     selected = max(
-        algorithms, key=lambda name: algorithms[name]["test"]["order_placed"]["best_f1"]
+        evaluations, key=lambda name: evaluations[name]["test"]["order_placed"]["best_f1"]
     )
-    suggested_threshold = algorithms[selected]["validation"]["order_placed"]["threshold"]
-    achieved = algorithms[selected]["test"]["order_placed"]["at_selected_threshold"]["f1"]
+    suggested_threshold = evaluations[selected]["validation"]["order_placed"]["threshold"]
+    achieved = evaluations[selected]["test"]["order_placed"]["at_selected_threshold"]["f1"]
 
     model_version = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     # Ảnh chụp lịch sử người bán trên TOÀN BỘ dữ liệu, khác hẳn cửa sổ giãn dần dùng
@@ -304,7 +318,7 @@ def train(model_dir: Path, *, sample_step: int = 1) -> dict[str, Any]:
             for name, split in splits.items()
         },
         "excluded_orders": data.excluded,
-        "algorithms": algorithms,
+        "algorithms": evaluations,
     }
 
     bundle = ModelBundle(
