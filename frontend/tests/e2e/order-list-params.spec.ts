@@ -86,6 +86,8 @@ const ALL_FILTERS = {
   delivered_to: "2018-01-31",
   customer_state: "SP",
   seller_id: "6560211a19b47992c3666cc44a7e94c0",
+  risk_level: "high",
+  handling_status: "unhandled",
 };
 
 test("bộ lọc hợp lệ đi qua nguyên vẹn, tên tham số trùng GET /orders", () => {
@@ -98,6 +100,8 @@ test("bộ lọc hợp lệ đi qua nguyên vẹn, tên tham số trùng GET /or
     delivered: { from: "2018-01-01", to: "2018-01-31" },
     customerState: "SP",
     sellerId: "6560211a19b47992c3666cc44a7e94c0",
+    riskLevel: "high",
+    handlingStatus: "unhandled",
   });
   expect(Object.fromEntries(new URLSearchParams(toOrderListQuery(params)))).toEqual(
     ALL_FILTERS,
@@ -117,6 +121,16 @@ test("trạng thái hay kết quả giao lạ thì bỏ qua bộ lọc đó", ()
 
   expect(filters.orderStatus).toBeNull();
   expect(filters.deliveryOutcome).toBeNull();
+});
+
+test("mức rủi ro hay trạng thái xử lý lạ thì bỏ qua bộ lọc đó", () => {
+  const { filters } = parseOrderListParams({
+    risk_level: "medium",
+    handling_status: "closed",
+  });
+
+  expect(filters.riskLevel).toBeNull();
+  expect(filters.handlingStatus).toBeNull();
 });
 
 test("khoảng ngày thiếu một đầu, sai ngày hay ngược chiều thì bỏ cả khoảng", () => {

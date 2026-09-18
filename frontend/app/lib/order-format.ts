@@ -28,6 +28,16 @@ export const OUTCOME_CLASS: Record<DeliveryOutcome, string> = {
   no_outcome: "text-muted-foreground",
 };
 
+// Dùng chung bởi cột Risk Level của danh sách đơn (order-list.tsx) và badge trên trang chi
+// tiết (order-risk-assessment.tsx) — hai nơi phải luôn cùng một màu cho cùng một mức rủi ro.
+export type RiskLevel = "high" | "low" | "not_assessed";
+
+export const RISK_LEVEL_CLASS: Record<RiskLevel, string> = {
+  high: "border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400",
+  low: "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  not_assessed: "text-muted-foreground",
+};
+
 // datetime-local đọc và ghi giờ theo giờ máy (không có múi giờ), nên phải tự lắp chuỗi
 // theo giờ địa phương — toISOString() trả UTC sẽ lệch giờ hiện trên ô nhập. Chiều ngược
 // với utcTimestamp: ở đây đầu vào là một thời điểm thật (Date), không phải dấu thời gian

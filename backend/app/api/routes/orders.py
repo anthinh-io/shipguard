@@ -28,11 +28,13 @@ from app.services.order_notes import (
 from app.services.orders import (
     PAGE_SIZE,
     DeliveryOutcome,
+    HandlingStatus,
     OrderDetail,
     OrderFilters,
     OrderList,
     OrderSort,
     OrderStatus,
+    RiskLevel,
     SortDirection,
     export_orders_csv,
     get_order_detail,
@@ -95,6 +97,8 @@ def order_query(
     # nhận hàng, không phải bang người bán.
     customer_state: str | None = None,
     seller_id: str | None = None,
+    risk_level: RiskLevel | None = None,
+    handling_status: HandlingStatus | None = None,
     sort: OrderSort = "purchased_at",
     direction: SortDirection = "desc",
 ) -> OrderQuery:
@@ -107,6 +111,8 @@ def order_query(
             delivered=_day_range("delivered", delivered_from, delivered_to),
             customer_state=customer_state,
             seller_id=seller_id,
+            risk_level=risk_level,
+            handling_status=handling_status,
         ),
         sort=sort,
         direction=direction,

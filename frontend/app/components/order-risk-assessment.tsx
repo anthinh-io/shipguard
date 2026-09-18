@@ -9,6 +9,7 @@ import {
   type InterventionType,
   type LifecycleActionResult,
 } from "@/app/lib/order-lifecycle-api";
+import { RISK_LEVEL_CLASS } from "@/app/lib/order-format";
 import { Field, Section } from "./order-detail";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -75,11 +76,6 @@ const STAGE_LABEL_KEY: Record<string, string> = {
   payment_approval: "stages.paymentApproval",
   seller_handling: "stages.sellerHandling",
   carrier_transit: "stages.carrierTransit",
-};
-
-const RISK_LEVEL_CLASS: Record<"high" | "low", string> = {
-  high: "border-red-600/30 bg-red-500/10 text-red-700 dark:text-red-400",
-  low: "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
 };
 
 type Failure =

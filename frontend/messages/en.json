@@ -87,6 +87,7 @@
       "orderId": "Order ID",
       "status": "Status",
       "outcome": "Delivery outcome",
+      "riskLevel": "Risk level",
       "purchasedAt": "Purchased",
       "estimatedDeliveryDate": "Estimated delivery",
       "deliveredAt": "Delivered",
@@ -108,6 +109,15 @@
       "late": "Late",
       "no_outcome": "No outcome yet"
     },
+    "riskLevel": {
+      "high": "High Risk",
+      "low": "Low Risk",
+      "not_assessed": "Not assessed"
+    },
+    "handlingStatus": {
+      "unhandled": "Unhandled",
+      "handled": "Handled"
+    },
     "noMatch": "No order ID starts with “{orderId}”.",
     "noMatchFilters": "No orders match the selected filters.",
     "filters": {
@@ -119,6 +129,10 @@
       "purchasedPlaceholder": "Purchase date",
       "deliveredRange": "Delivery date range",
       "deliveredPlaceholder": "Delivery date",
+      "riskLevel": "Risk level",
+      "allRiskLevels": "All risk levels",
+      "handlingStatus": "Handling status",
+      "allHandlingStatuses": "All handling statuses",
       "clearAll": "Clear all filters"
     },
     "pageEmpty": "There are no orders on this page.",

@@ -29,6 +29,7 @@ HEADER = [
     "delivered_at",
     "customer_state",
     "order_value",
+    "risk_level",
 ]
 
 pytestmark = pytest.mark.usefixtures("derived_data")

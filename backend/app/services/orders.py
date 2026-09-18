@@ -28,6 +28,13 @@ EXPORT_BATCH = 1000
 OrderSort = Literal["purchased_at", "estimated_delivery_date", "delivered_at", "order_value"]
 SortDirection = Literal["asc", "desc"]
 
+# Risk Level và trạng thái xử lý (#36) đều tính trên lần đánh giá MỚI NHẤT của đơn — cùng
+# tiêu chí phá thế hoà (assessed_at DESC, id DESC) với list_risk_assessments/
+# _superseded_clause trong risk_assessments.py. Không tái dùng thẳng hai hàm đó: import
+# ngược từ đây sang risk_assessments.py sẽ khép vòng (xem chú thích đầu risk_assessments.py).
+RiskLevel = Literal["high", "low", "not_assessed"]
+HandlingStatus = Literal["unhandled", "handled"]
+
 # Order Status theo CONTEXT.md: đúng tám giá trị sàn ghi nhận.
 OrderStatus = Literal[
     "created",
@@ -73,6 +80,9 @@ class OrderListItem(BaseModel):
     delivered_at: datetime | None
     customer_state: str
     order_value: float | None
+    # Cột duy nhất cần thêm cho #36: field mới ở đây tự thành cột CSV qua
+    # export_orders_csv (đọc model_fields), không cần sửa gì thêm ở đó.
+    risk_level: RiskLevel
 
 
 class OrderList(BaseModel):
@@ -92,6 +102,49 @@ class OrderFilters(BaseModel):
     delivered: tuple[date, date] | None = None
     customer_state: str | None = None
     seller_id: str | None = None
+    risk_level: RiskLevel | None = None
+    handling_status: HandlingStatus | None = None
+
+
+# Lần đánh giá mới nhất của mỗi đơn, tối đa một dòng — LATERAL chứ không JOIN thường: JOIN
+# thường nhân dòng với đơn có nhiều lần đánh giá, làm sai cả total lẫn số dòng trả về, cùng
+# cạm bẫy sold_by đã cảnh báo ở queries.py. LATERAL là bắt buộc chứ không phải lựa chọn:
+# subquery tương quan tới orders.c.order_id (một FROM khác trong cùng câu lệnh) chỉ hợp lệ
+# trên Postgres khi có từ khoá LATERAL.
+_latest_assessment = (
+    sa.select(
+        risk_assessments.c.is_high_risk,
+        risk_assessments.c.intervention,
+    )
+    .where(risk_assessments.c.order_id == orders.c.order_id)
+    .order_by(risk_assessments.c.assessed_at.desc(), risk_assessments.c.id.desc())
+    .limit(1)
+    .lateral("latest_assessment")
+)
+
+# FROM dùng chung bởi list_orders (câu đếm) và _list_statement (câu chọn dòng) — hai câu
+# phải cùng một FROM/JOIN, không thì total và items lệch nhau khi risk_level/handling_status
+# tham gia lọc.
+_ORDERS_WITH_LATEST_ASSESSMENT = orders.outerjoin(_latest_assessment, sa.true())
+
+# is_high_risk là NOT NULL trên risk_assessments, nên NULL ở đây chỉ có thể do LEFT JOIN
+# không khớp dòng nào — tức đơn chưa từng được đánh giá.
+_RISK_LEVEL = sa.case(
+    (_latest_assessment.c.is_high_risk.is_(None), "not_assessed"),
+    (_latest_assessment.c.is_high_risk.is_(True), "high"),
+    else_="low",
+)
+
+# Đúng định nghĩa needs_handling của list_risk_assessments (risk_assessments.py): lần đánh
+# giá mới nhất, chưa có Intervention, đơn chưa hủy. Chỉ nhánh "chưa xử lý" loại đơn đã hủy —
+# "đã xử lý" thì không, một Intervention đã ghi vẫn là đã ghi dù đơn sau đó bị hủy.
+_IS_UNHANDLED = sa.and_(
+    _latest_assessment.c.is_high_risk.is_not(None),
+    _latest_assessment.c.intervention.is_(None),
+    orders.c.order_status != "canceled",
+)
+
+_IS_HANDLED = _latest_assessment.c.intervention.is_not(None)
 
 
 def _where(filters: OrderFilters) -> list[sa.ColumnElement[bool]]:
@@ -114,6 +167,10 @@ def _where(filters: OrderFilters) -> list[sa.ColumnElement[bool]]:
         clauses.append(orders.c.customer_state == filters.customer_state)
     if filters.seller_id is not None:
         clauses.append(sold_by(filters.seller_id))
+    if filters.risk_level is not None:
+        clauses.append(_RISK_LEVEL == filters.risk_level)
+    if filters.handling_status is not None:
+        clauses.append(_IS_UNHANDLED if filters.handling_status == "unhandled" else _IS_HANDLED)
     return clauses
 
 
@@ -138,7 +195,9 @@ def _list_statement(
             orders.c.order_value,
             orders.c.is_late,
             DELIVERED.label("is_delivered"),
+            _RISK_LEVEL.label("risk_level"),
         )
+        .select_from(_ORDERS_WITH_LATEST_ASSESSMENT)
         .where(*_where(filters))
         # order_id phá hoà để lật trang không trả trùng hay bỏ sót đơn.
         .order_by(ordering, orders.c.order_id)
@@ -155,6 +214,7 @@ def _to_item(row: sa.Row) -> OrderListItem:
         delivered_at=row.delivered_to_customer_at,
         customer_state=row.customer_state,
         order_value=row.order_value,
+        risk_level=row.risk_level,
     )
 
 
@@ -167,8 +227,12 @@ async def list_orders(
     page: int,
 ) -> OrderList:
     """Một trang danh sách đơn khớp mọi điều kiện trong `filters` cùng lúc."""
+    # Cùng FROM với _list_statement: risk_level/handling_status lọc trên dòng đã LEFT JOIN
+    # LATERAL, nên câu đếm phải qua đúng JOIN đó thì total mới khớp items.
     total = await session.scalar(
-        sa.select(sa.func.count()).select_from(orders).where(*_where(filters))
+        sa.select(sa.func.count())
+        .select_from(_ORDERS_WITH_LATEST_ASSESSMENT)
+        .where(*_where(filters))
     )
     rows = (
         await session.execute(

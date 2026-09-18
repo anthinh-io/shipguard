@@ -58,6 +58,7 @@ async def test_default_is_the_newest_page_of_every_order(
         "delivered_at",
         "customer_state",
         "order_value",
+        "risk_level",
     }
     newest = await session.scalar(text("SELECT max(purchased_at) FROM orders"))
     assert body["items"][0]["purchased_at"] == newest.isoformat()

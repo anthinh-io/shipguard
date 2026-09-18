@@ -18,6 +18,8 @@ const FILTER_PARAMS = [
   "delivered_to",
   "customer_state",
   "seller_id",
+  "risk_level",
+  "handling_status",
 ];
 
 test.beforeEach(async ({ context }) => {
@@ -42,7 +44,7 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-function item(n: number) {
+function item(n: number, overrides: Record<string, string | number | null> = {}) {
   return {
     order_id: `${n.toString(16).padStart(8, "0")}${"b".repeat(24)}`,
     order_status: "shipped",
@@ -52,6 +54,8 @@ function item(n: number) {
     delivered_at: null,
     customer_state: "SP",
     order_value: 100.5,
+    risk_level: "not_assessed",
+    ...overrides,
   };
 }
 
@@ -64,6 +68,13 @@ function totalFor(url: URL): number {
   }
   if (url.searchParams.get("delivery_outcome") === "late" && active.length === 1) {
     return 6534;
+  }
+  if (
+    url.searchParams.get("risk_level") === "high" &&
+    url.searchParams.get("handling_status") === "unhandled" &&
+    active.length === 2
+  ) {
+    return 12;
   }
   return active.length === 0 ? 99441 : 100 - active.length;
 }
@@ -125,6 +136,45 @@ test("lọc kết quả giao trễ thì danh sách báo 6.534 đơn", async ({ p
 
   await expect(page.getByTestId("orders-total")).toHaveText("6.534 đơn");
   await expect(page).toHaveURL(/delivery_outcome=late/);
+});
+
+test("lọc rủi ro cao và chưa xử lý thì URL mang cả hai tham số và tổng đổi theo", async ({
+  page,
+}) => {
+  const calls = await mockOrders(page);
+  await page.goto("/orders");
+
+  await pickOption(page, "filter-risk-level", "Rủi ro cao");
+  // Đợi lần lọc đầu ổn định trước khi lọc tiếp: onChange của ô thứ hai đóng lại filters từ
+  // props hiện tại, chọn quá nhanh sẽ chép lại bộ lọc cũ, làm mất risk_level vừa chọn.
+  await expect(page.getByTestId("orders-total")).toHaveText("99 đơn");
+  await pickOption(page, "filter-handling-status", "Chưa xử lý");
+
+  await expect(page.getByTestId("orders-total")).toHaveText("12 đơn");
+  await expect(page).toHaveURL(/risk_level=high&handling_status=unhandled/);
+  expect(calls.at(-1)?.searchParams.get("risk_level")).toBe("high");
+  expect(calls.at(-1)?.searchParams.get("handling_status")).toBe("unhandled");
+});
+
+test("cột mức rủi ro hiện đúng badge theo giá trị của từng dòng", async ({ page }) => {
+  await page.route(ORDERS_API, (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          item(1, { risk_level: "high" }),
+          item(2, { risk_level: "low" }),
+          item(3, { risk_level: "not_assessed" }),
+        ],
+        total: 3,
+        page: 1,
+        page_size: 50,
+      },
+    }),
+  );
+  await page.goto("/orders");
+
+  const badges = page.getByTestId("order-risk-level");
+  await expect(badges).toHaveText(["Rủi ro cao", "Rủi ro thấp", "Chưa đánh giá"]);
 });
 
 test("mới chọn ngày bắt đầu thì chưa lọc, chọn đủ hai đầu mới lọc", async ({ page }) => {
@@ -244,7 +294,8 @@ test("mở đường liên kết đủ bộ lọc hay tải lại trang thì m�
     "/orders?order_status=shipped&delivery_outcome=no_outcome" +
     "&purchased_from=2017-01-01&purchased_to=2018-06-30" +
     "&delivered_from=2018-01-01&delivered_to=2018-01-31" +
-    `&customer_state=SP&seller_id=${SELLER_ID}`;
+    `&customer_state=SP&seller_id=${SELLER_ID}` +
+    "&risk_level=high&handling_status=unhandled";
 
   for (const open of [() => page.goto(link), () => page.reload()]) {
     await open();
@@ -259,7 +310,9 @@ test("mở đường liên kết đủ bộ lọc hay tải lại trang thì m�
     );
     await expect(page.getByTestId("filter-customer-state")).toContainText("SP");
     await expect(page.getByTestId("filter-seller")).toContainText("6560211a…");
-    await expect(page.getByTestId("orders-total")).toHaveText("92 đơn");
+    await expect(page.getByTestId("filter-risk-level")).toContainText("Rủi ro cao");
+    await expect(page.getByTestId("filter-handling-status")).toContainText("Chưa xử lý");
+    await expect(page.getByTestId("orders-total")).toHaveText("90 đơn");
     for (const name of FILTER_PARAMS) {
       expect(calls.at(-1)!.searchParams.has(name)).toBe(true);
     }
