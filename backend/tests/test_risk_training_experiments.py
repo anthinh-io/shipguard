@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.risk.candidates import SklearnQuantileStage
+from app.risk.candidates import LightGBMQuantileStage, SklearnQuantileStage
 from app.risk.training import REPORT_FILENAME, train
 from conftest import comparable_report
 
@@ -72,3 +72,14 @@ def test_custom_split_ratios_change_results_vs_default_ratios(
         != default_ratio_report["splits"]["train"]["rows"]
     )
     assert comparable_report(custom_ratio_report) != comparable_report(default_ratio_report)
+
+
+def test_custom_algorithm_set_can_include_lightgbm(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    report = _train(
+        tmp_path_factory,
+        algorithms={"lightgbm_quantile": partial(LightGBMQuantileStage, n_estimators=5)},
+    )
+    assert set(report["algorithms"]) == {"lightgbm_quantile"}
+    assert report["selected_algorithm"] == "lightgbm_quantile"

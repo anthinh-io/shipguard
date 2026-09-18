@@ -1,9 +1,18 @@
+from functools import partial
+
+import numpy as np
+import pandas as pd
+import pytest
+
 from app.risk.candidates import (
     ALGORITHMS,
+    QUANTILES,
+    LightGBMQuantileStage,
     SklearnQuantileStage,
     XGBAftStage,
     XGBQuantileStage,
 )
+from app.risk.features import FEATURES
 
 
 def test_xgb_quantile_stage_defaults_match_production() -> None:
@@ -67,3 +76,46 @@ def test_algorithms_are_zero_argument_factories() -> None:
     instantiated = {name: factory() for name, factory in ALGORITHMS.items()}
 
     assert set(instantiated) == {"xgboost_quantile", "xgboost_aft", "sklearn_quantile"}
+
+
+def test_lightgbm_is_not_in_the_default_algorithm_set() -> None:
+    assert "lightgbm_quantile" not in ALGORITHMS
+    assert LightGBMQuantileStage not in ALGORITHMS.values()
+
+
+def test_lightgbm_quantile_stage_accepts_custom_hyperparameters() -> None:
+    stage = LightGBMQuantileStage(n_estimators=5, learning_rate=0.5, max_depth=2)
+
+    for model in stage._models:
+        params = model.get_params()
+        assert params["n_estimators"] == 5
+        assert params["learning_rate"] == 0.5
+        assert params["max_depth"] == 2
+
+
+def _synthetic_features(rows: int = 40) -> tuple[pd.DataFrame, np.ndarray]:
+    rng = np.random.default_rng(0)
+    features = pd.DataFrame(
+        rng.uniform(1.0, 10.0, size=(rows, len(FEATURES))), columns=list(FEATURES)
+    )
+    target = rng.uniform(1.0, 10.0, size=rows)
+    return features, target
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        partial(XGBQuantileStage, n_estimators=5),
+        partial(XGBAftStage, num_boost_round=5),
+        partial(SklearnQuantileStage, max_iter=5),
+        partial(LightGBMQuantileStage, n_estimators=5),
+    ],
+)
+def test_stage_predicts_a_quantile_grid_shaped_like_its_siblings(factory) -> None:
+    features, target = _synthetic_features()
+    stage = factory()
+    stage.fit(features, target)
+
+    grid = stage.predict_quantiles(features)
+
+    assert grid.shape == (len(features), len(QUANTILES))
