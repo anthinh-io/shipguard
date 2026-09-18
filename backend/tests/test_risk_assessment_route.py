@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from fake_risk import FakePredictor
 from httpx import AsyncClient
-from sqlalchemy import insert, text, update
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_predictor
@@ -158,19 +158,22 @@ async def test_needs_handling_flags_only_the_latest_high_risk_assessment_without
 
 
 async def test_needs_handling_is_false_once_an_intervention_is_recorded(
-    client: AsyncClient, staff_id: int, session: AsyncSession
+    client: AsyncClient, staff_id: int
 ) -> None:
     app.dependency_overrides[get_predictor] = lambda: FakePredictor(late_probability=0.9)
     headers = await bearer(client, STAFF)
     create_response = await client.post("/orders", json=_payload(), headers=headers)
     order_id = create_response.json()["order_id"]
+    assessment_id = create_response.json()["risk_assessment"]["id"]
 
-    await session.execute(
-        update(risk_assessments)
-        .where(risk_assessments.c.order_id == order_id)
-        .values(intervention="remind_seller")
+    # Đường ghi thật (#35) thay cho UPDATE thô — endpoint chưa tồn tại lúc bài này viết lần
+    # đầu (#31).
+    intervention_response = await client.post(
+        f"/risk-assessments/{assessment_id}/intervention",
+        json={"intervention": "remind_seller"},
+        headers=headers,
     )
-    await session.commit()
+    assert intervention_response.status_code == 201, intervention_response.text
 
     response = await client.get(f"/orders/{order_id}/risk-assessments", headers=headers)
 

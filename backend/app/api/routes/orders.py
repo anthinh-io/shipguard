@@ -40,8 +40,11 @@ from app.services.orders import (
     list_orders,
 )
 from app.services.risk_assessments import (
+    AssessmentNotFoundError,
     CreatedOrder,
+    InterventionConflictError,
     InvalidOrderError,
+    NewIntervention,
     NewOrder,
     ProductCategory,
     RiskAssessmentOut,
@@ -49,6 +52,7 @@ from app.services.risk_assessments import (
     create_new_order,
     list_product_categories,
     list_risk_assessments,
+    record_intervention,
 )
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(get_current_user)])
@@ -291,3 +295,26 @@ async def customer_states(session: SessionDep) -> list[str]:
 @router.get("/product-categories", response_model=list[ProductCategory])
 async def product_categories(session: SessionDep) -> list[ProductCategory]:
     return await list_product_categories(session)
+
+
+# Ghi nhận Intervention cho một Risk Assessment High Risk — #35. Cấp gốc theo mã lần đánh
+# giá, không nằm dưới /orders: cùng lý do với /customer-states, /product-categories.
+@router.post(
+    "/risk-assessments/{assessment_id}/intervention",
+    response_model=RiskAssessmentOut,
+    status_code=201,
+)
+async def record_assessment_intervention(
+    assessment_id: int,
+    payload: NewIntervention,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+) -> RiskAssessmentOut:
+    try:
+        return await record_intervention(session, assessment_id, payload, current_user.user_id)
+    except AssessmentNotFoundError:
+        raise HTTPException(status_code=404, detail="Risk assessment not found") from None
+    except InterventionConflictError as error:
+        raise HTTPException(
+            status_code=409, detail={"code": error.code, "message": error.message}
+        ) from None

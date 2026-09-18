@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.auth import users
 from app.models.derived import (
     order_items,
     order_payments,
@@ -135,6 +136,73 @@ class RiskCauseOut(BaseModel):
     excess_days: float
 
 
+InterventionType = Literal[
+    "remind_seller", "change_carrier", "contact_payment", "notify_customer", "other"
+]
+
+# Ghi chú tuỳ chọn — không có min_length, khác NoteBody của Internal Note (order_notes.py)
+# vốn bắt buộc >=1. Rỗng sau khi cắt khoảng trắng thì lưu NULL (record_intervention), không
+# lưu chuỗi rỗng, để "không có ghi chú" không lẫn với "ghi chú rỗng".
+InterventionNote = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
+
+
+class NewIntervention(BaseModel):
+    intervention: InterventionType
+    note: InterventionNote = ""
+
+
+class InterventionOut(BaseModel):
+    intervention: InterventionType
+    note: str | None
+    handled_by: str
+    handled_at: datetime
+
+
+class AssessmentNotFoundError(Exception):
+    """404: assessment_id không tồn tại."""
+
+
+class InterventionConflictError(Exception):
+    """409, cùng hình dạng (code, message) với LifecycleConflictError của order_lifecycle.py.
+
+    Không import lại lớp đó — risk_assessments.py là module lá mà order_lifecycle.py import
+    TỪ, import ngược lại sẽ khép vòng (xem chú thích đầu order_lifecycle.py).
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
+class AssessmentAlreadyHandledError(InterventionConflictError):
+    def __init__(self, assessment_id: int) -> None:
+        super().__init__(
+            "already_handled",
+            f"Risk assessment {assessment_id} already has an intervention recorded",
+        )
+
+
+class AssessmentNotHighRiskError(InterventionConflictError):
+    def __init__(self, assessment_id: int) -> None:
+        super().__init__("not_high_risk", f"Risk assessment {assessment_id} is not High Risk")
+
+
+class AssessmentSupersededError(InterventionConflictError):
+    def __init__(self, assessment_id: int) -> None:
+        super().__init__(
+            "assessment_superseded",
+            f"Risk assessment {assessment_id} has been superseded by a newer assessment",
+        )
+
+
+class AssessmentOrderCanceledError(InterventionConflictError):
+    def __init__(self, assessment_id: int) -> None:
+        super().__init__(
+            "order_canceled", f"The order for risk assessment {assessment_id} has been canceled"
+        )
+
+
 class RiskAssessmentOut(BaseModel):
     id: int
     checkpoint: str
@@ -150,6 +218,8 @@ class RiskAssessmentOut(BaseModel):
     # và chưa có Intervention — list_risk_assessments tính, insert_assessment luôn False
     # vì dòng vừa tạo luôn là mới nhất và chưa thể có Intervention.
     needs_handling: bool = False
+    # Handled (CONTEXT.md, #35): None cho tới khi ghi Intervention.
+    intervention: InterventionOut | None = None
 
 
 class CreatedOrder(BaseModel):
@@ -190,7 +260,31 @@ def _risk_cause(row: sa.Row) -> RiskCauseOut:
     )
 
 
+_handler = users.alias("handler")
+
+# Dùng chung bởi list_risk_assessments và record_intervention (đọc lại sau UPDATE). LEFT
+# JOIN vì handled_by NULL ở mọi đánh giá chưa xử lý — tên người xử lý đọc lúc truy vấn chứ
+# không chép vào bản ghi, cùng nguyên tắc với _NOTE_COLUMNS của order_notes.py: User không
+# bao giờ bị xóa, chỉ bị khóa (CONTEXT.md, mục Locked User).
+_ASSESSMENT_COLUMNS = sa.select(
+    risk_assessments, _handler.c.display_name.label("handled_by_display_name")
+).select_from(
+    risk_assessments.outerjoin(_handler, _handler.c.id == risk_assessments.c.handled_by)
+)
+
+
 def _to_assessment(row: sa.Row, *, needs_handling: bool = False) -> RiskAssessmentOut:
+    # row.handled_by_display_name chỉ đọc khi có Intervention — nhánh này không bao giờ
+    # chạy với dòng insert_assessment trả về (vừa tạo, intervention luôn NULL), nên
+    # .returning(risk_assessments) của insert_assessment không cần JOIN thêm gì.
+    intervention = None
+    if row.intervention is not None:
+        intervention = InterventionOut(
+            intervention=row.intervention,
+            note=row.intervention_note,
+            handled_by=row.handled_by_display_name,
+            handled_at=row.handled_at,
+        )
     return RiskAssessmentOut(
         id=row.id,
         checkpoint=row.checkpoint,
@@ -202,6 +296,7 @@ def _to_assessment(row: sa.Row, *, needs_handling: bool = False) -> RiskAssessme
         risk_cause=_risk_cause(row),
         was_correct=row.was_correct,
         needs_handling=needs_handling,
+        intervention=intervention,
     )
 
 
@@ -480,8 +575,7 @@ async def list_risk_assessments(
         return None
     rows = (
         await session.execute(
-            sa.select(risk_assessments)
-            .where(risk_assessments.c.order_id == order_id)
+            _ASSESSMENT_COLUMNS.where(risk_assessments.c.order_id == order_id)
             # id phá thế hoà khi hai lần đánh giá trùng thời điểm.
             .order_by(risk_assessments.c.assessed_at.desc(), risk_assessments.c.id.desc())
         )
@@ -501,6 +595,111 @@ async def list_risk_assessments(
         )
         for index, row in enumerate(rows)
     ]
+
+
+def _superseded_clause(alias_name: str = "newer") -> sa.ColumnElement[bool]:
+    """EXISTS một dòng khác cùng order_id có (assessed_at, id) lớn hơn — cùng phép so mà
+    list_risk_assessments dùng để xếp mới nhất lên đầu. Dùng chung bởi record_intervention
+    (điều kiện ghi) và _load_assessment_for_intervention (chẩn đoán khi ghi thất bại).
+    """
+    newer = risk_assessments.alias(alias_name)
+    return sa.exists(
+        sa.select(1).where(
+            newer.c.order_id == risk_assessments.c.order_id,
+            sa.tuple_(newer.c.assessed_at, newer.c.id)
+            > sa.tuple_(risk_assessments.c.assessed_at, risk_assessments.c.id),
+        )
+    )
+
+
+async def _load_assessment_for_intervention(
+    session: AsyncSession, assessment_id: int
+) -> sa.Row | None:
+    """Chẩn đoán lý do UPDATE có điều kiện của record_intervention không khớp dòng nào:
+    None nếu assessment_id không tồn tại, ngược lại kèm order_status (JOIN orders —
+    risk_assessments không có khoá ngoại tới orders, xem app/models/risk.py) và cờ đã bị
+    thay thế.
+    """
+    return (
+        await session.execute(
+            sa.select(
+                risk_assessments.c.intervention,
+                risk_assessments.c.is_high_risk,
+                orders.c.order_status,
+                _superseded_clause().label("is_superseded"),
+            )
+            .select_from(
+                risk_assessments.join(orders, orders.c.order_id == risk_assessments.c.order_id)
+            )
+            .where(risk_assessments.c.id == assessment_id)
+        )
+    ).one_or_none()
+
+
+async def record_intervention(
+    session: AsyncSession,
+    assessment_id: int,
+    payload: NewIntervention,
+    current_user_id: int,
+) -> RiskAssessmentOut:
+    """Ghi Intervention cho một Risk Assessment High Risk — #35.
+
+    Bốn cổng — chưa xử lý, còn High Risk, đơn chưa hủy, chưa bị lần đánh giá mới hơn thay
+    thế — nằm hết trong WHERE của câu UPDATE, không tách thành kiểm tra trước rồi ghi sau,
+    để không đua tranh với record_milestone/edit_milestone (đang sinh dòng đánh giá mới)
+    hay cancel_order (đang hủy đơn) chạy cùng lúc — cùng idiom UPDATE có điều kiện + đọc lại
+    chẩn đoán khi 0 dòng khớp mà order_lifecycle.py (#33) dùng cho bốn thao tác vòng đời.
+    """
+    order_not_canceled = sa.exists(
+        sa.select(1).where(
+            orders.c.order_id == risk_assessments.c.order_id,
+            orders.c.order_status != "canceled",
+        )
+    )
+    # Tên người xử lý tương quan ngay trong RETURNING — một lượt round-trip duy nhất cho cả
+    # UPDATE lẫn phần dữ liệu JOIN mà _to_assessment cần, thay vì UPDATE xong rồi SELECT lại
+    # nguyên _ASSESSMENT_COLUMNS (đã có sẵn mọi cột khác từ chính câu UPDATE này).
+    handled_by_name = (
+        sa.select(users.c.display_name)
+        .where(users.c.id == risk_assessments.c.handled_by)
+        .scalar_subquery()
+    )
+
+    result = await session.execute(
+        sa.update(risk_assessments)
+        .where(
+            risk_assessments.c.id == assessment_id,
+            risk_assessments.c.intervention.is_(None),
+            risk_assessments.c.is_high_risk.is_(True),
+            ~_superseded_clause(),
+            order_not_canceled,
+        )
+        .values(
+            intervention=payload.intervention,
+            intervention_note=payload.note or None,
+            handled_by=current_user_id,
+            handled_at=sa.func.now(),
+        )
+        .returning(risk_assessments, handled_by_name.label("handled_by_display_name"))
+    )
+    row = result.one_or_none()
+
+    if row is None:
+        diagnosis = await _load_assessment_for_intervention(session, assessment_id)
+        if diagnosis is None:
+            raise AssessmentNotFoundError(assessment_id)
+        if diagnosis.intervention is not None:
+            raise AssessmentAlreadyHandledError(assessment_id)
+        if not diagnosis.is_high_risk:
+            raise AssessmentNotHighRiskError(assessment_id)
+        if diagnosis.order_status == "canceled":
+            raise AssessmentOrderCanceledError(assessment_id)
+        raise AssessmentSupersededError(assessment_id)
+
+    await session.commit()
+    # needs_handling luôn False ngay sau khi xử lý — dòng vừa ghi Intervention không còn là
+    # việc cần xử lý, bất kể có còn là mới nhất hay không.
+    return _to_assessment(row, needs_handling=False)
 
 
 async def list_product_categories(session: AsyncSession) -> list[ProductCategory]:
