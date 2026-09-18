@@ -704,6 +704,19 @@ uv run jupyter lab backend/notebooks/risk_model_analysis.ipynb
 Notebook chỉ đọc kết quả, không huấn luyện lại. Lưu nó với ô kết quả đã xoá sạch:
 số liệu đã nằm ở JSON và CSV rồi.
 
+### So sánh chất lượng giữa các lần thử nghiệm
+
+```bash
+uv run jupyter lab backend/notebooks/risk_model_experiment_comparison.ipynb
+```
+
+Ghép `evaluation_metrics.csv`/`evaluation_report.json` của mô hình sản xuất (`RISK_MODEL_DIR`) với
+báo cáo của mọi biến thể đã chạy bằng `train_risk_model_experiments.py`, thành bảng và biểu đồ so
+sánh Accuracy/F1/ROC-AUC theo (biến thể, thuật toán, mốc dự đoán). Chỉ đọc kết quả đã ghi trên đĩa —
+không gọi lại `train()`. Cần ít nhất một biến thể đã chạy xong trong `experiments/` trước khi mở.
+
+Lưu notebook với ô kết quả đã xoá sạch, cùng quy ước với notebook phân tích ở trên.
+
 ### Tệp mô hình
 
 `risk_model.joblib` là đối tượng Python tuần tự hoá bằng giao thức `pickle`; đuôi
