@@ -4,8 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { apiFetch } from "@/app/lib/api";
-import { Badge } from "./ui/badge";
+import {
+  recordIntervention,
+  type InterventionType,
+  type LifecycleActionResult,
+} from "@/app/lib/order-lifecycle-api";
 import { Field, Section } from "./order-detail";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Textarea } from "./ui/textarea";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -17,6 +34,13 @@ type RiskCause = {
   historical_median_days: number;
 };
 
+type InterventionInfo = {
+  intervention: InterventionType;
+  note: string | null;
+  handled_by: string;
+  handled_at: string;
+};
+
 type RiskAssessment = {
   id: number;
   checkpoint: string;
@@ -26,11 +50,22 @@ type RiskAssessment = {
   threshold_used: number;
   model_version: string;
   risk_cause: RiskCause;
-  // Reconciliation (#33): null cho tới khi đơn được ghi nhận đã giao. Không đọc
-  // needs_handling ở đây — thuộc phạm vi #35 (dựng nửa vời một khối "cần xử lý" chưa có
-  // nút xử lý nào đi kèm thì vô nghĩa).
+  // Reconciliation (#33): null cho tới khi đơn được ghi nhận đã giao.
   was_correct: boolean | null;
+  // Handled (CONTEXT.md, #35): chỉ true cho lần đánh giá mới nhất của đơn còn High Risk và
+  // chưa có Intervention — máy chủ tính sẵn (list_risk_assessments), không suy lại ở đây để
+  // luật "đã hủy"/"đã bị thay thế" chỉ nằm đúng một chỗ.
+  needs_handling: boolean;
+  intervention: InterventionInfo | null;
 };
+
+const INTERVENTION_TYPES: InterventionType[] = [
+  "remind_seller",
+  "change_carrier",
+  "contact_payment",
+  "notify_customer",
+  "other",
+];
 
 type SellerRef = { seller_id: string; seller_city: string; seller_state: string };
 
@@ -81,12 +116,16 @@ export function OrderRiskAssessment({
   orderId,
   sellers,
   refreshToken,
+  onActionSucceeded,
 }: {
   orderId: string;
   sellers: SellerRef[];
   // Tăng ở order-detail.tsx sau mỗi thao tác mốc/sửa mốc thành công, để buộc tải lại đúng
   // url này (ghi nhận mốc mới sinh thêm một dòng; giao hàng đối chiếu lại mọi dòng cũ).
   refreshToken?: number;
+  // Gọi sau khi ghi nhận Intervention thành công — cùng vai trò với prop cùng tên của
+  // OrderMilestoneActions: buộc order-detail.tsx tải lại đơn + lịch sử đánh giá.
+  onActionSucceeded: () => void;
 }) {
   const t = useTranslations("orderDetail");
   const tOrders = useTranslations("orders");
@@ -171,7 +210,11 @@ export function OrderRiskAssessment({
         </p>
       ) : (
         <div className="flex flex-col gap-4">
-          <AssessmentDetails assessment={state.history[0]} sellers={sellers} />
+          <AssessmentDetails
+            assessment={state.history[0]}
+            sellers={sellers}
+            onActionSucceeded={onActionSucceeded}
+          />
           {state.history.length > 1 ? (
             <div className="flex flex-col gap-3 border-t pt-4">
               <h3 className="text-sm font-medium">{t("riskAssessment.history.title")}</h3>
@@ -212,6 +255,30 @@ function OutcomeBadge({ wasCorrect, testId }: { wasCorrect: boolean | null; test
   );
 }
 
+// Biện pháp đã xử lý, cho cả dòng nổi bật (AssessmentDetails) lẫn dòng lịch sử (HistoryRow):
+// dòng lịch sử của kịch bản trọng tâm #35 (xử lý ở một mốc rồi bị mốc sau thay thế) mất hết
+// ý nghĩa "để đồng nghiệp biết đã làm gì" nếu không hiện lại được biện pháp đã ghi.
+function InterventionBadge({
+  intervention,
+  testId,
+}: {
+  intervention: InterventionInfo;
+  testId: string;
+}) {
+  const t = useTranslations("orderDetail");
+  return (
+    <Badge
+      data-testid={testId}
+      variant="outline"
+      className="border-blue-600/30 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+    >
+      {t("intervention.handledBadge", {
+        action: t(`intervention.types.${intervention.intervention}`),
+      })}
+    </Badge>
+  );
+}
+
 // Dòng lịch sử nhạt hơn dòng nổi bật: chỉ probability/badge/checkpoint/assessedAt/outcome,
 // không có nguyên nhân chi tiết (stage/seller) — đỡ rối khi một đơn có nhiều lần đánh giá.
 function HistoryRow({ assessment }: { assessment: RiskAssessment }) {
@@ -244,6 +311,12 @@ function HistoryRow({ assessment }: { assessment: RiskAssessment }) {
         wasCorrect={assessment.was_correct}
         testId="risk-assessment-history-outcome"
       />
+      {assessment.intervention ? (
+        <InterventionBadge
+          intervention={assessment.intervention}
+          testId="risk-assessment-history-intervention"
+        />
+      ) : null}
     </div>
   );
 }
@@ -251,9 +324,11 @@ function HistoryRow({ assessment }: { assessment: RiskAssessment }) {
 function AssessmentDetails({
   assessment,
   sellers,
+  onActionSucceeded,
 }: {
   assessment: RiskAssessment;
   sellers: SellerRef[];
+  onActionSucceeded: () => void;
 }) {
   const t = useTranslations("orderDetail");
   const format = useFormatter();
@@ -315,6 +390,165 @@ function AssessmentDetails({
           <OutcomeBadge wasCorrect={assessment.was_correct} testId="risk-assessment-outcome" />
         </Field>
       ) : null}
+      {assessment.intervention ? (
+        <>
+          <Field label={t("intervention.typeLabel")} testId="risk-assessment-intervention-type">
+            {t(`intervention.types.${assessment.intervention.intervention}`)}
+          </Field>
+          {assessment.intervention.note ? (
+            <Field label={t("intervention.noteLabel")} testId="risk-assessment-intervention-note">
+              {assessment.intervention.note}
+            </Field>
+          ) : null}
+          <Field label={t("intervention.handledBy")} testId="risk-assessment-intervention-handled-by">
+            {t("intervention.handledByLine", {
+              name: assessment.intervention.handled_by,
+              time: format.dateTime(new Date(assessment.intervention.handled_at), "localDateTime", {
+                timeZone,
+              }),
+            })}
+          </Field>
+        </>
+      ) : null}
+      {assessment.needs_handling ? (
+        <div className="pt-2">
+          <InterventionDialog assessmentId={assessment.id} onRecorded={onActionSucceeded} />
+        </div>
+      ) : null}
     </dl>
+  );
+}
+
+function InterventionDialog({
+  assessmentId,
+  onRecorded,
+}: {
+  assessmentId: number;
+  onRecorded: () => void;
+}) {
+  const t = useTranslations("orderDetail");
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<InterventionType | "">("");
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function genericErrorMessage(result: LifecycleActionResult): string {
+    // Cùng cách order-milestone-actions.tsx đọc lỗi 422: dùng thẳng msg máy chủ trả về thay
+    // vì đoán sẵn lý do — kiểm ở trình duyệt chỉ chặn được ghi chú quá dài, còn biện pháp
+    // ngoài danh sách (422 khác) vẫn có thể lọt tới máy chủ.
+    if (result.kind === "invalid") {
+      return result.errors[0]?.msg ?? t("intervention.errors.unreachable");
+    }
+    if (result.kind === "conflict") {
+      return t("intervention.errors.conflict");
+    }
+    return t("intervention.errors.unreachable");
+  }
+
+  async function handleSubmit() {
+    if (type === "") {
+      return;
+    }
+    // Cùng cách đếm ký tự Unicode với order-notes.tsx (Array.from, không phải .length),
+    // để khớp char_length của Postgres.
+    if (Array.from(note.trim()).length > 2000) {
+      setError(t("intervention.errors.tooLong"));
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    const result = await recordIntervention(assessmentId, type, note.trim());
+    setSubmitting(false);
+    if (result.kind === "ok") {
+      setOpen(false);
+      setType("");
+      setNote("");
+      onRecorded();
+      return;
+    }
+    // "conflict" cũng gọi onRecorded(): cùng quy ước với handleRecord/handleEdit/handleCancel
+    // của order-milestone-actions.tsx — câu errors.conflict tự nhận "trang đã được tải lại",
+    // nên bản thân nó phải kích tải lại thật, không chỉ hiện chữ suông. Dialog vẫn mở để lỗi
+    // còn chỗ hiện; assessmentId trong dialog có cũ thì lần gửi lại (nếu còn nút) cũng chỉ
+    // nhận đúng 409 tương ứng, không âm thầm ghi đè gì.
+    if (result.kind === "conflict") {
+      onRecorded();
+    }
+    setError(genericErrorMessage(result));
+  }
+
+  return (
+    <>
+      <Button
+        data-testid="intervention-open"
+        type="button"
+        size="sm"
+        onClick={() => setOpen(true)}
+      >
+        {t("intervention.open")}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next && !submitting) {
+            setOpen(false);
+          }
+        }}
+      >
+        <DialogContent data-testid="intervention-dialog">
+          <DialogHeader>
+            <DialogTitle>{t("intervention.dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("intervention.dialogDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm">{t("intervention.typeLabel")}</span>
+              <Select value={type} onValueChange={(value) => setType(value as InterventionType)}>
+                <SelectTrigger data-testid="intervention-type" className="w-full">
+                  <SelectValue placeholder={t("intervention.typePlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVENTION_TYPES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {t(`intervention.types.${value}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm">{t("intervention.noteLabel")}</span>
+              <Textarea
+                data-testid="intervention-note"
+                placeholder={t("intervention.notePlaceholder")}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="max-h-48 overflow-y-auto"
+              />
+            </label>
+            {error ? (
+              <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+                {error}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={submitting}>
+                {t("intervention.cancel")}
+              </Button>
+            </DialogClose>
+            <Button
+              data-testid="intervention-submit"
+              disabled={submitting || type === ""}
+              onClick={handleSubmit}
+            >
+              {submitting ? t("intervention.submitting") : t("intervention.submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

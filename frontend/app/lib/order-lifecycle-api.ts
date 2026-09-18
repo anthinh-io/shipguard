@@ -78,3 +78,24 @@ export async function cancelOrder(orderId: string): Promise<LifecycleActionResul
     { method: "POST" },
   );
 }
+
+export type InterventionType =
+  | "remind_seller"
+  | "change_carrier"
+  | "contact_payment"
+  | "notify_customer"
+  | "other";
+
+// Cấp gốc theo mã lần đánh giá, không nằm dưới /orders: mẫu chặn `${BACKEND_URL}/orders**`
+// của Playwright vượt cả dấu gạch chéo (backend/app/api/routes/orders.py).
+export async function recordIntervention(
+  assessmentId: number,
+  intervention: InterventionType,
+  note: string,
+): Promise<LifecycleActionResult> {
+  return requestLifecycleAction(`${BACKEND_URL}/risk-assessments/${assessmentId}/intervention`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ intervention, note }),
+  });
+}

@@ -194,6 +194,15 @@ export function OrderDetail({ orderId }: { orderId: string }) {
 
   const { data } = state;
 
+  // Cùng vai trò cho cả OrderMilestoneActions (ghi/sửa mốc, hủy đơn) và OrderRiskAssessment
+  // (ghi nhận Intervention, #35): buộc tải lại đơn + lịch sử đánh giá, máy chủ suy ra mọi
+  // trường phái sinh mà client không tái tạo đúng được.
+  function handleActionSucceeded() {
+    setRefreshFailed(false);
+    setRefreshing(true);
+    setRefreshToken((n) => n + 1);
+  }
+
   return (
     <div data-testid="order-detail">
       <header className="flex flex-col gap-2">
@@ -231,16 +240,13 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             timeline={data.timeline}
             refreshing={refreshing}
             refreshFailed={refreshFailed}
-            onActionSucceeded={() => {
-              setRefreshFailed(false);
-              setRefreshing(true);
-              setRefreshToken((n) => n + 1);
-            }}
+            onActionSucceeded={handleActionSucceeded}
           />
           <OrderRiskAssessment
             orderId={data.order_id}
             sellers={data.sellers}
             refreshToken={refreshToken}
+            onActionSucceeded={handleActionSucceeded}
           />
           <Items data={data} />
           <Sellers data={data} />

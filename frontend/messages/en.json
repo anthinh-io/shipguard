@@ -257,6 +257,33 @@
         "title": "Previous assessments"
       }
     },
+    "intervention": {
+      "open": "Record intervention",
+      "dialogTitle": "Record intervention",
+      "dialogDescription": "Record what was done about this high-risk order. Ship Guard only records this — it does not remind the seller or change the carrier automatically.",
+      "typeLabel": "Intervention",
+      "typePlaceholder": "Choose an intervention",
+      "types": {
+        "remind_seller": "Remind or prioritize the seller",
+        "change_carrier": "Change carrier",
+        "contact_payment": "Contact about payment",
+        "notify_customer": "Notify the customer",
+        "other": "Other"
+      },
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Add details for your colleagues…",
+      "submit": "Save",
+      "submitting": "Saving…",
+      "cancel": "Cancel",
+      "handledBy": "Handled by",
+      "handledByLine": "{name} · {time}",
+      "handledBadge": "Handled: {action}",
+      "errors": {
+        "conflict": "This assessment has changed since the page loaded. The page has been refreshed.",
+        "tooLong": "The note cannot be longer than 2,000 characters.",
+        "unreachable": "Could not reach the server. Please try again."
+      }
+    },
     "milestoneActions": {
       "title": "Milestones",
       "noActions": "No milestone action available for this order.",

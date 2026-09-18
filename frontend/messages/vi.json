@@ -257,6 +257,33 @@
         "title": "Các lần đánh giá trước"
       }
     },
+    "intervention": {
+      "open": "Ghi nhận xử lý",
+      "dialogTitle": "Ghi nhận xử lý",
+      "dialogDescription": "Ghi lại biện pháp đã thực hiện cho đơn rủi ro cao này. Ship Guard chỉ ghi nhận — không tự nhắc người bán hay đổi đơn vị vận chuyển.",
+      "typeLabel": "Biện pháp",
+      "typePlaceholder": "Chọn một biện pháp",
+      "types": {
+        "remind_seller": "Nhắc hoặc ưu tiên người bán",
+        "change_carrier": "Đổi đơn vị vận chuyển",
+        "contact_payment": "Liên hệ về thanh toán",
+        "notify_customer": "Thông báo khách",
+        "other": "Khác"
+      },
+      "noteLabel": "Ghi chú (tuỳ chọn)",
+      "notePlaceholder": "Ghi thêm chi tiết cho đồng nghiệp…",
+      "submit": "Lưu",
+      "submitting": "Đang lưu…",
+      "cancel": "Hủy",
+      "handledBy": "Người xử lý",
+      "handledByLine": "{name} · {time}",
+      "handledBadge": "Đã xử lý: {action}",
+      "errors": {
+        "conflict": "Lần đánh giá này đã đổi từ lúc tải trang. Trang đã được tải lại.",
+        "tooLong": "Ghi chú không được dài quá 2.000 ký tự.",
+        "unreachable": "Không kết nối được máy chủ. Vui lòng thử lại."
+      }
+    },
     "milestoneActions": {
       "title": "Mốc vòng đời",
       "noActions": "Đơn này không có thao tác mốc nào.",
