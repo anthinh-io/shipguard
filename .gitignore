@@ -19,4 +19,5 @@ __pycache__/
 # thêm thư mục đó vào đây: *.joblib chỉ che tệp mô hình, ba tệp báo cáo mang tên .json
 # và .csv thường nên không thể bắt bằng mẫu chung mà không che nhầm thứ khác.
 /models/
+/experiments/
 *.joblib
