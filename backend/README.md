@@ -661,6 +661,21 @@ Bốn tệp sinh ra trong `RISK_MODEL_DIR`:
 `.env`.** Lệnh cố ý không tự ghi vào cấu hình: ngưỡng là quyết định vận hành, và đổi
 nó làm mọi đơn được đánh giá từ đó trở đi đổi mức rủi ro.
 
+### Thử nhiều cấu hình huấn luyện (thử nghiệm)
+
+```bash
+uv run python -m app.scripts.train_risk_model_experiments
+```
+
+Chạy 10 biến thể liên tiếp — siêu tham số của ba thuật toán hiện có, một biến thể LightGBM, và vài
+tỷ lệ chia tập khác 70/15/15 — mỗi biến thể gọi đúng `train()` ở trên, không có đường huấn luyện
+riêng nào khác. Mất khoảng mười lần thời gian một lần huấn luyện sản xuất (~5 phút) cộng lại, tức
+xấp xỉ 45–60 phút cho toàn bộ.
+
+Kết quả ghi vào `experiments/<tên biến thể>/` ở gốc repo — **không phải** `RISK_MODEL_DIR`, nên
+không ảnh hưởng mô hình đang phục vụ backend. Danh sách biến thể khai báo trong
+`train_risk_model_experiments.py`, không nhận tham số dòng lệnh, cùng khuôn với `train_risk_model.py`.
+
 Ngưỡng hợp lý nằm quanh 0,15–0,25. Nếu báo cáo đề xuất một con số xấp xỉ 0,5 thì có
 gì đó sai: tỷ lệ trễ nền chỉ 6,8%, nên ở mốc đặt hàng gần như không đơn nào đạt xác
 suất 0,5.
