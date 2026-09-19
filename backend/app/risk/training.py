@@ -2,6 +2,7 @@
 
 import csv
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,8 +11,9 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import roc_auc_score
 
-from app.risk.candidates import ALGORITHMS, QUANTILES, FeatureEncoder
+from app.risk.candidates import ALGORITHMS, QUANTILES, FeatureEncoder, StageModel
 from app.risk.dataset import (
     STAGES,
     TrainingData,
@@ -64,6 +66,8 @@ def metrics_at(probabilities: np.ndarray, truth: np.ndarray, threshold: float) -
     true_positive = int(np.sum(flagged & truth))
     false_positive = int(np.sum(flagged & ~truth))
     false_negative = int(np.sum(~flagged & truth))
+    true_negative = int(np.sum(~flagged & ~truth))
+    total = true_positive + false_positive + false_negative + true_negative
 
     precision = (
         true_positive / (true_positive + false_positive)
@@ -78,12 +82,21 @@ def metrics_at(probabilities: np.ndarray, truth: np.ndarray, threshold: float) -
     f1 = (
         2 * precision * recall / (precision + recall) if precision + recall else 0.0
     )
+    accuracy = (true_positive + true_negative) / total if total else 0.0
     return {
         "threshold": round(float(threshold), 4),
         "precision": round(precision, 4),
         "recall": round(recall, 4),
         "f1": round(f1, 4),
+        "accuracy": round(accuracy, 4),
     }
+
+
+def roc_auc(probabilities: np.ndarray, truth: np.ndarray) -> float | None:
+    """None khi tập chỉ có một lớp nhãn — ROC-AUC không định nghĩa được, không phải lỗi."""
+    if len(np.unique(truth)) < 2:
+        return None
+    return round(float(roc_auc_score(truth, probabilities)), 4)
 
 
 def sweep_thresholds(probabilities: np.ndarray, truth: np.ndarray) -> dict:
@@ -98,7 +111,9 @@ def sweep_thresholds(probabilities: np.ndarray, truth: np.ndarray) -> dict:
     return scored[best]
 
 
-def _build_splits(data: TrainingData) -> dict[str, Split]:
+def _build_splits(
+    data: TrainingData, *, train_ratio: float, validation_ratio: float
+) -> dict[str, Split]:
     features = build_features(data.orders, data.lines, data.payments, data.zip_coords)
 
     # Bỏ các cột nhãn mà tầng đặc trưng mang theo rồi nối lại toàn bộ nhãn một lượt:
@@ -113,7 +128,9 @@ def _build_splits(data: TrainingData) -> dict[str, Split]:
     )
 
     splits = {}
-    for name, part in split_by_purchase_time(data.orders).items():
+    for name, part in split_by_purchase_time(
+        data.orders, train_ratio=train_ratio, validation_ratio=validation_ratio
+    ).items():
         keep = set(part["order_id"])
         orders = order_level[order_level["order_id"].isin(keep)].sort_values("order_id")
         orders = orders.reset_index(drop=True)
@@ -138,11 +155,13 @@ def _build_splits(data: TrainingData) -> dict[str, Split]:
     return splits
 
 
-def _fit_models(encoder: FeatureEncoder, algorithm: str, train: Split) -> dict:
+def _fit_models(
+    encoder: FeatureEncoder, factory: Callable[[], StageModel], train: Split
+) -> dict:
     models = {}
     for stage in STAGES:
         frame = train.orders if STAGE_GRAIN[stage] == "order" else train.sellers
-        model = ALGORITHMS[algorithm]()
+        model = factory()
         model.fit(encoder.transform(frame), frame[stage].to_numpy(dtype=float))
         models[stage] = model
     return models
@@ -198,7 +217,9 @@ def _evaluate(models: dict, encoder: FeatureEncoder, splits: dict) -> tuple[dict
         for checkpoint in CHECKPOINTS:
             split = splits[split_name]
             probability = _probabilities(models, encoder, split, checkpoint)
-            report[split_name][checkpoint] = sweep_thresholds(probability, split.is_late)
+            scored = sweep_thresholds(probability, split.is_late)
+            scored["roc_auc"] = roc_auc(probability, split.is_late)
+            report[split_name][checkpoint] = scored
             if split_name == "test":
                 predictions[checkpoint] = probability
     return report, predictions
@@ -221,36 +242,43 @@ def _apply_chosen_threshold(report: dict, threshold: float, predictions: dict, s
         )
 
 
-def train(model_dir: Path, *, sample_step: int = 1) -> dict[str, Any]:
+def train(
+    model_dir: Path,
+    *,
+    sample_step: int = 1,
+    algorithms: Mapping[str, Callable[[], StageModel]] = ALGORITHMS,
+    train_ratio: float = 0.70,
+    validation_ratio: float = 0.15,
+) -> dict[str, Any]:
     data = load_training_data(sample_step=sample_step)
-    splits = _build_splits(data)
+    splits = _build_splits(data, train_ratio=train_ratio, validation_ratio=validation_ratio)
 
     encoder = FeatureEncoder().fit(splits["train"].orders)
 
-    algorithms: dict[str, Any] = {}
+    evaluations: dict[str, Any] = {}
     fitted: dict[str, dict] = {}
     test_predictions: dict[str, dict] = {}
 
-    for algorithm in ALGORITHMS:
-        models = _fit_models(encoder, algorithm, splits["train"])
+    for name, factory in algorithms.items():
+        models = _fit_models(encoder, factory, splits["train"])
         evaluation, predictions = _evaluate(models, encoder, splits)
 
         threshold = evaluation["validation"]["order_placed"]["threshold"]
         _apply_chosen_threshold(evaluation, threshold, predictions, splits)
 
-        algorithms[algorithm] = evaluation
-        fitted[algorithm] = models
-        test_predictions[algorithm] = predictions
+        evaluations[name] = evaluation
+        fitted[name] = models
+        test_predictions[name] = predictions
 
     # Chọn theo F1 cao nhất ở mốc ĐẶT HÀNG trên tập KIỂM TRA, ngưỡng lấy từ tập KIỂM
     # ĐỊNH (ADR-0008). Phản xạ quen thuộc là chọn cả hai trên kiểm định; ở đây khác đi
     # có chủ đích, và mốc đặt hàng là mốc khó nhất đồng thời là lúc can thiệp còn giá
     # trị nhất.
     selected = max(
-        algorithms, key=lambda name: algorithms[name]["test"]["order_placed"]["best_f1"]
+        evaluations, key=lambda name: evaluations[name]["test"]["order_placed"]["best_f1"]
     )
-    suggested_threshold = algorithms[selected]["validation"]["order_placed"]["threshold"]
-    achieved = algorithms[selected]["test"]["order_placed"]["at_selected_threshold"]["f1"]
+    suggested_threshold = evaluations[selected]["validation"]["order_placed"]["threshold"]
+    achieved = evaluations[selected]["test"]["order_placed"]["at_selected_threshold"]["f1"]
 
     model_version = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     # Ảnh chụp lịch sử người bán trên TOÀN BỘ dữ liệu, khác hẳn cửa sổ giãn dần dùng
@@ -290,7 +318,7 @@ def train(model_dir: Path, *, sample_step: int = 1) -> dict[str, Any]:
             for name, split in splits.items()
         },
         "excluded_orders": data.excluded,
-        "algorithms": algorithms,
+        "algorithms": evaluations,
     }
 
     bundle = ModelBundle(
@@ -326,7 +354,9 @@ def _write_outputs(
 
     with open(model_dir / METRICS_FILENAME, "w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["algorithm", "checkpoint", "precision", "recall", "f1"])
+        writer.writerow(
+            ["algorithm", "checkpoint", "precision", "recall", "f1", "accuracy", "roc_auc"]
+        )
         for algorithm, evaluation in report["algorithms"].items():
             for checkpoint in CHECKPOINTS:
                 chosen = evaluation["test"][checkpoint]["at_selected_threshold"]
@@ -337,6 +367,8 @@ def _write_outputs(
                         chosen["precision"],
                         chosen["recall"],
                         chosen["f1"],
+                        chosen["accuracy"],
+                        evaluation["test"][checkpoint]["roc_auc"],
                     ]
                 )
 
@@ -387,6 +419,15 @@ def format_summary(report: dict) -> str:
         f"Ngưỡng đề xuất: {report['suggested_risk_threshold']}"
         f"    ->  đặt RISK_THRESHOLD={report['suggested_risk_threshold']} trong .env",
     ]
+    selected_at_order_placed = report["algorithms"][report["selected_algorithm"]][
+        "test"
+    ]["order_placed"]
+    accuracy = selected_at_order_placed["at_selected_threshold"]["accuracy"]
+    roc = selected_at_order_placed["roc_auc"]
+    roc_text = f"{roc:.2f}" if roc is not None else "không tính được (một lớp nhãn)"
+    lines.append(
+        f"Accuracy tại ngưỡng đề xuất: {accuracy:.2f}    ROC-AUC (mốc đặt hàng): {roc_text}"
+    )
     verdict = "ĐẠT" if report["meets_f1_target"] else "CHƯA ĐẠT"
     lines.append(
         f"Mục tiêu F1 >= {report['f1_target']:.2f} ở mốc đặt hàng: "

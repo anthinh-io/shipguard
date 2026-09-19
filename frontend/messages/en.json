@@ -365,19 +365,24 @@
     "algorithmComparison": {
       "title": "Candidate algorithm comparison",
       "algorithm": "Algorithm",
-      "selectedBadge": "In use"
+      "selectedBadge": "In use",
+      "caption": "Measured on the fixed test set from training — a static snapshot, unchanged over time."
     },
     "metric": {
       "precision": "Precision",
       "recall": "Recall",
-      "f1": "F1"
+      "f1": "F1",
+      "accuracy": "Accuracy",
+      "rocAuc": "ROC-AUC",
+      "rocAucNoData": "no data yet"
     },
     "reconciliation": {
       "title": "Cumulative reconciliation on real orders",
       "correct": "Correct",
       "incorrect": "Incorrect",
       "total": "Reconciliations",
-      "smallSampleWarning": "Only {count, number} reconciliations so far — too few to draw firm conclusions."
+      "smallSampleWarning": "Only {count, number} reconciliations so far — too few to draw firm conclusions.",
+      "caption": "Measured on accumulated real orders via reconciliation, blending multiple model versions and thresholds over time — not directly comparable to the table above."
     }
   },
   "nav": {

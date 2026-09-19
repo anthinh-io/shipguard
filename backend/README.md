@@ -288,12 +288,15 @@ cắt khoảng trắng, rỗng thì lưu `null`. Trả 201 kèm `{"intervention"
 
 - `report` — báo cáo huấn luyện đọc từ `RISK_MODEL_DIR`: `model_version`, `trained_at`,
   `selected_algorithm`, `f1_target`, `f1_at_order_placed`, `meets_f1_target`, và
-  `algorithms` — precision / recall / F1 của từng bộ ứng viên ở ba mốc, trên tập kiểm tra.
+  `algorithms` — precision / recall / F1 / accuracy của từng bộ ứng viên ở ba mốc, trên
+  tập kiểm tra, kèm `roc_auc` (null khi tập chỉ có một lớp nhãn).
 - `risk_threshold` — ngưỡng **đang áp dụng** đọc từ cấu hình, có thể khác ngưỡng đề xuất
   trong báo cáo.
-- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision` và
-  `recall` thực tế (null khi mẫu số bằng 0), `small_sample` khi dưới 30 lần. Chỉ đếm lần
-  đánh giá đã có `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
+- `reconciliation` — mỗi mốc một dòng: `total`, `correct`, `incorrect`, `precision`,
+  `recall` và `accuracy` thực tế (null khi mẫu số/tổng số bằng 0), `small_sample` khi
+  dưới 30 lần. Không có `roc_auc` — quần thể này đã nhị phân hoá (chỉ còn High/Low
+  Risk), không có `Late Probability` liên tục để tính. Chỉ đếm lần đánh giá đã có
+  `was_correct`, nên đơn hủy và đơn chưa giao tự bị loại.
 
 Chưa huấn luyện thì trả 200 với `trained: false` và `report: null` — không phải lỗi, và
 phần đối chiếu vẫn tính được vì nó đọc `risk_assessments`, không đọc báo cáo.
@@ -658,6 +661,21 @@ Bốn tệp sinh ra trong `RISK_MODEL_DIR`:
 `.env`.** Lệnh cố ý không tự ghi vào cấu hình: ngưỡng là quyết định vận hành, và đổi
 nó làm mọi đơn được đánh giá từ đó trở đi đổi mức rủi ro.
 
+### Thử nhiều cấu hình huấn luyện (thử nghiệm)
+
+```bash
+uv run python -m app.scripts.train_risk_model_experiments
+```
+
+Chạy 10 biến thể liên tiếp — siêu tham số của ba thuật toán hiện có, hai biến thể LightGBM, và vài
+tỷ lệ chia tập khác 70/15/15 — mỗi biến thể gọi đúng `train()` ở trên, không có đường huấn luyện
+riêng nào khác. Mất khoảng mười lần thời gian một lần huấn luyện sản xuất (~5 phút) cộng lại, tức
+xấp xỉ 45–60 phút cho toàn bộ.
+
+Kết quả ghi vào `experiments/<tên biến thể>/` ở gốc repo — **không phải** `RISK_MODEL_DIR`, nên
+không ảnh hưởng mô hình đang phục vụ backend. Danh sách biến thể khai báo trong
+`train_risk_model_experiments.py`, không nhận tham số dòng lệnh, cùng khuôn với `train_risk_model.py`.
+
 Ngưỡng hợp lý nằm quanh 0,15–0,25. Nếu báo cáo đề xuất một con số xấp xỉ 0,5 thì có
 gì đó sai: tỷ lệ trễ nền chỉ 6,8%, nên ở mốc đặt hàng gần như không đơn nào đạt xác
 suất 0,5.
@@ -685,6 +703,19 @@ uv run jupyter lab backend/notebooks/risk_model_analysis.ipynb
 
 Notebook chỉ đọc kết quả, không huấn luyện lại. Lưu nó với ô kết quả đã xoá sạch:
 số liệu đã nằm ở JSON và CSV rồi.
+
+### So sánh chất lượng giữa các lần thử nghiệm
+
+```bash
+uv run jupyter lab backend/notebooks/risk_model_experiment_comparison.ipynb
+```
+
+Ghép `evaluation_metrics.csv`/`evaluation_report.json` của mô hình sản xuất (`RISK_MODEL_DIR`) với
+báo cáo của mọi biến thể đã chạy bằng `train_risk_model_experiments.py`, thành bảng và biểu đồ so
+sánh Accuracy/F1/ROC-AUC theo (biến thể, thuật toán, mốc dự đoán). Chỉ đọc kết quả đã ghi trên đĩa —
+không gọi lại `train()`. Cần ít nhất một biến thể đã chạy xong trong `experiments/` trước khi mở.
+
+Lưu notebook với ô kết quả đã xoá sạch, cùng quy ước với notebook phân tích ở trên.
 
 ### Tệp mô hình
 

@@ -92,6 +92,16 @@ def test_splits_follow_purchase_time_without_overlapping(data) -> None:
     assert rates[2] < 0.05
 
 
+def test_splits_respect_custom_ratios(data) -> None:
+    splits = split_by_purchase_time(data.orders, train_ratio=0.5, validation_ratio=0.25)
+
+    assert list(splits) == ["train", "validation", "test"]
+    assert sum(len(part) for part in splits.values()) == KEPT
+    assert len(splits["train"]) == int(KEPT * 0.5)
+    assert len(splits["validation"]) == int(KEPT * 0.25)
+    assert len(splits["train"]) != int(KEPT * 0.70)
+
+
 def test_sample_step_thins_the_rows_but_keeps_the_time_span() -> None:
     thinned = load_training_data(sample_step=40)
 

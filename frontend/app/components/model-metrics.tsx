@@ -6,7 +6,15 @@ import { useFormatter, useTranslations } from "next-intl";
 import { apiFetch } from "@/app/lib/api";
 import { Badge } from "./ui/badge";
 import { Field, Section } from "./order-detail";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 
 // Phải đọc nguyên dạng tĩnh như thế này thì Next mới thay được giá trị lúc build.
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -16,7 +24,13 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const CHECKPOINTS = ["order_placed", "payment_approved", "handed_to_carrier"] as const;
 type Checkpoint = (typeof CHECKPOINTS)[number];
 
-type CheckpointMetrics = { precision: number; recall: number; f1: number };
+type CheckpointMetrics = {
+  precision: number;
+  recall: number;
+  f1: number;
+  accuracy: number;
+  roc_auc: number | null;
+};
 
 type AlgorithmReport = Record<Checkpoint, CheckpointMetrics>;
 
@@ -37,6 +51,7 @@ type ReconciliationCheckpoint = {
   incorrect: number;
   precision: number | null;
   recall: number | null;
+  accuracy: number | null;
   small_sample: boolean;
 };
 
@@ -187,6 +202,9 @@ export function ModelMetrics() {
       {data.report ? (
         <Section title={t("algorithmComparison.title")} testId="model-metrics-algorithm-comparison">
           <Table data-testid="model-metrics-algorithm-table">
+            <TableCaption data-testid="model-metrics-algorithm-caption">
+              {t("algorithmComparison.caption")}
+            </TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>{t("algorithmComparison.algorithm")}</TableHead>
@@ -215,6 +233,13 @@ export function ModelMetrics() {
                         {t("metric.precision")} {format.number(cell.precision, "percent")}
                         {" · "}
                         {t("metric.recall")} {format.number(cell.recall, "percent")}
+                        <br />
+                        {t("metric.accuracy")} {format.number(cell.accuracy, "percent")}
+                        {" · "}
+                        {t("metric.rocAuc")}{" "}
+                        {cell.roc_auc === null
+                          ? t("metric.rocAucNoData")
+                          : format.number(cell.roc_auc, "percent")}
                       </TableCell>
                     );
                   })}
@@ -227,6 +252,9 @@ export function ModelMetrics() {
 
       <Section title={t("reconciliation.title")} testId="model-metrics-reconciliation">
         <Table data-testid="reconciliation-table">
+          <TableCaption data-testid="model-metrics-reconciliation-caption">
+            {t("reconciliation.caption")}
+          </TableCaption>
           <TableHeader>
             <TableRow>
               <TableHead>{tOrderDetail("riskAssessment.checkpoint")}</TableHead>
@@ -235,6 +263,7 @@ export function ModelMetrics() {
               <TableHead>{t("reconciliation.incorrect")}</TableHead>
               <TableHead>{t("metric.precision")}</TableHead>
               <TableHead>{t("metric.recall")}</TableHead>
+              <TableHead>{t("metric.accuracy")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -260,6 +289,9 @@ export function ModelMetrics() {
                 </TableCell>
                 <TableCell>
                   {row.recall === null ? "—" : format.number(row.recall, "percent")}
+                </TableCell>
+                <TableCell>
+                  {row.accuracy === null ? "—" : format.number(row.accuracy, "percent")}
                 </TableCell>
               </TableRow>
             ))}

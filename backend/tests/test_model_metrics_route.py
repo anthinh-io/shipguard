@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.main import app
 from app.models.risk import risk_assessments
+from app.risk.predictor import CHECKPOINTS
+from app.risk.training import REPORT_FILENAME
 from app.services.users import create_user
 
 pytestmark = pytest.mark.usefixtures("derived_data")
@@ -145,6 +148,7 @@ async def test_untrained_reports_not_trained(
     assert body["report"] is None
     assert len(body["reconciliation"]) == 3
     assert all(row["total"] == 0 for row in body["reconciliation"])
+    assert all(row["accuracy"] is None for row in body["reconciliation"])
     # Mẫu rỗng vẫn là mẫu nhỏ — is_small_sample(0) là True.
     assert all(row["small_sample"] for row in body["reconciliation"])
 
@@ -164,13 +168,59 @@ async def test_trained_report_shape(
     for evaluation in report["algorithms"].values():
         for checkpoint in ("order_placed", "payment_approved", "handed_to_carrier"):
             scored = evaluation[checkpoint]
-            assert set(scored) == {"precision", "recall", "f1"}
-            assert all(0.0 <= scored[name] <= 1.0 for name in ("precision", "recall", "f1"))
+            assert set(scored) == {"precision", "recall", "f1", "accuracy", "roc_auc"}
+            assert all(
+                0.0 <= scored[name] <= 1.0
+                for name in ("precision", "recall", "f1", "accuracy")
+            )
+            assert scored["roc_auc"] is None or 0.0 <= scored["roc_auc"] <= 1.0
     assert report["selected_algorithm"] in report["algorithms"]
     assert isinstance(report["meets_f1_target"], bool)
     # Ngưỡng "đang áp dụng" là cấu hình đang chạy, không phải ngưỡng đề xuất trong báo cáo —
     # hai giá trị có thể lệch nếu ai đó huấn luyện lại mà chưa cập nhật .env.
     assert body["risk_threshold"] == settings.RISK_THRESHOLD
+
+
+async def test_roc_auc_null_passes_through_when_one_label_class(
+    client: AsyncClient, staff_id: int, tmp_path: Path, model_dir
+) -> None:
+    """Dữ liệu Olist thật luôn có cả hai lớp nhãn nên risk_model_dir không bao giờ sinh
+    ra roc_auc null — tự ghi báo cáo tối giản để bài này chạm được nhánh đó, không cần
+    huấn luyện thật."""
+    model_dir(tmp_path)
+    checkpoint_metrics = {
+        "best_f1": 0.5,
+        "best_threshold": 0.3,
+        "at_selected_threshold": {
+            "threshold": 0.3,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "accuracy": 0.6,
+        },
+        "roc_auc": None,
+    }
+    report = {
+        "model_version": "test-null-roc-auc",
+        "trained_at": "2024-01-01T00:00:00+00:00",
+        "selected_algorithm": "xgboost_quantile",
+        "f1_target": 0.30,
+        "f1_at_order_placed": 0.5,
+        "meets_f1_target": True,
+        "algorithms": {
+            "xgboost_quantile": {
+                "test": {checkpoint: checkpoint_metrics for checkpoint in CHECKPOINTS}
+            }
+        },
+    }
+    (tmp_path / REPORT_FILENAME).write_text(json.dumps(report), encoding="utf-8")
+
+    response = await client.get("/model-metrics", headers=headers_for(staff_id))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    for checkpoint in CHECKPOINTS:
+        assert body["report"]["algorithms"]["xgboost_quantile"][checkpoint]["roc_auc"] is None
 
 
 # --- Đối chiếu tích lũy ----------------------------------------------------------
@@ -205,6 +255,8 @@ async def test_reconciliation_counts_and_rates(
     assert row["incorrect"] == 2  # 1 FP + 1 FN
     assert row["precision"] == pytest.approx(2 / 3)  # TP / (TP + FP)
     assert row["recall"] == pytest.approx(2 / 3)  # TP / (TP + FN)
+    assert row["accuracy"] == pytest.approx(3 / 5)  # (TP + TN) / total
+    assert "roc_auc" not in row  # không tính được ở quần thể đã nhị phân hoá
     assert row["small_sample"] is True  # 5 < 30, cùng ngưỡng với is_small_sample
 
 

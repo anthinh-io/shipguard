@@ -1,12 +1,14 @@
-"""Ba bộ thuật toán ứng viên, mỗi bộ dùng một thuật toán cho cả ba chặng (ADR-0008).
+"""Ba bộ thuật toán ứng viên mặc định, mỗi bộ dùng một thuật toán cho cả ba chặng
+(ADR-0008), cộng thêm các lớp thử nghiệm không nằm trong bộ mặc định.
 
-Cả ba phơi ra cùng một giao diện: nhận đặc trưng, trả về một lưới phân vị của thời
+Tất cả phơi ra cùng một giao diện: nhận đặc trưng, trả về một lưới phân vị của thời
 gian chặng. Nhờ vậy phần lấy mẫu, phần đánh giá và phần dự đoán không cần biết bên
-dưới là XGBoost hay Scikit-learn.
+dưới là XGBoost, Scikit-learn hay LightGBM.
 """
 
 from typing import Protocol
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -87,14 +89,21 @@ class StageModel(Protocol):
 class XGBQuantileStage:
     """XGBoost hồi quy phân vị — một mô hình cho cả sáu phân vị."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        n_estimators: int = 300,
+        learning_rate: float = 0.1,
+        max_depth: int = 6,
+        random_state: int = 0,
+    ) -> None:
         self._model = xgb.XGBRegressor(
             objective="reg:quantileerror",
             quantile_alpha=np.array(QUANTILES),
-            n_estimators=300,
-            learning_rate=0.1,
-            max_depth=6,
-            random_state=0,
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            random_state=random_state,
         )
 
     def fit(self, features: pd.DataFrame, target: np.ndarray) -> None:
@@ -115,25 +124,35 @@ class XGBAftStage:
     phân vị rộng hay hẹp tuỳ may rủi.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        learning_rate: float = 0.1,
+        max_depth: int = 6,
+        num_boost_round: int = 300,
+        aft_loss_distribution_scale: float = 1.0,
+        seed: int = 0,
+    ) -> None:
         self._booster: xgb.Booster | None = None
         self._sigma = 1.0
+        self._num_boost_round = num_boost_round
+        self._params = {
+            "objective": "survival:aft",
+            "aft_loss_distribution": "normal",
+            "aft_loss_distribution_scale": aft_loss_distribution_scale,
+            "learning_rate": learning_rate,
+            "max_depth": max_depth,
+            "seed": seed,
+        }
 
     def fit(self, features: pd.DataFrame, target: np.ndarray) -> None:
         matrix = xgb.DMatrix(features)
         matrix.set_float_info("label_lower_bound", target)
         matrix.set_float_info("label_upper_bound", target)
         self._booster = xgb.train(
-            {
-                "objective": "survival:aft",
-                "aft_loss_distribution": "normal",
-                "aft_loss_distribution_scale": 1.0,
-                "learning_rate": 0.1,
-                "max_depth": 6,
-                "seed": 0,
-            },
+            self._params,
             matrix,
-            num_boost_round=300,
+            num_boost_round=self._num_boost_round,
         )
         fitted = np.asarray(self._booster.predict(matrix), dtype=float)
         residual = np.log(target) - np.log(np.clip(fitted, MIN_STAGE_DAYS, None))
@@ -159,14 +178,20 @@ class XGBAftStage:
 class SklearnQuantileStage:
     """Scikit-learn HistGradientBoosting hồi quy phân vị — một mô hình mỗi phân vị."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_iter: int = 200,
+        learning_rate: float = 0.1,
+        random_state: int = 0,
+    ) -> None:
         self._models = [
             HistGradientBoostingRegressor(
                 loss="quantile",
                 quantile=quantile,
-                max_iter=200,
-                learning_rate=0.1,
-                random_state=0,
+                max_iter=max_iter,
+                learning_rate=learning_rate,
+                random_state=random_state,
             )
             for quantile in QUANTILES
         ]
@@ -186,6 +211,48 @@ class SklearnQuantileStage:
         return None
 
 
+class LightGBMQuantileStage:
+    """LightGBM hồi quy phân vị — một mô hình mỗi phân vị, thử nghiệm ngoài ADR-0008.
+
+    Không đăng ký vào ALGORITHMS (xem ghi chú tại đó): chỉ dùng được qua tham số
+    algorithms tuỳ chọn của train(), không phải một trong ba bộ ứng viên ADR-0008 chọn.
+    """
+
+    def __init__(
+        self,
+        *,
+        n_estimators: int = 300,
+        learning_rate: float = 0.1,
+        max_depth: int = 6,
+        random_state: int = 0,
+    ) -> None:
+        self._models = [
+            lgb.LGBMRegressor(
+                objective="quantile",
+                alpha=quantile,
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                random_state=random_state,
+                verbose=-1,
+            )
+            for quantile in QUANTILES
+        ]
+
+    def fit(self, features: pd.DataFrame, target: np.ndarray) -> None:
+        for model in self._models:
+            model.fit(features, target)
+
+    def predict_quantiles(self, features: pd.DataFrame) -> np.ndarray:
+        columns = [model.predict(features) for model in self._models]
+        return _finalise(np.column_stack(columns).astype(float))
+
+    def feature_importances(self) -> np.ndarray | None:
+        return np.asarray(self._models[MEDIAN_INDEX].feature_importances_, dtype=float)
+
+
+# Không thêm LightGBMQuantileStage vào đây: mặc định sản xuất là ba bộ ADR-0008 chọn,
+# LightGBM chỉ để thử qua tham số algorithms tuỳ chọn của train().
 ALGORITHMS = {
     "xgboost_quantile": XGBQuantileStage,
     "xgboost_aft": XGBAftStage,

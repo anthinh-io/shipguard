@@ -22,6 +22,8 @@ class CheckpointMetrics(BaseModel):
     precision: float
     recall: float
     f1: float
+    accuracy: float
+    roc_auc: float | None
 
 
 class AlgorithmReport(BaseModel):
@@ -47,6 +49,7 @@ class ReconciliationCheckpoint(BaseModel):
     incorrect: int
     precision: float | None
     recall: float | None
+    accuracy: float | None
     small_sample: bool
 
 
@@ -60,7 +63,8 @@ def read_training_report(model_dir: Path) -> TrainingReport | None:
         name: AlgorithmReport(
             **{
                 checkpoint: CheckpointMetrics(
-                    **evaluation["test"][checkpoint]["at_selected_threshold"]
+                    **evaluation["test"][checkpoint]["at_selected_threshold"],
+                    roc_auc=evaluation["test"][checkpoint]["roc_auc"],
                 )
                 for checkpoint in CHECKPOINTS
             }
@@ -124,6 +128,7 @@ async def compute_reconciliation(session: AsyncSession) -> list[ReconciliationCh
                 incorrect=fp + fn,
                 precision=tp / (tp + fp) if (tp + fp) > 0 else None,
                 recall=tp / (tp + fn) if (tp + fn) > 0 else None,
+                accuracy=(tp + tn) / total if total > 0 else None,
                 small_sample=is_small_sample(total),
             )
         )
