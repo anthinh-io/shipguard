@@ -185,11 +185,11 @@ Vai trò nhân viên vận hành: xem bảng điều khiển, tra cứu đơn, v
 _Avoid_: Operator, Agent
 
 **Logistics Manager**:
-Vai trò quản lý hậu cần: mọi việc của `Operations Staff`, cộng quyền quản trị các `User` khác trừ `Super Admin`.
+Vai trò quản lý hậu cần: mọi việc của `Operations Staff`, cộng quyền quản trị các `User` có vai trò `Operations Staff`. Không chạm được tới `Logistics Manager` khác hay `Super Admin`, và không đổi được vai trò của bất kỳ ai — nâng một `Operations Staff` lên `Logistics Manager` là việc của `Super Admin`.
 _Avoid_: Admin, Supervisor
 
 **Super Admin**:
-Vai trò của đúng một `User` duy nhất, sinh ra từ cấu hình lúc cài đặt để có người đầu tiên cấp tài khoản cho các `Logistics Manager`. Làm được mọi việc của `Logistics Manager`, và không ai khóa, đổi vai trò hay đặt lại mật khẩu của nó qua giao diện — để hệ thống luôn còn một lối vào.
+Vai trò của đúng một `User` duy nhất, sinh ra từ cấu hình lúc cài đặt để có người đầu tiên cấp tài khoản cho các `Logistics Manager`. Quản trị được mọi `User` khác, gồm cả việc đổi vai trò — thứ không ai ngoài `Super Admin` làm được — và không ai khóa, đổi vai trò hay đặt lại mật khẩu của nó qua giao diện, để hệ thống luôn còn một lối vào.
 _Avoid_: Root, Owner, Admin
 
 **User Claim**:
