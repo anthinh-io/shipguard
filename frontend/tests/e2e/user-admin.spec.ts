@@ -186,6 +186,21 @@ test("quản lý hậu cần chỉ thấy menu thao tác ở dòng nhân viên v
   await expect(row(page, "lan@shipguard.vn").getByTestId("user-actions")).toBeVisible();
 });
 
+test("quản lý hậu cần không thấy mục Đổi vai trò ở dòng nhân viên vận hành", async ({
+  page,
+  context,
+}) => {
+  await signInAsManager(context);
+  await mockUsersApi(page);
+  await page.goto("/admin/users");
+
+  await openActions(page, "lan@shipguard.vn");
+
+  await expect(page.getByTestId("user-action-role")).toHaveCount(0);
+  await expect(page.getByTestId("user-action-lock")).toBeVisible();
+  await expect(page.getByTestId("user-action-reset-password")).toBeVisible();
+});
+
 test("Super Admin thấy menu thao tác ở mọi dòng trừ dòng của mình", async ({ page, context }) => {
   await signInAsSuperAdmin(context);
   await mockUsersApi(page);

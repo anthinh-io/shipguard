@@ -140,6 +140,8 @@ export function UserAdmin() {
             // để không đưa ra lựa chọn chắc chắn thất bại. Dòng của chính mình tự rơi vào
             // đây: vai trò của mình không bao giờ nằm trong tập mình quản trị được.
             const manageable = manageableRoles(profile?.role).some((role) => role === user.role);
+            // Soi gương RoleChangeRequiresSuperAdminError (ADR-0011): đổi vai trò chỉ Super Admin.
+            const canChangeRole = profile?.role === "super_admin";
             const status = user.is_locked ? "locked" : "active";
             return (
               <TableRow key={user.id} data-testid="user-row">
@@ -164,6 +166,7 @@ export function UserAdmin() {
                   {manageable ? (
                     <UserActions
                       user={user}
+                      canChangeRole={canChangeRole}
                       onChangeRole={(role) => applyUpdate(user, { role })}
                       onLock={() => setLocking(user)}
                       onUnlock={() => applyUpdate(user, { is_locked: false })}
@@ -202,12 +205,14 @@ export function UserAdmin() {
 
 function UserActions({
   user,
+  canChangeRole,
   onChangeRole,
   onLock,
   onUnlock,
   onResetPassword,
 }: {
   user: AdminUser;
+  canChangeRole: boolean;
   onChangeRole: (role: AssignableRole) => void;
   onLock: () => void;
   onUnlock: () => void;
@@ -224,28 +229,30 @@ function UserActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger data-testid="user-action-role">
-            <UserCog />
-            {t("changeRole")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={user.role}
-              onValueChange={(value) => {
-                if (value !== user.role) {
-                  onChangeRole(value as AssignableRole);
-                }
-              }}
-            >
-              {ASSIGNABLE_ROLES.map((role) => (
-                <DropdownMenuRadioItem key={role} value={role}>
-                  {tRole(role)}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {canChangeRole ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger data-testid="user-action-role">
+              <UserCog />
+              {t("changeRole")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={user.role}
+                onValueChange={(value) => {
+                  if (value !== user.role) {
+                    onChangeRole(value as AssignableRole);
+                  }
+                }}
+              >
+                {ASSIGNABLE_ROLES.map((role) => (
+                  <DropdownMenuRadioItem key={role} value={role}>
+                    {tRole(role)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
         {user.is_locked ? (
           <DropdownMenuItem data-testid="user-action-unlock" onSelect={onUnlock}>
             <LockOpen />

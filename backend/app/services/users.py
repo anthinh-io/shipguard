@@ -61,6 +61,11 @@ class LogisticsManagerProtectedError(PermissionError):
         super().__init__("Only the Super Admin can manage Logistics Manager accounts")
 
 
+class RoleChangeRequiresSuperAdminError(PermissionError):
+    def __init__(self) -> None:
+        super().__init__("Only the Super Admin can change roles")
+
+
 class UserProfile(BaseModel):
     id: int
     email: str
@@ -207,6 +212,12 @@ async def update_user(
     is_locked: bool | None = None,
 ) -> UserSummary:
     user = await _load_manageable_user(session, actor_role, user_id)
+    # #52: đổi vai trò là đặc quyền riêng của Super Admin, dù đối tượng đã qua được rào
+    # theo phạm vi ở trên. Xét trên `role is not None`, không so với `user.role` — một
+    # yêu cầu đổi vai trò vẫn phải bị từ chối kể cả khi giá trị gửi lên trùng vai trò
+    # hiện tại, vì đây là yêu cầu đổi vai trò chứ không phải "có đổi thật hay không".
+    if role is not None and actor_role != "super_admin":
+        raise RoleChangeRequiresSuperAdminError
     changes: dict[str, object] = {}
     if role is not None and role != user.role:
         changes["role"] = role

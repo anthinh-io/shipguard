@@ -23,6 +23,7 @@ SUPER_ADMIN_DETAIL = {"detail": "The Super Admin cannot be managed"}
 MANAGER_DETAIL = {
     "detail": "Only the Super Admin can manage Logistics Manager accounts"
 }
+ROLE_CHANGE_DETAIL = {"detail": "Only the Super Admin can change roles"}
 
 
 # Người thật trong cơ sở dữ liệu, không phải token mượn id: route quản trị tra dòng của
@@ -311,7 +312,7 @@ async def test_role_change_ends_sessions_and_next_login_carries_the_new_role(
 
     response = await act(
         client,
-        MANAGER,
+        SUPER_ADMIN,
         "PATCH",
         f"/users/{accounts[STAFF]}",
         {"role": "logistics_manager"},
@@ -401,7 +402,8 @@ def cell_id(actor: str, target: str, action: str) -> str:
 
 
 # Ma trận ADR-0011: Logistics Manager quản trị Operations Staff; Super Admin quản trị
-# tất cả trừ Super Admin. Ô đổi vai trò LM → OS thuộc #52 nên chưa có ở đây.
+# tất cả trừ Super Admin. Đổi vai trò hẹp hơn nữa: chỉ Super Admin làm được, kể cả khi
+# đối tượng nằm trong phạm vi quản trị của Logistics Manager (#52).
 PERMISSION_CELLS = [
     pytest.param(actor, target, action, None, id=cell_id(actor, target, action))
     for actor, target in [
@@ -410,6 +412,12 @@ PERMISSION_CELLS = [
         (SUPER_ADMIN, OTHER_MANAGER),
     ]
     for action in ["lock", "unlock", "reset password"]
+] + [
+    # Super Admin đổi vai trò được cho cả hai loại đối tượng trong phạm vi của mình.
+    pytest.param(
+        actor, target, "change role", None, id=cell_id(actor, target, "change role")
+    )
+    for actor, target in [(SUPER_ADMIN, STAFF), (SUPER_ADMIN, OTHER_MANAGER)]
 ] + [
     pytest.param(actor, target, action, detail, id=cell_id(actor, target, action))
     for actor, target, detail in [
@@ -420,6 +428,16 @@ PERMISSION_CELLS = [
         (SUPER_ADMIN, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
     ]
     for action in TARGETED_ACTIONS
+] + [
+    # #52: đổi vai trò của người trong phạm vi vẫn bị từ chối — thông điệp riêng, không
+    # phải MANAGER_DETAIL của rào theo đối tượng.
+    pytest.param(
+        MANAGER,
+        STAFF,
+        "change role",
+        ROLE_CHANGE_DETAIL,
+        id=cell_id(MANAGER, STAFF, "change role"),
+    ),
 ]
 
 
@@ -463,8 +481,11 @@ async def test_permission_matrix(
     assert response.status_code in (200, 204), response.text
     if action == "reset password":
         assert (await login(client, target, NEW_PASSWORD)).status_code == 200
+        return
+    after = await target_row(auth_session, target_id)
+    if action == "change role":
+        assert after.role == "operations_staff"
     else:
-        after = await target_row(auth_session, target_id)
         assert after.is_locked is (action == "lock")
 
 

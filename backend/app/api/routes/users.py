@@ -9,6 +9,7 @@ from app.services.users import (
     EmailTakenError,
     LogisticsManagerProtectedError,
     PasswordTooShortError,
+    RoleChangeRequiresSuperAdminError,
     SuperAdminProtectedError,
     UserNotFoundError,
     UserProfile,
@@ -51,6 +52,7 @@ ADMIN_ERROR_STATUS: dict[type[Exception], int] = {
     UserNotFoundError: 404,
     SuperAdminProtectedError: 403,
     LogisticsManagerProtectedError: 403,
+    RoleChangeRequiresSuperAdminError: 403,
 }
 ADMIN_ERRORS = tuple(ADMIN_ERROR_STATUS)
 
