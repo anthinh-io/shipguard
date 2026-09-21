@@ -280,8 +280,10 @@ async def reset_user_password(
     user_id: int,
     new_password: str,
 ) -> None:
-    check_password_policy(new_password)
+    # Kiểm quyền trước chính sách mật khẩu, như ở create_managed_user: yêu cầu ngoài
+    # quyền bị từ chối vì quyền.
     await _load_manageable_user(session, actor_role, user_id)
+    check_password_policy(new_password)
     await _set_password_and_sign_out(session, user_id, new_password)
 
 

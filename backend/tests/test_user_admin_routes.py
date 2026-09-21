@@ -379,13 +379,6 @@ async def test_password_reset_rejects_a_short_password(
     assert refreshed.status_code == 200
 
 
-ADMIN_ACTIONS = [
-    ("PATCH", "/users/{target}", {"is_locked": True}),
-    ("PATCH", "/users/{target}", {"role": "operations_staff"}),
-    ("POST", "/users/{target}/password", {"new_password": NEW_PASSWORD}),
-]
-ADMIN_ACTION_IDS = ["lock", "change role", "reset password"]
-
 ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
     "lock": ("PATCH", "/users/{target}", {"is_locked": True}),
     "unlock": ("PATCH", "/users/{target}", {"is_locked": False}),
@@ -396,13 +389,15 @@ ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
         {"new_password": NEW_PASSWORD},
     ),
 }
+# Các thao tác phủ ở ô bị từ chối; mở khóa đi cùng đường PATCH với khóa nên không lặp.
+TARGETED_ACTIONS = ["lock", "change role", "reset password"]
 
-
-SHORT = {SUPER_ADMIN: "SA", MANAGER: "LM", OTHER_MANAGER: "LM", STAFF: "OS"}
+ROLE_ABBR = {SUPER_ADMIN: "SA", MANAGER: "LM", OTHER_MANAGER: "LM", STAFF: "OS"}
 
 
 def cell_id(actor: str, target: str, action: str) -> str:
-    return f"{SHORT[actor]}->{'self' if actor == target else SHORT[target]} {action}"
+    target_abbr = "self" if actor == target else ROLE_ABBR[target]
+    return f"{ROLE_ABBR[actor]}->{target_abbr} {action}"
 
 
 # Ma trận ADR-0011: Logistics Manager quản trị Operations Staff; Super Admin quản trị
@@ -424,7 +419,7 @@ PERMISSION_CELLS = [
         (MANAGER, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
         (SUPER_ADMIN, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
     ]
-    for action in ["lock", "change role", "reset password"]
+    for action in TARGETED_ACTIONS
 ]
 
 
@@ -438,7 +433,7 @@ async def target_row(session: AsyncSession, user_id: int) -> Any:
     ).one()
 
 
-@pytest.mark.parametrize(("actor", "target", "action", "denied"), PERMISSION_CELLS)
+@pytest.mark.parametrize(("actor", "target", "action", "refusal"), PERMISSION_CELLS)
 async def test_permission_matrix(
     client: AsyncClient,
     auth_session: AsyncSession,
@@ -446,7 +441,7 @@ async def test_permission_matrix(
     actor: str,
     target: str,
     action: str,
-    denied: dict[str, str] | None,
+    refusal: dict[str, str] | None,
 ) -> None:
     target_id = accounts[target]
     if action == "unlock":
@@ -460,9 +455,9 @@ async def test_permission_matrix(
 
     response = await act(client, actor, method, path.format(target=target_id), json)
 
-    if denied is not None:
+    if refusal is not None:
         assert response.status_code == 403
-        assert response.json() == denied
+        assert response.json() == refusal
         assert await target_row(auth_session, target_id) == before
         return
     assert response.status_code in (200, 204), response.text
@@ -473,16 +468,28 @@ async def test_permission_matrix(
         assert after.is_locked is (action == "lock")
 
 
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
-async def test_unknown_user_is_not_found(
-    client: AsyncClient,
-    accounts: dict[str, int],
-    method: str,
-    path: str,
-    json: dict[str, Any],
+# Quyền hỏi trước chính sách mật khẩu: ngoài quyền thì 403 dù mật khẩu có ngắn.
+async def test_out_of_scope_password_reset_is_refused_before_the_password_check(
+    client: AsyncClient, accounts: dict[str, int]
 ) -> None:
+    response = await act(
+        client,
+        MANAGER,
+        "POST",
+        f"/users/{accounts[OTHER_MANAGER]}/password",
+        {"new_password": "short"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == MANAGER_DETAIL
+
+
+@pytest.mark.parametrize("action", TARGETED_ACTIONS)
+async def test_unknown_user_is_not_found(
+    client: AsyncClient, accounts: dict[str, int], action: str
+) -> None:
+    method, path, json = ACTIONS[action]
+
     response = await act(client, MANAGER, method, path.format(target=999_999), json)
 
     assert response.status_code == 404
