@@ -153,6 +153,15 @@ liệu — rẻ hơn nhiều so với một nút thắt vận hành gặp hằng
   động được lên `operations_staff`"*. Nếu ai đó sau này nới thành *"`Logistics Manager`
   không tác động được lên `Logistics Manager` khác ngoài chính mình"* — một cách nới nghe
   rất tự nhiên — thì lỗ hổng tự quản lý mở lại mà không có bài test nào đỏ.
+- **Việc gỡ rào tự-quản-lý còn dựa vào một chỗ thứ hai: cổng quản trị thô.** Trong mã,
+  luật được viết thành "ai không phải `Super Admin` thì chỉ chạm được
+  `operations_staff`" — rộng hơn câu ở trên, vì nó áp cho mọi người không phải
+  `Super Admin` chứ không riêng `Logistics Manager`. Hôm nay hai cách viết cho cùng kết
+  quả, vì cổng thô chỉ cho `Logistics Manager` và `Super Admin` đi qua. Nhưng nếu cổng
+  đó được nới — chẳng hạn dùng `User Claim` để cấp quyền quản trị cho một
+  `Operations Staff` — người đó sẽ quản trị được mọi `Operations Staff` khác, kể cả
+  chính mình, mà không bài test nào đỏ. Nới cổng thô thì phải viết lại luật theo đúng
+  câu ở trên, và cân nhắc dựng lại rào tự-quản-lý.
 - **Vài bài test hiện có dùng thao tác quản trị chỉ để dựng cảnh**, không phải để kiểm
   quyền. Chúng đều là `Logistics Manager` khóa một `Operations Staff` nên vẫn hợp lệ,
   nhưng sẽ vỡ theo nếu chữ ký hàm quản trị đổi để nhận thêm vai trò người gọi.

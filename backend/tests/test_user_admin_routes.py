@@ -333,7 +333,11 @@ async def test_role_cannot_be_changed_to_super_admin(
     client: AsyncClient, accounts: dict[str, int]
 ) -> None:
     response = await act(
-        client, MANAGER, "PATCH", f"/users/{accounts[STAFF]}", {"role": "super_admin"}
+        client,
+        SUPER_ADMIN,
+        "PATCH",
+        f"/users/{accounts[STAFF]}",
+        {"role": "super_admin"},
     )
 
     assert response.status_code == 422
@@ -384,6 +388,8 @@ ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
     "lock": ("PATCH", "/users/{target}", {"is_locked": True}),
     "unlock": ("PATCH", "/users/{target}", {"is_locked": False}),
     "change role": ("PATCH", "/users/{target}", {"role": "operations_staff"}),
+    # Đòn leo thang ở Problem Statement của #49: nâng một người lên Logistics Manager.
+    "promote": ("PATCH", "/users/{target}", {"role": "logistics_manager"}),
     "reset password": (
         "POST",
         "/users/{target}/password",
@@ -413,11 +419,17 @@ PERMISSION_CELLS = [
     ]
     for action in ["lock", "unlock", "reset password"]
 ] + [
-    # Super Admin đổi vai trò được cho cả hai loại đối tượng trong phạm vi của mình.
+    # Super Admin đổi vai trò thật theo cả hai chiều: nâng OS lên LM, hạ LM xuống OS.
     pytest.param(
-        actor, target, "change role", None, id=cell_id(actor, target, "change role")
-    )
-    for actor, target in [(SUPER_ADMIN, STAFF), (SUPER_ADMIN, OTHER_MANAGER)]
+        SUPER_ADMIN, STAFF, "promote", None, id=cell_id(SUPER_ADMIN, STAFF, "promote")
+    ),
+    pytest.param(
+        SUPER_ADMIN,
+        OTHER_MANAGER,
+        "change role",
+        None,
+        id=cell_id(SUPER_ADMIN, OTHER_MANAGER, "change role"),
+    ),
 ] + [
     pytest.param(actor, target, action, detail, id=cell_id(actor, target, action))
     for actor, target, detail in [
@@ -430,14 +442,12 @@ PERMISSION_CELLS = [
     for action in TARGETED_ACTIONS
 ] + [
     # #52: đổi vai trò của người trong phạm vi vẫn bị từ chối — thông điệp riêng, không
-    # phải MANAGER_DETAIL của rào theo đối tượng.
+    # phải MANAGER_DETAIL của rào theo đối tượng. "promote" là đòn leo thang thật;
+    # "change role" gửi đúng vai trò hiện tại và vẫn phải bị từ chối.
     pytest.param(
-        MANAGER,
-        STAFF,
-        "change role",
-        ROLE_CHANGE_DETAIL,
-        id=cell_id(MANAGER, STAFF, "change role"),
-    ),
+        MANAGER, STAFF, action, ROLE_CHANGE_DETAIL, id=cell_id(MANAGER, STAFF, action)
+    )
+    for action in ["promote", "change role"]
 ]
 
 
@@ -483,8 +493,8 @@ async def test_permission_matrix(
         assert (await login(client, target, NEW_PASSWORD)).status_code == 200
         return
     after = await target_row(auth_session, target_id)
-    if action == "change role":
-        assert after.role == "operations_staff"
+    if action in ("change role", "promote"):
+        assert after.role == json["role"]
     else:
         assert after.is_locked is (action == "lock")
 
