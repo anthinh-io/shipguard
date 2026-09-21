@@ -7,8 +7,8 @@ from app.api.deps import CurrentUserDep, SessionDep, UserAdminDep
 from app.services.users import (
     AssignableRole,
     EmailTakenError,
+    LogisticsManagerProtectedError,
     PasswordTooShortError,
-    SelfManagementError,
     SuperAdminProtectedError,
     UserNotFoundError,
     UserProfile,
@@ -50,7 +50,7 @@ ADMIN_ERROR_STATUS: dict[type[Exception], int] = {
     EmailTakenError: 409,
     UserNotFoundError: 404,
     SuperAdminProtectedError: 403,
-    SelfManagementError: 403,
+    LogisticsManagerProtectedError: 403,
 }
 ADMIN_ERRORS = tuple(ADMIN_ERROR_STATUS)
 
@@ -96,7 +96,6 @@ async def update(
     try:
         return await update_user(
             session,
-            actor_id=admin.user_id,
             actor_role=admin.role,
             user_id=user_id,
             role=body.role,
@@ -113,7 +112,6 @@ async def reset_password(
     try:
         await reset_user_password(
             session,
-            actor_id=admin.user_id,
             actor_role=admin.role,
             user_id=user_id,
             new_password=body.new_password,

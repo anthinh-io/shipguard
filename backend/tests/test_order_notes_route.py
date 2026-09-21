@@ -168,7 +168,6 @@ async def test_note_of_a_locked_author_still_shows_their_name_and_role(
     await add_note(client, STAFF, "Viết trước khi bị khóa")
     await update_user(
         auth_session,
-        actor_id=accounts[MANAGER],
         actor_role="logistics_manager",
         user_id=accounts[STAFF],
         is_locked=True,

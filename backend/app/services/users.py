@@ -56,9 +56,9 @@ class SuperAdminProtectedError(PermissionError):
         super().__init__("The Super Admin cannot be managed")
 
 
-class SelfManagementError(PermissionError):
+class LogisticsManagerProtectedError(PermissionError):
     def __init__(self) -> None:
-        super().__init__("You cannot manage your own account here")
+        super().__init__("Only the Super Admin can manage Logistics Manager accounts")
 
 
 class UserProfile(BaseModel):
@@ -166,40 +166,44 @@ async def get_user_summary(session: AsyncSession, user_id: int) -> UserSummary:
     return _summary(user)
 
 
+def _check_target_role(actor_role: Role, target_role: Role) -> None:
+    # Phát biểu đúng như ADR-0011: ngoài Super Admin, chỉ chạm được operations_staff.
+    # Đừng nới thành "không chạm Logistics Manager khác" — rào chặn tự quản lý chính
+    # mình đã bỏ vì câu này bao trùm nó, nới ra là lỗ hổng đó mở lại.
+    if actor_role != "super_admin" and target_role != "operations_staff":
+        raise LogisticsManagerProtectedError
+
+
 async def _load_manageable_user(
-    session: AsyncSession, actor_id: int, actor_role: Role, user_id: int
+    session: AsyncSession, actor_role: Role, user_id: int
 ) -> Row:
     """Kiểm ở đây chứ không chỉ ẩn nút: yêu cầu gửi thẳng tới API cũng phải bị chặn.
 
-    Vai trò của người bị tác động đọc từ cơ sở dữ liệu, không tin thứ gì client gửi.
-    actor_role là vai trò người gọi trong access token — chưa dùng tới, chờ luật theo
-    cặp của ADR-0011.
+    Vai trò của người bị tác động đọc từ cơ sở dữ liệu, không tin thứ gì client gửi;
+    actor_role là vai trò người gọi trong access token.
     """
     user = (
         await session.execute(select(users).where(users.c.id == user_id))
     ).one_or_none()
     if user is None:
         raise UserNotFoundError
-    # Không ai quản lý được Super Admin — để hệ thống luôn còn một lối vào.
+    # Không ai quản lý được Super Admin — để hệ thống luôn còn một lối vào. Kiểm trước
+    # rào theo vai trò để chạm Super Admin luôn nhận đúng thông điệp này.
     if user.role == "super_admin":
         raise SuperAdminProtectedError
-    # Tự khóa hay tự hạ vai trò là tự nhốt mình ngoài; tự đặt lại mật khẩu ở đây thì thu
-    # hồi luôn phiên đang dùng mà không báo — tự đổi mật khẩu đã có /auth/password.
-    if user.id == actor_id:
-        raise SelfManagementError
+    _check_target_role(actor_role, user.role)
     return user
 
 
 async def update_user(
     session: AsyncSession,
     *,
-    actor_id: int,
     actor_role: Role,
     user_id: int,
     role: AssignableRole | None = None,
     is_locked: bool | None = None,
 ) -> UserSummary:
-    user = await _load_manageable_user(session, actor_id, actor_role, user_id)
+    user = await _load_manageable_user(session, actor_role, user_id)
     changes: dict[str, object] = {}
     if role is not None and role != user.role:
         changes["role"] = role
@@ -269,13 +273,12 @@ async def reset_super_admin_password(session: AsyncSession, new_password: str) -
 async def reset_user_password(
     session: AsyncSession,
     *,
-    actor_id: int,
     actor_role: Role,
     user_id: int,
     new_password: str,
 ) -> None:
     check_password_policy(new_password)
-    await _load_manageable_user(session, actor_id, actor_role, user_id)
+    await _load_manageable_user(session, actor_role, user_id)
     await _set_password_and_sign_out(session, user_id, new_password)
 
 

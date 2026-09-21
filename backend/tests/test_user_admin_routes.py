@@ -3,7 +3,7 @@ from typing import Any
 import jwt
 import pytest
 from httpx import AsyncClient, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -21,7 +21,7 @@ STAFF = "lan@shipguard.vn"
 
 
 # Người thật trong cơ sở dữ liệu, không phải token mượn id: route quản trị tra dòng của
-# người bị tác động và so id người gọi, nên id trong token phải khớp một dòng có thật.
+# người bị tác động, và người gọi phải đăng nhập được thật để lấy token.
 @pytest.fixture
 async def accounts(auth_session: AsyncSession) -> dict[str, int]:
     people = [
@@ -133,8 +133,8 @@ async def test_manager_and_super_admin_see_every_account(
     }
 
 
-# Mỗi thao tác đều nhắm vào một người quản lý được, để 403 chỉ có thể đến từ vai trò
-# người gọi chứ không phải từ quy tắc bảo vệ Super Admin hay chính mình.
+# Cổng vai trò chặn Operations Staff trước mọi luật theo đối tượng, nên 403 ở đây đến từ
+# vai trò người gọi, bất kể đối tượng là ai.
 @pytest.mark.parametrize(
     ("method", "path", "json"), ADMIN_ENDPOINTS, ids=ADMIN_ENDPOINT_IDS
 )
@@ -351,64 +351,95 @@ ADMIN_ACTIONS = [
 ]
 ADMIN_ACTION_IDS = ["lock", "change role", "reset password"]
 
+ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
+    "lock": ("PATCH", "/users/{target}", {"is_locked": True}),
+    "unlock": ("PATCH", "/users/{target}", {"is_locked": False}),
+    "change role": ("PATCH", "/users/{target}", {"role": "operations_staff"}),
+    "reset password": (
+        "POST",
+        "/users/{target}/password",
+        {"new_password": NEW_PASSWORD},
+    ),
+}
 
-@pytest.mark.parametrize("actor", [MANAGER, SUPER_ADMIN])
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
-async def test_no_admin_action_touches_the_super_admin(
+SUPER_ADMIN_DETAIL = {"detail": "The Super Admin cannot be managed"}
+MANAGER_DETAIL = {
+    "detail": "Only the Super Admin can manage Logistics Manager accounts"
+}
+
+SHORT = {SUPER_ADMIN: "SA", MANAGER: "LM", OTHER_MANAGER: "LM", STAFF: "OS"}
+
+
+def cell_id(actor: str, target: str, action: str) -> str:
+    return f"{SHORT[actor]}->{'self' if actor == target else SHORT[target]} {action}"
+
+
+# Ma trận ADR-0011: Logistics Manager quản trị Operations Staff; Super Admin quản trị
+# tất cả trừ Super Admin. Ô đổi vai trò LM → OS thuộc #52 nên chưa có ở đây.
+PERMISSION_CELLS = [
+    pytest.param(actor, target, action, None, id=cell_id(actor, target, action))
+    for actor, target in [
+        (MANAGER, STAFF),
+        (SUPER_ADMIN, STAFF),
+        (SUPER_ADMIN, OTHER_MANAGER),
+    ]
+    for action in ["lock", "unlock", "reset password"]
+] + [
+    pytest.param(actor, target, action, detail, id=cell_id(actor, target, action))
+    for actor, target, detail in [
+        (MANAGER, OTHER_MANAGER, MANAGER_DETAIL),
+        # Chính mình nhận thông điệp dành cho Logistics Manager, không có câu riêng.
+        (MANAGER, MANAGER, MANAGER_DETAIL),
+        (MANAGER, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
+        (SUPER_ADMIN, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
+    ]
+    for action in ["lock", "change role", "reset password"]
+]
+
+
+async def target_row(session: AsyncSession, user_id: int) -> Any:
+    return (
+        await session.execute(
+            select(users.c.role, users.c.is_locked, users.c.password_hash).where(
+                users.c.id == user_id
+            )
+        )
+    ).one()
+
+
+@pytest.mark.parametrize(("actor", "target", "action", "denied"), PERMISSION_CELLS)
+async def test_permission_matrix(
     client: AsyncClient,
+    auth_session: AsyncSession,
     accounts: dict[str, int],
     actor: str,
-    method: str,
-    path: str,
-    json: dict[str, Any],
+    target: str,
+    action: str,
+    denied: dict[str, str] | None,
 ) -> None:
-    url = path.format(target=accounts[SUPER_ADMIN])
+    target_id = accounts[target]
+    if action == "unlock":
+        # Khóa sẵn thẳng trong cơ sở dữ liệu, không qua API đang được kiểm.
+        await auth_session.execute(
+            update(users).where(users.c.id == target_id).values(is_locked=True)
+        )
+        await auth_session.commit()
+    before = await target_row(auth_session, target_id)
+    method, path, json = ACTIONS[action]
 
-    response = await act(client, actor, method, url, json)
+    response = await act(client, actor, method, path.format(target=target_id), json)
 
-    assert response.status_code == 403
-    assert response.json() == {"detail": "The Super Admin cannot be managed"}
-    super_admin = (await login(client, SUPER_ADMIN)).json()["access_token"]
-    me = await client.get("/me", headers=bearer(super_admin))
-    assert me.json()["role"] == "super_admin"
-
-
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
-async def test_no_admin_action_on_yourself(
-    client: AsyncClient,
-    accounts: dict[str, int],
-    method: str,
-    path: str,
-    json: dict[str, Any],
-) -> None:
-    url = path.format(target=accounts[MANAGER])
-
-    response = await act(client, MANAGER, method, url, json)
-
-    assert response.status_code == 403
-    assert response.json() == {"detail": "You cannot manage your own account here"}
-    token = await token_for(client, MANAGER)
-    me = await client.get("/me", headers=bearer(token))
-    assert me.json()["role"] == "logistics_manager"
-
-
-async def test_manager_can_manage_another_manager(
-    client: AsyncClient, accounts: dict[str, int]
-) -> None:
-    response = await act(
-        client,
-        MANAGER,
-        "PATCH",
-        f"/users/{accounts[OTHER_MANAGER]}",
-        {"is_locked": True},
-    )
-
-    assert response.status_code == 200
-    assert (await login(client, OTHER_MANAGER)).status_code == 401
+    if denied is not None:
+        assert response.status_code == 403
+        assert response.json() == denied
+        assert await target_row(auth_session, target_id) == before
+        return
+    assert response.status_code in (200, 204), response.text
+    if action == "reset password":
+        assert (await login(client, target, NEW_PASSWORD)).status_code == 200
+    else:
+        after = await target_row(auth_session, target_id)
+        assert after.is_locked is (action == "lock")
 
 
 @pytest.mark.parametrize(

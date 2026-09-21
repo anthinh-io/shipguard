@@ -7,6 +7,7 @@ import { Ellipsis, KeyRound, Lock, LockOpen, UserCog, UserPlus } from "lucide-re
 import {
   ASSIGNABLE_ROLES,
   listUsers,
+  manageableRoles,
   updateUser,
   type AdminUser,
   type AssignableRole,
@@ -135,9 +136,10 @@ export function UserAdmin() {
         <TableBody>
           {state.users.map((user) => {
             const isSelf = user.id === profile?.id;
-            // Máy chủ từ chối mọi thao tác lên Super Admin và lên chính mình; ẩn hẳn menu
-            // để không đưa ra lựa chọn chắc chắn thất bại.
-            const manageable = user.role !== "super_admin" && !isSelf && profile !== null;
+            // Máy chủ từ chối thao tác lên dòng ngoài quyền của người đăng nhập; ẩn hẳn menu
+            // để không đưa ra lựa chọn chắc chắn thất bại. Dòng của chính mình tự rơi vào
+            // đây: vai trò của mình không bao giờ nằm trong tập mình quản trị được.
+            const manageable = manageableRoles(profile?.role).some((role) => role === user.role);
             const status = user.is_locked ? "locked" : "active";
             return (
               <TableRow key={user.id} data-testid="user-row">

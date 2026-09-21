@@ -17,6 +17,19 @@ export type AdminUser = {
 export const ASSIGNABLE_ROLES = ["operations_staff", "logistics_manager"] as const;
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
+// Soi gương luật máy chủ (ADR-0011): Logistics Manager chỉ quản trị Operations Staff, Super
+// Admin quản trị mọi người trừ chính Super Admin. Chỉ để ẩn lựa chọn chắc chắn thất bại —
+// máy chủ vẫn tự kiểm.
+export function manageableRoles(actor: Role | undefined): readonly AssignableRole[] {
+  if (actor === "super_admin") {
+    return ASSIGNABLE_ROLES;
+  }
+  if (actor === "logistics_manager") {
+    return ["operations_staff"];
+  }
+  return [];
+}
+
 export type ListUsersResult =
   { kind: "ok"; users: AdminUser[] } | { kind: "forbidden" } | { kind: "error" };
 
@@ -89,8 +102,8 @@ export async function createUser(
   return { kind: "ok", user: (await response.json()) as AdminUser };
 }
 
-// null cho mọi kiểu thất bại: menu thao tác chỉ có một thông báo lỗi chung, vì các lý do máy
-// chủ từ chối (Super Admin, chính mình) đã bị ẩn khỏi menu từ trước.
+// null cho mọi kiểu thất bại: menu thao tác chỉ có một thông báo lỗi chung, vì các dòng máy
+// chủ sẽ từ chối (ngoài quyền theo vai trò người đăng nhập) đã không có menu từ trước.
 export async function updateUser(id: number, patch: UserPatch): Promise<AdminUser | null> {
   try {
     const response = await apiFetch(`${BACKEND_URL}/users/${id}`, {

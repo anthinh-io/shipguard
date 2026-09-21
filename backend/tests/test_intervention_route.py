@@ -266,7 +266,6 @@ async def test_intervention_of_a_locked_handler_still_shows_their_name(
 
     await update_user(
         auth_session,
-        actor_id=manager_id,
         actor_role="logistics_manager",
         user_id=staff_id,
         is_locked=True,
