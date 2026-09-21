@@ -7,13 +7,14 @@ from app.api.deps import CurrentUserDep, SessionDep, UserAdminDep
 from app.services.users import (
     AssignableRole,
     EmailTakenError,
+    LogisticsManagerProtectedError,
     PasswordTooShortError,
-    SelfManagementError,
+    RoleChangeRequiresSuperAdminError,
     SuperAdminProtectedError,
     UserNotFoundError,
     UserProfile,
     UserSummary,
-    create_user,
+    create_managed_user,
     get_user_profile,
     get_user_summary,
     list_users,
@@ -50,7 +51,8 @@ ADMIN_ERROR_STATUS: dict[type[Exception], int] = {
     EmailTakenError: 409,
     UserNotFoundError: 404,
     SuperAdminProtectedError: 403,
-    SelfManagementError: 403,
+    LogisticsManagerProtectedError: 403,
+    RoleChangeRequiresSuperAdminError: 403,
 }
 ADMIN_ERRORS = tuple(ADMIN_ERROR_STATUS)
 
@@ -73,11 +75,12 @@ async def users(_: UserAdminDep, session: SessionDep) -> list[UserSummary]:
 
 @router.post("/users", status_code=201)
 async def create(
-    body: CreateUserRequest, _: UserAdminDep, session: SessionDep
+    body: CreateUserRequest, admin: UserAdminDep, session: SessionDep
 ) -> UserSummary:
     try:
-        user_id = await create_user(
+        user_id = await create_managed_user(
             session,
+            actor_role=admin.role,
             email=body.email,
             password=body.password,
             display_name=body.display_name,
@@ -95,7 +98,7 @@ async def update(
     try:
         return await update_user(
             session,
-            actor_id=admin.user_id,
+            actor_role=admin.role,
             user_id=user_id,
             role=body.role,
             is_locked=body.is_locked,
@@ -111,7 +114,7 @@ async def reset_password(
     try:
         await reset_user_password(
             session,
-            actor_id=admin.user_id,
+            actor_role=admin.role,
             user_id=user_id,
             new_password=body.new_password,
         )

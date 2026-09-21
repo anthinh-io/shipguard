@@ -3,7 +3,7 @@ from typing import Any
 import jwt
 import pytest
 from httpx import AsyncClient, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -19,9 +19,15 @@ MANAGER = "khoa@shipguard.vn"
 OTHER_MANAGER = "minh@shipguard.vn"
 STAFF = "lan@shipguard.vn"
 
+SUPER_ADMIN_DETAIL = {"detail": "The Super Admin cannot be managed"}
+MANAGER_DETAIL = {
+    "detail": "Only the Super Admin can manage Logistics Manager accounts"
+}
+ROLE_CHANGE_DETAIL = {"detail": "Only the Super Admin can change roles"}
+
 
 # Người thật trong cơ sở dữ liệu, không phải token mượn id: route quản trị tra dòng của
-# người bị tác động và so id người gọi, nên id trong token phải khớp một dòng có thật.
+# người bị tác động, và người gọi phải đăng nhập được thật để lấy token.
 @pytest.fixture
 async def accounts(auth_session: AsyncSession) -> dict[str, int]:
     people = [
@@ -133,8 +139,8 @@ async def test_manager_and_super_admin_see_every_account(
     }
 
 
-# Mỗi thao tác đều nhắm vào một người quản lý được, để 403 chỉ có thể đến từ vai trò
-# người gọi chứ không phải từ quy tắc bảo vệ Super Admin hay chính mình.
+# Cổng vai trò chặn Operations Staff trước mọi luật theo đối tượng, nên 403 ở đây đến từ
+# vai trò người gọi, bất kể đối tượng là ai.
 @pytest.mark.parametrize(
     ("method", "path", "json"), ADMIN_ENDPOINTS, ids=ADMIN_ENDPOINT_IDS
 )
@@ -217,6 +223,36 @@ async def test_create_rejects_invalid_input(
     assert await count_users(auth_session) == 4
 
 
+# 403 chứ không phải 422: yêu cầu hợp lệ với lược đồ, bị từ chối vì vai trò người gọi.
+@pytest.mark.parametrize(
+    ("actor", "role", "status"),
+    [
+        (MANAGER, "operations_staff", 201),
+        (MANAGER, "logistics_manager", 403),
+        (SUPER_ADMIN, "operations_staff", 201),
+        (SUPER_ADMIN, "logistics_manager", 201),
+    ],
+    ids=["LM->OS", "LM->LM", "SA->OS", "SA->LM"],
+)
+async def test_create_follows_the_callers_role(
+    client: AsyncClient,
+    auth_session: AsyncSession,
+    accounts: dict[str, int],
+    actor: str,
+    role: str,
+    status: int,
+) -> None:
+    response = await act(client, actor, "POST", "/users", new_account(role=role))
+
+    assert response.status_code == status
+    if status == 403:
+        assert response.json() == MANAGER_DETAIL
+        assert await count_users(auth_session) == 4
+    else:
+        assert response.json()["role"] == role
+        assert await count_users(auth_session) == 5
+
+
 async def test_super_admin_creates_the_first_logistics_manager(
     client: AsyncClient, auth_session: AsyncSession
 ) -> None:
@@ -276,7 +312,7 @@ async def test_role_change_ends_sessions_and_next_login_carries_the_new_role(
 
     response = await act(
         client,
-        MANAGER,
+        SUPER_ADMIN,
         "PATCH",
         f"/users/{accounts[STAFF]}",
         {"role": "logistics_manager"},
@@ -297,7 +333,11 @@ async def test_role_cannot_be_changed_to_super_admin(
     client: AsyncClient, accounts: dict[str, int]
 ) -> None:
     response = await act(
-        client, MANAGER, "PATCH", f"/users/{accounts[STAFF]}", {"role": "super_admin"}
+        client,
+        SUPER_ADMIN,
+        "PATCH",
+        f"/users/{accounts[STAFF]}",
+        {"role": "super_admin"},
     )
 
     assert response.status_code == 422
@@ -344,83 +384,143 @@ async def test_password_reset_rejects_a_short_password(
     assert refreshed.status_code == 200
 
 
-ADMIN_ACTIONS = [
-    ("PATCH", "/users/{target}", {"is_locked": True}),
-    ("PATCH", "/users/{target}", {"role": "operations_staff"}),
-    ("POST", "/users/{target}/password", {"new_password": NEW_PASSWORD}),
+ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
+    "lock": ("PATCH", "/users/{target}", {"is_locked": True}),
+    "unlock": ("PATCH", "/users/{target}", {"is_locked": False}),
+    "change role": ("PATCH", "/users/{target}", {"role": "operations_staff"}),
+    # Đòn leo thang ở Problem Statement của #49: nâng một người lên Logistics Manager.
+    "promote": ("PATCH", "/users/{target}", {"role": "logistics_manager"}),
+    "reset password": (
+        "POST",
+        "/users/{target}/password",
+        {"new_password": NEW_PASSWORD},
+    ),
+}
+# Các thao tác phủ ở ô bị từ chối; mở khóa đi cùng đường PATCH với khóa nên không lặp.
+TARGETED_ACTIONS = ["lock", "change role", "reset password"]
+
+ROLE_ABBR = {SUPER_ADMIN: "SA", MANAGER: "LM", OTHER_MANAGER: "LM", STAFF: "OS"}
+
+
+def cell_id(actor: str, target: str, action: str) -> str:
+    target_abbr = "self" if actor == target else ROLE_ABBR[target]
+    return f"{ROLE_ABBR[actor]}->{target_abbr} {action}"
+
+
+# Ma trận ADR-0011: Logistics Manager quản trị Operations Staff; Super Admin quản trị
+# tất cả trừ Super Admin. Đổi vai trò hẹp hơn nữa: chỉ Super Admin làm được, kể cả khi
+# đối tượng nằm trong phạm vi quản trị của Logistics Manager (#52).
+PERMISSION_CELLS = [
+    pytest.param(actor, target, action, None, id=cell_id(actor, target, action))
+    for actor, target in [
+        (MANAGER, STAFF),
+        (SUPER_ADMIN, STAFF),
+        (SUPER_ADMIN, OTHER_MANAGER),
+    ]
+    for action in ["lock", "unlock", "reset password"]
+] + [
+    # Super Admin đổi vai trò thật theo cả hai chiều: nâng OS lên LM, hạ LM xuống OS.
+    pytest.param(
+        SUPER_ADMIN, STAFF, "promote", None, id=cell_id(SUPER_ADMIN, STAFF, "promote")
+    ),
+    pytest.param(
+        SUPER_ADMIN,
+        OTHER_MANAGER,
+        "change role",
+        None,
+        id=cell_id(SUPER_ADMIN, OTHER_MANAGER, "change role"),
+    ),
+] + [
+    pytest.param(actor, target, action, detail, id=cell_id(actor, target, action))
+    for actor, target, detail in [
+        (MANAGER, OTHER_MANAGER, MANAGER_DETAIL),
+        # Chính mình nhận thông điệp dành cho Logistics Manager, không có câu riêng.
+        (MANAGER, MANAGER, MANAGER_DETAIL),
+        (MANAGER, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
+        (SUPER_ADMIN, SUPER_ADMIN, SUPER_ADMIN_DETAIL),
+    ]
+    for action in TARGETED_ACTIONS
+] + [
+    # #52: đổi vai trò của người trong phạm vi vẫn bị từ chối — thông điệp riêng, không
+    # phải MANAGER_DETAIL của rào theo đối tượng. "promote" là đòn leo thang thật;
+    # "change role" gửi đúng vai trò hiện tại và vẫn phải bị từ chối.
+    pytest.param(
+        MANAGER, STAFF, action, ROLE_CHANGE_DETAIL, id=cell_id(MANAGER, STAFF, action)
+    )
+    for action in ["promote", "change role"]
 ]
-ADMIN_ACTION_IDS = ["lock", "change role", "reset password"]
 
 
-@pytest.mark.parametrize("actor", [MANAGER, SUPER_ADMIN])
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
-async def test_no_admin_action_touches_the_super_admin(
+async def target_row(session: AsyncSession, user_id: int) -> Any:
+    return (
+        await session.execute(
+            select(users.c.role, users.c.is_locked, users.c.password_hash).where(
+                users.c.id == user_id
+            )
+        )
+    ).one()
+
+
+@pytest.mark.parametrize(("actor", "target", "action", "refusal"), PERMISSION_CELLS)
+async def test_permission_matrix(
     client: AsyncClient,
+    auth_session: AsyncSession,
     accounts: dict[str, int],
     actor: str,
-    method: str,
-    path: str,
-    json: dict[str, Any],
+    target: str,
+    action: str,
+    refusal: dict[str, str] | None,
 ) -> None:
-    url = path.format(target=accounts[SUPER_ADMIN])
+    target_id = accounts[target]
+    if action == "unlock":
+        # Khóa sẵn thẳng trong cơ sở dữ liệu, không qua API đang được kiểm.
+        await auth_session.execute(
+            update(users).where(users.c.id == target_id).values(is_locked=True)
+        )
+        await auth_session.commit()
+    before = await target_row(auth_session, target_id)
+    method, path, json = ACTIONS[action]
 
-    response = await act(client, actor, method, url, json)
+    response = await act(client, actor, method, path.format(target=target_id), json)
 
-    assert response.status_code == 403
-    assert response.json() == {"detail": "The Super Admin cannot be managed"}
-    super_admin = (await login(client, SUPER_ADMIN)).json()["access_token"]
-    me = await client.get("/me", headers=bearer(super_admin))
-    assert me.json()["role"] == "super_admin"
-
-
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
-async def test_no_admin_action_on_yourself(
-    client: AsyncClient,
-    accounts: dict[str, int],
-    method: str,
-    path: str,
-    json: dict[str, Any],
-) -> None:
-    url = path.format(target=accounts[MANAGER])
-
-    response = await act(client, MANAGER, method, url, json)
-
-    assert response.status_code == 403
-    assert response.json() == {"detail": "You cannot manage your own account here"}
-    token = await token_for(client, MANAGER)
-    me = await client.get("/me", headers=bearer(token))
-    assert me.json()["role"] == "logistics_manager"
+    if refusal is not None:
+        assert response.status_code == 403
+        assert response.json() == refusal
+        assert await target_row(auth_session, target_id) == before
+        return
+    assert response.status_code in (200, 204), response.text
+    if action == "reset password":
+        assert (await login(client, target, NEW_PASSWORD)).status_code == 200
+        return
+    after = await target_row(auth_session, target_id)
+    if action in ("change role", "promote"):
+        assert after.role == json["role"]
+    else:
+        assert after.is_locked is (action == "lock")
 
 
-async def test_manager_can_manage_another_manager(
+# Quyền hỏi trước chính sách mật khẩu: ngoài quyền thì 403 dù mật khẩu có ngắn.
+async def test_out_of_scope_password_reset_is_refused_before_the_password_check(
     client: AsyncClient, accounts: dict[str, int]
 ) -> None:
     response = await act(
         client,
         MANAGER,
-        "PATCH",
-        f"/users/{accounts[OTHER_MANAGER]}",
-        {"is_locked": True},
+        "POST",
+        f"/users/{accounts[OTHER_MANAGER]}/password",
+        {"new_password": "short"},
     )
 
-    assert response.status_code == 200
-    assert (await login(client, OTHER_MANAGER)).status_code == 401
+    assert response.status_code == 403
+    assert response.json() == MANAGER_DETAIL
 
 
-@pytest.mark.parametrize(
-    ("method", "path", "json"), ADMIN_ACTIONS, ids=ADMIN_ACTION_IDS
-)
+@pytest.mark.parametrize("action", TARGETED_ACTIONS)
 async def test_unknown_user_is_not_found(
-    client: AsyncClient,
-    accounts: dict[str, int],
-    method: str,
-    path: str,
-    json: dict[str, Any],
+    client: AsyncClient, accounts: dict[str, int], action: str
 ) -> None:
+    method, path, json = ACTIONS[action]
+
     response = await act(client, MANAGER, method, path.format(target=999_999), json)
 
     assert response.status_code == 404

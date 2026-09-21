@@ -26,15 +26,16 @@ const MANAGER = {
   role: "logistics_manager",
 } as const;
 
+const SUPER_ADMIN = {
+  id: 1,
+  email: "admin@shipguard.vn",
+  display_name: "Super Admin",
+  role: "super_admin",
+} as const;
+
 function seedUsers(): User[] {
   return [
-    {
-      id: 1,
-      email: "admin@shipguard.vn",
-      display_name: "Super Admin",
-      role: "super_admin",
-      is_locked: false,
-    },
+    { ...SUPER_ADMIN, is_locked: false },
     { ...MANAGER, is_locked: false },
     {
       id: 3,
@@ -93,6 +94,10 @@ async function mockUsersApi(
 
 async function signInAsManager(context: BrowserContext) {
   await mockSession(context, MANAGER);
+}
+
+async function signInAsSuperAdmin(context: BrowserContext) {
+  await mockSession(context, SUPER_ADMIN);
 }
 
 // Khớp nguyên ô email: lọc theo chữ thì "khoa@" cũng chứa "hoa@".
@@ -154,12 +159,7 @@ test("quản lý hậu cần mở mục Quản trị thì thấy mọi tài kho�
 });
 
 test("Super Admin cũng thấy mục Quản trị", async ({ page, context }) => {
-  await mockSession(context, {
-    id: 1,
-    email: "admin@shipguard.vn",
-    display_name: "Super Admin",
-    role: "super_admin",
-  });
+  await signInAsSuperAdmin(context);
   await mockUsersApi(page);
 
   await page.goto("/admin/users");
@@ -169,7 +169,7 @@ test("Super Admin cũng thấy mục Quản trị", async ({ page, context }) =>
   await expect(row(page, "admin@shipguard.vn")).toContainText("(bạn)");
 });
 
-test("dòng Super Admin và dòng của chính mình không có menu thao tác", async ({
+test("quản lý hậu cần chỉ thấy menu thao tác ở dòng nhân viên vận hành", async ({
   page,
   context,
 }) => {
@@ -182,14 +182,57 @@ test("dòng Super Admin và dòng của chính mình không có menu thao tác",
   await expect(row(page, "admin@shipguard.vn").getByTestId("user-actions")).toHaveCount(0);
   await expect(row(page, "khoa@shipguard.vn").getByTestId("user-actions")).toHaveCount(0);
   await expect(row(page, "khoa@shipguard.vn")).toContainText("(bạn)");
+  await expect(row(page, "minh@shipguard.vn").getByTestId("user-actions")).toHaveCount(0);
   await expect(row(page, "lan@shipguard.vn").getByTestId("user-actions")).toBeVisible();
 });
 
-test("tạo tài khoản: ô vai trò chỉ có hai lựa chọn, lưu xong thì người mới hiện trong bảng", async ({
+test("quản lý hậu cần không thấy mục Đổi vai trò ở dòng nhân viên vận hành", async ({
   page,
   context,
 }) => {
   await signInAsManager(context);
+  await mockUsersApi(page);
+  await page.goto("/admin/users");
+
+  await openActions(page, "lan@shipguard.vn");
+
+  await expect(page.getByTestId("user-action-role")).toHaveCount(0);
+  await expect(page.getByTestId("user-action-lock")).toBeVisible();
+  await expect(page.getByTestId("user-action-reset-password")).toBeVisible();
+});
+
+test("Super Admin thấy menu thao tác ở mọi dòng trừ dòng của mình", async ({ page, context }) => {
+  await signInAsSuperAdmin(context);
+  await mockUsersApi(page);
+
+  await page.goto("/admin/users");
+
+  await expect(page.getByTestId("user-row")).toHaveCount(4);
+  await expect(row(page, "admin@shipguard.vn").getByTestId("user-actions")).toHaveCount(0);
+  await expect(row(page, "khoa@shipguard.vn").getByTestId("user-actions")).toBeVisible();
+  await expect(row(page, "minh@shipguard.vn").getByTestId("user-actions")).toBeVisible();
+  await expect(row(page, "lan@shipguard.vn").getByTestId("user-actions")).toBeVisible();
+});
+
+test("quản lý hậu cần tạo tài khoản: ô vai trò chỉ có Nhân viên vận hành", async ({
+  page,
+  context,
+}) => {
+  await signInAsManager(context);
+  await mockUsersApi(page);
+  await page.goto("/admin/users");
+
+  await page.getByTestId("user-admin-create").click();
+  await page.getByTestId("create-user-dialog").getByTestId("create-user-role").click();
+
+  await expect(page.getByRole("option")).toHaveText(["Nhân viên vận hành"]);
+});
+
+test("Super Admin tạo tài khoản: ô vai trò có hai lựa chọn, lưu xong thì người mới hiện trong bảng", async ({
+  page,
+  context,
+}) => {
+  await signInAsSuperAdmin(context);
   const calls = await mockUsersApi(page);
   await page.goto("/admin/users");
 
@@ -296,8 +339,9 @@ test("khóa tài khoản phải qua bước xác nhận; hủy thì không gửi
   expect(patches()).toEqual([{ method: "PATCH", path: "/users/3", body: { is_locked: true } }]);
 });
 
+// Super Admin: dòng minh@ là một Logistics Manager, chỉ Super Admin mới có menu ở đó.
 test("mở khóa và đổi vai trò gửi thẳng, bảng cập nhật theo phản hồi", async ({ page, context }) => {
-  await signInAsManager(context);
+  await signInAsSuperAdmin(context);
   const calls = await mockUsersApi(page);
   await page.goto("/admin/users");
 

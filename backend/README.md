@@ -341,15 +341,22 @@ Bốn endpoint dưới đây chỉ dành cho `logistics_manager` và `super_admi
 khác nhận 403, thiếu token nhận 401. Vai trò người gọi đọc từ access token, nên
 người vừa bị hạ vai trò vẫn gọi được tối đa 15 phút.
 
+Qua được cổng đó rồi, phạm vi theo ADR-0011: `logistics_manager` chỉ quản trị
+`operations_staff`, `super_admin` quản trị mọi `User` trừ chính `Super Admin`, và chỉ
+`super_admin` đổi được vai trò.
+
 | Endpoint | Việc |
 | --- | --- |
 | `GET /users` | Mọi `User`, theo thứ tự tạo: `id`, `email`, `display_name`, `role`, `is_locked` |
-| `POST /users` | Tạo `User`; body `{"display_name", "email", "role", "password"}`, trả 201 kèm dòng vừa tạo. Email trùng (không phân biệt hoa thường) nhận 409; tên trống, email sai định dạng, mật khẩu dưới 8 ký tự hay `role` ngoài `operations_staff` / `logistics_manager` nhận 422 |
-| `PATCH /users/{id}` | Đổi vai trò hoặc khóa / mở khóa; body `{"role"?, "is_locked"?}`, trả dòng sau khi đổi. Đổi vai trò và khóa thu hồi mọi refresh token của người đó |
-| `POST /users/{id}/password` | Đặt lại mật khẩu; body `{"new_password"}`, trả 204. Thu hồi mọi refresh token của người đó |
+| `POST /users` | Tạo `User`; body `{"display_name", "email", "role", "password"}`, trả 201 kèm dòng vừa tạo. `logistics_manager` xin tạo `logistics_manager` nhận 403, kiểm trước mọi lỗi khác. Email trùng (không phân biệt hoa thường) nhận 409; tên trống, email sai định dạng, mật khẩu dưới 8 ký tự hay `role` ngoài `operations_staff` / `logistics_manager` nhận 422 |
+| `PATCH /users/{id}` | Đổi vai trò hoặc khóa / mở khóa; body `{"role"?, "is_locked"?}`, trả dòng sau khi đổi. Yêu cầu có `role` từ người không phải `super_admin` nhận 403, kể cả khi vai trò gửi lên trùng vai trò hiện tại. Đổi vai trò và khóa thu hồi mọi refresh token của người đó |
+| `POST /users/{id}/password` | Đặt lại mật khẩu; body `{"new_password"}`, trả 204. Quyền kiểm trước độ dài mật khẩu. Thu hồi mọi refresh token của người đó |
 
-Quy tắc bảo vệ kiểm ở backend: thao tác lên `Super Admin` hay lên chính người gọi
-nhận 403 (tự đổi mật khẩu dùng `POST /auth/password`), id không tồn tại nhận 404,
+Quy tắc bảo vệ kiểm ở backend, theo thứ tự: id không tồn tại nhận 404; thao tác lên
+`Super Admin` nhận 403 "The Super Admin cannot be managed"; `logistics_manager` thao
+tác lên một `logistics_manager` — kể cả chính mình — nhận 403 "Only the Super Admin
+can manage Logistics Manager accounts"; `logistics_manager` đổi vai trò nhận 403
+"Only the Super Admin can change roles". Tự đổi mật khẩu dùng `POST /auth/password`,
 và không có endpoint xóa `User`. Email kiểm bằng `EmailStr`, vốn từ chối tên miền
 dành riêng như `.local`, `.test`, `.localhost` — tài khoản tạo qua API phải dùng
 tên miền thật.

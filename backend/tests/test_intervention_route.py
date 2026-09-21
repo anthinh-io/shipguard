@@ -265,7 +265,10 @@ async def test_intervention_of_a_locked_handler_still_shows_their_name(
     assert handled.status_code == 201, handled.text
 
     await update_user(
-        auth_session, actor_id=manager_id, user_id=staff_id, is_locked=True
+        auth_session,
+        actor_role="logistics_manager",
+        user_id=staff_id,
+        is_locked=True,
     )
 
     response = await client.get(

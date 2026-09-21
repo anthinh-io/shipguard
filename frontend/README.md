@@ -63,7 +63,9 @@ frontend/
                          409 thành một loại "conflict" vì cùng một cách khắc phục
                          (trang đang cũ, tải lại)
       users-api.ts       gọi /users: liệt kê, tạo, khóa / đổi vai trò, đặt lại
-                         mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện
+                         mật khẩu — trả kết quả dạng khóa chuỗi cho giao diện;
+                         manageableRoles soi gương luật quyền của máy chủ
+                         (ADR-0011) để ẩn lựa chọn chắc chắn thất bại
     components/
       auth-gate.tsx      Client Component: chờ /auth/refresh trước khi vẽ
                          trang, thất bại thì về /login?next=...
@@ -81,11 +83,13 @@ frontend/
       change-password-dialog.tsx
                          Client Component: hộp thoại tự đổi mật khẩu
       user-admin.tsx     Client Component: trang Quản trị — bảng tài khoản, menu
-                         "…" mỗi dòng (ẩn ở dòng Super Admin và dòng của chính
-                         mình), từ chối khi GET /users trả 403
+                         "…" chỉ ở dòng người đăng nhập quản trị được, mục
+                         "Đổi vai trò" chỉ cho Super Admin; từ chối khi
+                         GET /users trả 403
       create-user-dialog.tsx, lock-user-dialog.tsx, reset-user-password-dialog.tsx
-                         Client Component: tạo tài khoản, xác nhận khóa, đặt
-                         lại mật khẩu cho người khác
+                         Client Component: tạo tài khoản (chỉ đưa vai trò người
+                         đăng nhập được cấp), xác nhận khóa, đặt lại mật khẩu
+                         cho người khác
       dashboard.tsx      Client Component: gọi GET /dashboard, ba trạng thái
                          (đang tải / lỗi / có số liệu) và hàng ô KPI; bộ lọc
                          đọc từ và ghi lên URL; click điểm xu hướng hoặc cột
