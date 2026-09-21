@@ -127,6 +127,25 @@ async def create_user(
     return user_id
 
 
+async def create_managed_user(
+    session: AsyncSession,
+    *,
+    actor_role: Role,
+    email: str,
+    password: str,
+    display_name: str,
+    role: AssignableRole,
+) -> int:
+    """Tạo tài khoản qua API quản trị, nhận vai trò người gọi từ access token.
+
+    Tách khỏi create_user cấp thấp mà ensure_super_admin và test dùng: luật "ai được
+    tạo vai trò nào" (ADR-0011) phụ thuộc người gọi, nên chỉ đường quản trị cần biết.
+    """
+    return await create_user(
+        session, email=email, password=password, display_name=display_name, role=role
+    )
+
+
 def _summary(user: Row) -> UserSummary:
     return UserSummary(
         id=user.id,
@@ -148,11 +167,13 @@ async def get_user_summary(session: AsyncSession, user_id: int) -> UserSummary:
 
 
 async def _load_manageable_user(
-    session: AsyncSession, actor_id: int, user_id: int
+    session: AsyncSession, actor_id: int, actor_role: Role, user_id: int
 ) -> Row:
     """Kiểm ở đây chứ không chỉ ẩn nút: yêu cầu gửi thẳng tới API cũng phải bị chặn.
 
     Vai trò của người bị tác động đọc từ cơ sở dữ liệu, không tin thứ gì client gửi.
+    actor_role là vai trò người gọi trong access token — chưa dùng tới, chờ luật theo
+    cặp của ADR-0011.
     """
     user = (
         await session.execute(select(users).where(users.c.id == user_id))
@@ -173,11 +194,12 @@ async def update_user(
     session: AsyncSession,
     *,
     actor_id: int,
+    actor_role: Role,
     user_id: int,
     role: AssignableRole | None = None,
     is_locked: bool | None = None,
 ) -> UserSummary:
-    user = await _load_manageable_user(session, actor_id, user_id)
+    user = await _load_manageable_user(session, actor_id, actor_role, user_id)
     changes: dict[str, object] = {}
     if role is not None and role != user.role:
         changes["role"] = role
@@ -245,10 +267,15 @@ async def reset_super_admin_password(session: AsyncSession, new_password: str) -
 
 
 async def reset_user_password(
-    session: AsyncSession, *, actor_id: int, user_id: int, new_password: str
+    session: AsyncSession,
+    *,
+    actor_id: int,
+    actor_role: Role,
+    user_id: int,
+    new_password: str,
 ) -> None:
     check_password_policy(new_password)
-    await _load_manageable_user(session, actor_id, user_id)
+    await _load_manageable_user(session, actor_id, actor_role, user_id)
     await _set_password_and_sign_out(session, user_id, new_password)
 
 
