@@ -19,6 +19,11 @@ MANAGER = "khoa@shipguard.vn"
 OTHER_MANAGER = "minh@shipguard.vn"
 STAFF = "lan@shipguard.vn"
 
+SUPER_ADMIN_DETAIL = {"detail": "The Super Admin cannot be managed"}
+MANAGER_DETAIL = {
+    "detail": "Only the Super Admin can manage Logistics Manager accounts"
+}
+
 
 # Người thật trong cơ sở dữ liệu, không phải token mượn id: route quản trị tra dòng của
 # người bị tác động, và người gọi phải đăng nhập được thật để lấy token.
@@ -217,6 +222,36 @@ async def test_create_rejects_invalid_input(
     assert await count_users(auth_session) == 4
 
 
+# 403 chứ không phải 422: yêu cầu hợp lệ với lược đồ, bị từ chối vì vai trò người gọi.
+@pytest.mark.parametrize(
+    ("actor", "role", "status"),
+    [
+        (MANAGER, "operations_staff", 201),
+        (MANAGER, "logistics_manager", 403),
+        (SUPER_ADMIN, "operations_staff", 201),
+        (SUPER_ADMIN, "logistics_manager", 201),
+    ],
+    ids=["LM->OS", "LM->LM", "SA->OS", "SA->LM"],
+)
+async def test_create_follows_the_callers_role(
+    client: AsyncClient,
+    auth_session: AsyncSession,
+    accounts: dict[str, int],
+    actor: str,
+    role: str,
+    status: int,
+) -> None:
+    response = await act(client, actor, "POST", "/users", new_account(role=role))
+
+    assert response.status_code == status
+    if status == 403:
+        assert response.json() == MANAGER_DETAIL
+        assert await count_users(auth_session) == 4
+    else:
+        assert response.json()["role"] == role
+        assert await count_users(auth_session) == 5
+
+
 async def test_super_admin_creates_the_first_logistics_manager(
     client: AsyncClient, auth_session: AsyncSession
 ) -> None:
@@ -362,10 +397,6 @@ ACTIONS: dict[str, tuple[str, str, dict[str, Any]]] = {
     ),
 }
 
-SUPER_ADMIN_DETAIL = {"detail": "The Super Admin cannot be managed"}
-MANAGER_DETAIL = {
-    "detail": "Only the Super Admin can manage Logistics Manager accounts"
-}
 
 SHORT = {SUPER_ADMIN: "SA", MANAGER: "LM", OTHER_MANAGER: "LM", STAFF: "OS"}
 

@@ -4,12 +4,13 @@ import { useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 
 import {
-  ASSIGNABLE_ROLES,
   createUser,
+  manageableRoles,
   type AdminUser,
   type AssignableRole,
   type CreateUserFailure,
 } from "@/app/lib/users-api";
+import { useProfile } from "./profile-provider";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -34,6 +35,8 @@ export function CreateUserDialog({
 }) {
   const t = useTranslations("createUser");
   const tRole = useTranslations("roles");
+  // Chỉ đưa ra vai trò người đăng nhập được phép cấp; máy chủ vẫn tự kiểm.
+  const roles = manageableRoles(useProfile()?.role);
   const [role, setRole] = useState<AssignableRole>("operations_staff");
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<CreateUserFailure | null>(null);
@@ -102,7 +105,7 @@ export function CreateUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ASSIGNABLE_ROLES.map((value) => (
+                {roles.map((value) => (
                   <SelectItem key={value} value={value}>
                     {tRole(value)}
                   </SelectItem>

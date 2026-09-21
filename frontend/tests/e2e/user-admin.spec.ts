@@ -199,11 +199,25 @@ test("Super Admin thấy menu thao tác ở mọi dòng trừ dòng của mình"
   await expect(row(page, "lan@shipguard.vn").getByTestId("user-actions")).toBeVisible();
 });
 
-test("tạo tài khoản: ô vai trò chỉ có hai lựa chọn, lưu xong thì người mới hiện trong bảng", async ({
+test("quản lý hậu cần tạo tài khoản: ô vai trò chỉ có Nhân viên vận hành", async ({
   page,
   context,
 }) => {
   await signInAsManager(context);
+  await mockUsersApi(page);
+  await page.goto("/admin/users");
+
+  await page.getByTestId("user-admin-create").click();
+  await page.getByTestId("create-user-dialog").getByTestId("create-user-role").click();
+
+  await expect(page.getByRole("option")).toHaveText(["Nhân viên vận hành"]);
+});
+
+test("Super Admin tạo tài khoản: ô vai trò có hai lựa chọn, lưu xong thì người mới hiện trong bảng", async ({
+  page,
+  context,
+}) => {
+  await signInAsSuperAdmin(context);
   const calls = await mockUsersApi(page);
   await page.goto("/admin/users");
 

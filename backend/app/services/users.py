@@ -140,7 +140,10 @@ async def create_managed_user(
 
     Tách khỏi create_user cấp thấp mà ensure_super_admin và test dùng: luật "ai được
     tạo vai trò nào" (ADR-0011) phụ thuộc người gọi, nên chỉ đường quản trị cần biết.
+    AssignableRole chỉ loại super_admin ở tầng lược đồ; phần còn lại của luật nằm ở đây.
     """
+    # Kiểm quyền trước chính sách mật khẩu: yêu cầu ngoài quyền bị từ chối vì quyền.
+    _check_target_role(actor_role, role)
     return await create_user(
         session, email=email, password=password, display_name=display_name, role=role
     )

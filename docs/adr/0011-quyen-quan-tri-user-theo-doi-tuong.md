@@ -172,13 +172,13 @@ liệu — rẻ hơn nhiều so với một nút thắt vận hành gặp hằng
 
 ## Việc cần làm
 
-1. [ ] Kiểm quyền theo cặp (vai trò người gọi × vai trò đối tượng) ở tầng dịch vụ, dùng
+1. [x] Kiểm quyền theo cặp (vai trò người gọi × vai trò đối tượng) ở tầng dịch vụ, dùng
    chung cho khóa/mở khóa, đổi vai trò và đặt lại mật khẩu
-2. [ ] Đường kiểm riêng cho việc tạo tài khoản, theo vai trò người gọi
+2. [x] Đường kiểm riêng cho việc tạo tài khoản, theo vai trò người gọi
 3. [ ] Chặn đổi vai trò với người gọi không phải `Super Admin`
-4. [ ] Bỏ rào "không ai tự quản lý chính mình" cùng các bài test khẳng định nó
-5. [ ] Lỗi 403 mới cho trường hợp chạm một `Logistics Manager` khác — chỉ phục vụ người
+4. [x] Bỏ rào "không ai tự quản lý chính mình" cùng các bài test khẳng định nó
+5. [x] Lỗi 403 mới cho trường hợp chạm một `Logistics Manager` khác — chỉ phục vụ người
    gọi API trực tiếp, không đổi lớp gọi API phía trình duyệt
-6. [ ] Giao diện ẩn thao tác theo vai trò người đang đăng nhập, cả ở bảng lẫn ở hộp thoại
+6. [x] Giao diện ẩn thao tác theo vai trò người đang đăng nhập, cả ở bảng lẫn ở hộp thoại
    tạo tài khoản
 7. [ ] Cập nhật test backend và test đầu-cuối theo ma trận quyền mới
