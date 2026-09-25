@@ -62,7 +62,7 @@ Bố cục theo `fastapi/full-stack-fastapi-template`.
 
 ## Khởi động
 
-Chép tệp môi trường rồi điền `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`
+Chép tệp môi trường rồi điền `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `JWT_SECRET_KEY`
 và ba biến `SUPER_ADMIN_*` của bạn:
 
 ```bash
@@ -750,7 +750,7 @@ ngay lúc khởi động kèm thông báo nêu tên biến thiếu.
 | Biến | Dùng ở đâu |
 | --- | --- |
 | `PROJECT_NAME` | Tiêu đề của API |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose dựng container |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Docker Compose dựng container |
 | `DATABASE_URL` | Ứng dụng và Alembic |
 | `TEST_DATABASE_URL` | Chỉ bộ test |
 | `CORS_ALLOWED_ORIGINS` | Origin của frontend, phân tách bằng dấu phẩy. Trình duyệt gọi thẳng backend nên thiếu origin đúng là màn hình trắng mà phía máy chủ không báo lỗi gì — xem `docs/adr/0006-goi-thang-backend-kem-xac-thuc-jwt.md` |
