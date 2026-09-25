@@ -41,21 +41,68 @@ Người dùng nhập thông tin đơn hàng và nhận dự đoán rủi ro gia
 
 ## 5. Cài đặt
 
-Thứ tự bắt buộc, chạy từ gốc repo — mỗi bước cần bước trước đã xong:
+### 5.1 Yêu cầu
+
+- **Docker**: Docker Desktop (Windows 10/11, macOS) hoặc Docker Engine kèm Docker Compose (Linux).
+- Internet ở lần chạy đầu (tải ảnh nền, cài thư viện), khoảng 8 GB ổ đĩa trống, khuyến nghị RAM 8 GB.
+- Ba cổng **3000** (giao diện), **8000** (máy chủ xử lý), **5432** (PostgreSQL) còn trống.
+- Không cần cài Python, Node.js hay PostgreSQL. Chỉ cần thêm [uv](https://docs.astral.sh/uv/) nếu trong môi trường phát triển.
+
+### 5.2 Khởi tạo `.env` (nếu chưa có)
+
+Nếu thư mục gốc chưa có tệp `.env`, tạo từ mẫu:
+
+```bash
+cp .env.example .env
+```
+
+Rồi mở `.env` và điền các giá trị sau, các biến còn lại giữ mặc định:
+
+| Biến | Điền gì |
+| --- | --- |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD` | Tự chọn; PostgreSQL tạo tài khoản này ở lần chạy đầu |
+| `POSTGRES_PORT` | `5432` |
+| `JWT_SECRET_KEY` | Chuỗi ngẫu nhiên dài, sinh bằng: `docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD` | Tài khoản Super Admin tạo ở lần chạy đầu, khi chưa có Super Admin nào; mật khẩu tối thiểu 8 ký tự |
+
+`.env` chứa bí mật và đã nằm trong `.gitignore`; không đưa lên Git.
+
+### 5.3 Dữ liệu và mô hình
+
+| Cần có | Dùng để | Nếu chưa có |
+| --- | --- | --- |
+| `db/initdb/*.sql` (bản dump) | PostgreSQL nạp lược đồ và dữ liệu ở lần chạy đầu | Yêu cầu bản dump `shipguard.sql` và đặt vào `db/initdb/` |
+| `models/` | Mô hình rủi ro đã huấn luyện | `uv run python -m app.scripts.train_risk_model` |
+
+Bản dump chỉ được nạp khi volume PostgreSQL còn trống.
+
+### 5.4 Khởi động nhanh hệ thống
+
+Từ thư mục gốc (nơi có `docker-compose.yml`):
+
+```bash
+docker compose up -d --build --wait
+```
+
+Truy cập trình duyệt tại http://localhost:3000; dịch vụ tại http://localhost:8000 (tài liệu API tại `/docs`).
+
+Lệnh dừng: `docker compose stop`; gỡ và xóa dữ liệu: `docker compose down -v`.
+
+### 5.5 Môi trường phát triển
+
+Từ thư mục gốc (nơi có `docker-compose.yml`):
 
 ```bash
 cp .env.example .env                                  # rồi điền các giá trị của bạn
-docker compose up -d --wait postgres
+docker compose up -d --wait postgres                  # dựng `postgres`, bỏ qua `backend` và `frontend`
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head    # dựng lược đồ
 uv run python -m app.scripts.build_derived_data       # nạp CSV và dựng dẫn xuất
 uv run python -m app.scripts.train_risk_model         # huấn luyện mô hình rủi ro
-uv run fastapi dev backend/app/main.py                # chạy backend
+uv run fastapi dev backend/app/main.py                # chạy dịch vụ máy chủ
 ```
 
-Lệnh huấn luyện đọc thẳng tệp CSV trong `datasets/raw/` nên không phụ thuộc hai bước trước nó và chạy được cả khi Postgres đang tắt; xếp ở đây vì backend cần tệp mô hình thì mới dự đoán được. Nó in ra một "Ngưỡng đề xuất" — chép con số đó vào `RISK_THRESHOLD` trong `.env`.
-
-Chi tiết cấu hình, biến môi trường và cách đọc báo cáo đánh giá: [backend/README.md](backend/README.md).
+Lệnh huấn luyện đọc thẳng tệp CSV trong `datasets/raw/` nên không phụ thuộc hai bước trước nó và chạy được cả khi Postgres đang tắt.
 
 ## 6. Giấy phép
 
