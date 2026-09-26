@@ -1,0 +1,7 @@
+clips/
+*.mp4
+*.webm
+video/node_modules/
+video/out/
+video/public/
+recording/state.json

@@ -1,0 +1,11 @@
+[
+  { "id": "canh-1a", "canh": 1, "clip": "canh-1a-tieu-de.webm", "cues": [0] },
+  { "id": "canh-1t", "canh": 1, "clip": "canh-1-terminal-tinh.webm", "cues": [0, 19] },
+  { "id": "canh-1b", "canh": 1, "clip": "canh-1b-dang-nhap.webm", "cues": [0] },
+  { "id": "canh-2", "canh": 2, "clip": "canh-2-bang-dieu-khien.webm", "cues": [0, 20, 50, 70, 90, 110, 130] },
+  { "id": "canh-3", "canh": 3, "clip": "canh-3-tao-don.webm", "cues": [0, 15, 35, 60, 90, 110, 150, 190, 220, 235, 257] },
+  { "id": "canh-4", "canh": 4, "clip": "canh-4-huy-don.webm", "cues": [0, 15] },
+  { "id": "canh-5", "canh": 5, "clip": "canh-5-chi-so-mo-hinh.webm", "cues": [0, 15, 30, 60, 80] },
+  { "id": "canh-6", "canh": 6, "clip": "canh-6-quan-tri.webm", "cues": [0, 15, 45, 70, 95, 120] },
+  { "id": "canh-7", "canh": 7, "clip": "canh-7-ket.webm", "cues": [0, 25] }
+]

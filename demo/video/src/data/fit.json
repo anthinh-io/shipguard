@@ -1,0 +1,8 @@
+{
+  "mode": "smart",
+  "maxSpeed": 2,
+  "slack": 1,
+  "tailPad": 0.8,
+  "motionThreshold": 15,
+  "overrides": {}
+}
