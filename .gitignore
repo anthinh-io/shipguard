@@ -16,3 +16,5 @@ __pycache__/
 /models/
 /experiments/
 *.joblib
+/db/initdb/*.sql
+/db/initdb/*.sql.gz

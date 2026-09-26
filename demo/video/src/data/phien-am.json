@@ -1,0 +1,19 @@
+[
+  ["docker compose up -d --build --wait", "đóc cơ com pâu úp, gạch đê, gạch gạch bild, gạch gạch quây"],
+  ["docker compose ps", "đóc cơ com pâu pi ét"],
+  ["PostgreSQL", "Pốt gret ét kiu eo"],
+  ["FastAPI", "Fát ây pi ai"],
+  ["Next.js", "Nếch chây ét"],
+  ["ShipGuard", "Ship Guard"],
+  ["22730096", "hai hai bảy ba không không chín sáu"],
+  ["localhost", "lô cồ hốt"],
+  ["Olist", "Ô-list"],
+  ["UTC", "diu ti xi"],
+  ["CSV", "xi ét vi"],
+  ["São Paulo", "Sao Pao-lô"],
+  ["01310", "không một ba một không"],
+  ["furniture_decor", "phơ-ni-chờ đếch-cô"],
+  ["Super Admin", "Siu-pơ Át-min"],
+  ["\bSP\b", "ét pi"],
+  ["\bF1\b", "ép một"]
+]

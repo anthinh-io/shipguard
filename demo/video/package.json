@@ -1,0 +1,31 @@
+{
+  "name": "shipguard-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lồng tiếng và dựng video Demo ShipGuard bằng Remotion",
+  "scripts": {
+    "narration": "node scripts/gen-narration.mjs",
+    "sync": "node scripts/sync-assets.mjs",
+    "tts": "node scripts/tts.mjs",
+    "check": "node scripts/check-timeline.mjs",
+    "motion": "node scripts/analyze-motion.mjs",
+    "verify": "node scripts/verify-cuts.mjs",
+    "studio": "remotion studio src/index.ts --port 3100",
+    "render:canh": "remotion render src/index.ts",
+    "render:full": "remotion render src/index.ts Full ../ShipGuard-Demo.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "@remotion/media": "4.0.529",
+    "@remotion/media-utils": "4.0.529",
+    "msedge-tts": "^2.0.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^7.0.2"
+  }
+}
